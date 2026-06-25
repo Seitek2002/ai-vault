@@ -43,7 +43,7 @@
 .prose-editor .tiptap em { font-style: italic; }
 .prose-editor .tiptap u { text-decoration: underline; }
 
-/* Table */
+/* Table — base */
 .prose-editor .tiptap table {
   width: 100%;
   border-collapse: collapse;
@@ -65,6 +65,22 @@
 .prose-editor .tiptap td {
   color: var(--color-text-secondary);
 }
+
+/* Реквизитные таблицы (нет th) — невидимые, только разметка */
+.prose-editor .tiptap table:not(:has(th)) {
+  border: none;
+  margin: 0.15em 0;
+}
+.prose-editor .tiptap table:not(:has(th)) td {
+  border: none;
+  padding: 0.25em 0.6em;
+  color: var(--color-text-secondary);
+}
+.prose-editor .tiptap table:not(:has(th)) td:first-child {
+  padding-left: 0;
+  white-space: nowrap;
+  color: var(--color-text-primary);
+}
 .prose-editor .tiptap .selectedCell::after {
   background: var(--color-accent-dim);
   position: absolute;
@@ -83,6 +99,12 @@
 }
 .prose-editor .tiptap .tableWrapper {
   overflow-x: auto;
+}
+
+.prose-editor .tiptap hr {
+  border: none;
+  border-top: 1.5px solid var(--color-text-primary);
+  margin: 0.3em 0 0.6em;
 }
 
 /* Placeholder */

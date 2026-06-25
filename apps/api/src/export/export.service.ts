@@ -51,7 +51,7 @@ export class ExportService {
       await page.setContent(html, { waitUntil: 'load' });
       const pdf = await page.pdf({
         format: 'A4',
-        margin: { top: '2cm', right: '2cm', bottom: '2cm', left: '2cm' },
+        margin: { top: '1.5cm', right: '1.5cm', bottom: '1.5cm', left: '1.5cm' },
         printBackground: true,
       });
       return { buffer: Buffer.from(pdf), filename: doc.title };

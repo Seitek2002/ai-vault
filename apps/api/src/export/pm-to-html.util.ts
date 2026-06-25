@@ -31,7 +31,7 @@ function textNodeToHtml(node: PmNode): string {
 function nodeToHtml(node: PmNode): string {
   const children = () => (node.content ?? []).map(nodeToHtml).join('');
   const alignStyle = (node.attrs?.textAlign as string | undefined);
-  const style = alignStyle && alignStyle !== 'left' ? ` style="text-align:${alignStyle}"` : '';
+  const style = alignStyle ? ` style="text-align:${alignStyle}"` : '';
 
   switch (node.type) {
     case 'doc':
@@ -90,27 +90,31 @@ const PAGE_CSS = `
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
     font-family: 'Times New Roman', Times, serif;
-    font-size: 12pt;
-    line-height: 1.6;
+    font-size: 11pt;
+    line-height: 1.35;
     color: #000;
     padding: 0;
   }
-  h1 { font-size: 16pt; font-weight: bold; text-align: center; margin: 1em 0 0.5em; }
-  h2 { font-size: 14pt; font-weight: bold; margin: 0.9em 0 0.4em; }
-  h3 { font-size: 12pt; font-weight: bold; margin: 0.8em 0 0.3em; }
-  p  { margin: 0.4em 0; }
-  ul, ol { padding-left: 1.5em; margin: 0.4em 0; }
-  li { margin: 0.2em 0; }
-  table { width: 100%; border-collapse: collapse; margin: 0.8em 0; font-size: 11pt; }
-  th, td { border: 1px solid #333; padding: 4pt 8pt; vertical-align: top; }
+  h1 { font-size: 14pt; font-weight: bold; margin: 0.5em 0 0.35em; }
+  h2 { font-size: 12pt; font-weight: bold; margin: 0.6em 0 0.25em; }
+  h3 { font-size: 11pt; font-weight: bold; margin: 0.5em 0 0.2em; }
+  p  { margin: 0.2em 0; }
+  ul, ol { padding-left: 1.5em; margin: 0.3em 0; }
+  li { margin: 0.1em 0; }
+  table { width: 100%; border-collapse: collapse; margin: 0.45em 0; font-size: 10.5pt; }
+  th, td { border: 1px solid #333; padding: 3pt 6pt; vertical-align: top; }
   th { font-weight: bold; background: #f5f5f5; }
+  /* Реквизитные таблицы (нет th) — без рамок */
+  table:not(:has(th)) { border: none; margin: 0.1em 0; }
+  table:not(:has(th)) td { border: none; padding: 1.5pt 5pt; }
+  table:not(:has(th)) td:first-child { padding-left: 0; white-space: nowrap; }
   strong { font-weight: bold; }
   em { font-style: italic; }
   u  { text-decoration: underline; }
   s  { text-decoration: line-through; }
   code { font-family: monospace; background: #f4f4f4; padding: 0 3pt; }
   pre  { background: #f4f4f4; padding: 8pt; margin: 0.5em 0; }
-  hr   { border: none; border-top: 1px solid #ccc; margin: 1em 0; }
+  hr   { border: none; border-top: 1.5px solid #000; margin: 0.25em 0 0.5em; }
   blockquote { border-left: 3px solid #ccc; padding-left: 1em; color: #555; }
 `;
 

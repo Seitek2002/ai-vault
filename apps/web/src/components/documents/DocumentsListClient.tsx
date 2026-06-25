@@ -8,7 +8,9 @@ import { templatesApi } from "@/lib/api/templates";
 import type { TemplateDto } from "@/lib/api/templates";
 import { counterpartiesApi } from "@/lib/api/counterparties";
 import { DOCUMENT_TEMPLATES, DOCUMENT_TYPE_LIST } from "@/lib/templates";
-import { syncDateInBody, syncNumberInBody, injectCounterpartyInBody, todayISO } from "@/lib/docBody";
+import { syncDateInBody, syncNumberInBody, injectCounterpartyInBody, injectProviderInBody } from "@/lib/docBody";
+import { todayISO } from "@/lib/docBody";
+import { settingsApi } from "@/lib/api/settings";
 import { DocumentType, DocumentStatus } from "@ai-vault/types";
 import type { DocumentDto } from "@ai-vault/types";
 
@@ -83,6 +85,9 @@ function CreateDocumentModal({ onClose }: { onClose: () => void }) {
       let bodyJson: unknown = tpl.bodyJson;
       let meta: Record<string, unknown> = tpl.metaDefaults as Record<string, unknown>;
 
+      // Fetch org settings once — used to auto-fill Поставщик section
+      const orgSettings = await settingsApi.getSettings().catch(() => null);
+
       if (selectedTemplate) {
         bodyJson = substituteVariables(selectedTemplate.bodyJson, variableValues);
         meta = (selectedTemplate.metaDefaults as Record<string, unknown>) ?? {};
@@ -114,6 +119,11 @@ function CreateDocumentModal({ onClose }: { onClose: () => void }) {
         if (cpName) {
           bodyJson = injectCounterpartyInBody(bodyJson, cpName);
         }
+      }
+
+      // Always inject provider (Поставщик) from org settings
+      if (orgSettings?.name) {
+        bodyJson = injectProviderInBody(bodyJson, orgSettings);
       }
 
       return documentsApi.create({
@@ -629,6 +639,8 @@ function CompanyFilterDropdown({
 // ─── Document card ─────────────────────────────────────────────────────────────
 function DocCard({ doc }: { doc: DocumentDto }) {
   const router = useRouter();
+  const qc = useQueryClient();
+  const [confirming, setConfirming] = useState(false);
   const tpl = DOCUMENT_TEMPLATES[doc.type];
   const date = new Date(doc.updatedAt).toLocaleDateString("ru-RU", {
     day: "2-digit",
@@ -636,16 +648,23 @@ function DocCard({ doc }: { doc: DocumentDto }) {
     year: "numeric",
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: () => documentsApi.delete(doc.id),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["documents"] }),
+  });
+
   return (
-    <button
-      onClick={() => router.push(`/documents/${doc.id}`)}
-      className="w-full text-left flex items-start gap-3 px-4 py-4 rounded-xl bg-[var(--color-bg-surface)] border border-[var(--color-border)] hover:border-[var(--color-border-hover)] hover:bg-[var(--color-bg-elevated)] transition-all group"
-    >
+    <div className="w-full flex items-start gap-3 px-4 py-4 rounded-xl bg-[var(--color-bg-surface)] border border-[var(--color-border)] hover:border-[var(--color-border-hover)] hover:bg-[var(--color-bg-elevated)] transition-all group">
       <div
         className="mt-0.5 w-1 self-stretch rounded-full shrink-0"
         style={{ background: tpl.color }}
       />
-      <div className="flex-1 min-w-0">
+
+      {/* Clickable content area */}
+      <button
+        onClick={() => router.push(`/documents/${doc.id}`)}
+        className="flex-1 min-w-0 text-left"
+      >
         <div className="flex items-center gap-2 mb-1">
           <span
             className="text-xs font-bold px-1.5 py-0.5 rounded shrink-0"
@@ -668,9 +687,38 @@ function DocCard({ doc }: { doc: DocumentDto }) {
         {doc.number && (
           <p className="text-xs text-[var(--color-text-muted)] mt-0.5">№ {doc.number}</p>
         )}
+      </button>
+
+      <div className="flex items-center gap-3 shrink-0">
+        <time className="text-xs text-[var(--color-text-muted)]">{date}</time>
+
+        {confirming ? (
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs text-[var(--color-text-muted)]">Удалить?</span>
+            <button
+              onClick={() => { deleteMutation.mutate(); setConfirming(false); }}
+              disabled={deleteMutation.isPending}
+              className="text-xs px-2 py-1 rounded bg-red-600/80 hover:bg-red-600 text-white font-medium transition-colors disabled:opacity-50"
+            >
+              Да
+            </button>
+            <button
+              onClick={() => setConfirming(false)}
+              className="text-xs px-2 py-1 rounded bg-[var(--color-bg-elevated)] hover:bg-[var(--color-border)] text-[var(--color-text-secondary)] font-medium transition-colors border border-[var(--color-border)]"
+            >
+              Нет
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => setConfirming(true)}
+            className="opacity-0 group-hover:opacity-100 text-xs px-2.5 py-1 rounded border border-[var(--color-border)] text-[var(--color-text-muted)] hover:text-red-400 hover:border-red-400/50 transition-all"
+          >
+            Удалить
+          </button>
+        )}
       </div>
-      <time className="text-xs text-[var(--color-text-muted)] shrink-0 mt-0.5">{date}</time>
-    </button>
+    </div>
   );
 }
 

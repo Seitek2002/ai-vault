@@ -57,6 +57,93 @@ export function syncNumberInBody(
   return JSON.parse(text) as unknown;
 }
 
+export interface ProviderSettings {
+  name: string;
+  inn?: string | null;
+  bin?: string | null;
+  address?: string | null;
+  bankAccount?: string | null;
+  bankName?: string | null;
+  bankBik?: string | null;
+}
+
+/**
+ * Inject the provider (Поставщик/Исполнитель) details from org settings into the body.
+ * Finds the tableRow that contains "Поставщик", "Исполнитель" or "Продавец" and
+ * rebuilds the content cell with actual company data.
+ */
+export function injectProviderInBody(
+  bodyJson: unknown,
+  settings: ProviderSettings,
+): unknown {
+  if (!settings.name) return bodyJson;
+
+  const PROVIDER_KW = ["Поставщик", "Исполнитель", "Продавец"];
+  const isProviderCell = (s: string) => PROVIDER_KW.some((kw) => s.includes(kw));
+
+  const t = (text: string) => ({ type: "text", text });
+  const b = (text: string) => ({ type: "text", text, marks: [{ type: "bold" }] });
+  const para = (...nodes: object[]) => ({ type: "paragraph", content: nodes });
+
+  function buildContent(): object[] {
+    const rows: object[] = [];
+    // Company name — bold
+    rows.push(para(b(`ОсОО «${settings.name}»`)));
+    // INN + ОКПО + address + postal — one paragraph
+    const innParts: string[] = [];
+    if (settings.inn) {
+      innParts.push(settings.bin
+        ? `ИНН: ${settings.inn}, код ОКПО: ${settings.bin}`
+        : `ИНН: ${settings.inn}`);
+    }
+    if (settings.address) innParts.push(`Юридический адрес: ${settings.address}`);
+    if (innParts.length) rows.push(para(t(innParts.join(", ") + " Почтовый адрес: 720001")));
+    // Bank details — bold, one line
+    if (settings.bankAccount || settings.bankName || settings.bankBik) {
+      rows.push(para(b("Банковские реквизиты:")));
+      const bankLine = [
+        settings.bankAccount ? `Расчетный счет ${settings.bankAccount}` : null,
+        settings.bankName ? settings.bankName : null,
+        settings.bankBik ? `БИК банка ${settings.bankBik}` : null,
+      ].filter(Boolean).join("  ");
+      rows.push(para(b(bankLine)));
+    }
+    return rows;
+  }
+
+  function traverse(node: unknown): unknown {
+    if (typeof node !== "object" || node === null) return node;
+    const n = node as Record<string, unknown>;
+    if (n.type === "tableRow") {
+      const cells = (n.content as unknown[]) ?? [];
+      if (cells.length >= 2) {
+        const labelIdx = cells.findIndex((c) => {
+          if (!isProviderCell(JSON.stringify(c))) return false;
+          // Only treat as a label cell if it's short (≤2 paragraphs).
+          // A full реквизиты block has many paragraphs and must not be replaced.
+          const cellContent = ((c as Record<string, unknown>).content as unknown[]) ?? [];
+          return cellContent.length <= 2;
+        });
+        if (labelIdx >= 0) {
+          const contentIdx = labelIdx === 0 ? 1 : 0;
+          return {
+            ...n,
+            content: cells.map((c, i) =>
+              i === contentIdx
+                ? { ...(c as Record<string, unknown>), content: buildContent() }
+                : c,
+            ),
+          };
+        }
+      }
+    }
+    if (n.content) return { ...n, content: (n.content as unknown[]).map(traverse) };
+    return n;
+  }
+
+  return traverse(bodyJson);
+}
+
 /**
  * Inject the counterparty (buyer/Заказчик) company name into the body.
  * Works for both INVOICE_PAYMENT (label and content in separate cells)

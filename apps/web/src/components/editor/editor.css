@@ -1,0 +1,109 @@
+.prose-editor .tiptap {
+  outline: none;
+  min-height: 400px;
+  color: var(--color-text-primary);
+  font-size: 0.9375rem;
+  line-height: 1.75;
+}
+
+.prose-editor .tiptap p {
+  margin: 0.5em 0;
+}
+
+.prose-editor .tiptap h1 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 1.25em 0 0.5em;
+  color: var(--color-text-primary);
+  text-align: center;
+}
+.prose-editor .tiptap h2 {
+  font-size: 1.2rem;
+  font-weight: 600;
+  margin: 1em 0 0.4em;
+  color: var(--color-text-primary);
+}
+.prose-editor .tiptap h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0.8em 0 0.3em;
+  color: var(--color-text-secondary);
+}
+
+.prose-editor .tiptap ul,
+.prose-editor .tiptap ol {
+  padding-left: 1.5em;
+  margin: 0.5em 0;
+}
+.prose-editor .tiptap li {
+  margin: 0.2em 0;
+}
+
+.prose-editor .tiptap strong { font-weight: 700; }
+.prose-editor .tiptap em { font-style: italic; }
+.prose-editor .tiptap u { text-decoration: underline; }
+
+/* Table */
+.prose-editor .tiptap table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1em 0;
+  font-size: 0.875rem;
+}
+.prose-editor .tiptap th,
+.prose-editor .tiptap td {
+  border: 1px solid var(--color-border);
+  padding: 0.5em 0.75em;
+  vertical-align: top;
+  min-width: 60px;
+}
+.prose-editor .tiptap th {
+  background: var(--color-bg-elevated);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+.prose-editor .tiptap td {
+  color: var(--color-text-secondary);
+}
+.prose-editor .tiptap .selectedCell::after {
+  background: var(--color-accent-dim);
+  position: absolute;
+  inset: 0;
+  content: "";
+  pointer-events: none;
+}
+.prose-editor .tiptap .column-resize-handle {
+  background-color: var(--color-accent);
+  width: 2px;
+  position: absolute;
+  right: -1px;
+  top: 0;
+  bottom: 0;
+  pointer-events: none;
+}
+.prose-editor .tiptap .tableWrapper {
+  overflow-x: auto;
+}
+
+/* Placeholder */
+.prose-editor .tiptap p.is-editor-empty:first-child::before {
+  color: var(--color-text-muted);
+  content: attr(data-placeholder);
+  float: left;
+  pointer-events: none;
+  height: 0;
+}
+
+/* AI diff marks */
+.prose-editor .tiptap .diff-insert {
+  background-color: var(--color-diff-insert-bg);
+  color: var(--color-diff-insert-text);
+  border-bottom: 1px solid var(--color-diff-insert-text);
+  border-radius: 2px;
+}
+.prose-editor .tiptap .diff-delete {
+  background-color: var(--color-diff-delete-bg);
+  color: var(--color-diff-delete-text);
+  text-decoration: line-through;
+  border-radius: 2px;
+}

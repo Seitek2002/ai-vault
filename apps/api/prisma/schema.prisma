@@ -1,0 +1,234 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ───────────────────────────────────────────────────────────────────
+
+enum UserRole {
+  ADMIN
+  MANAGER
+}
+
+enum DocumentType {
+  KP
+  CONTRACT
+  INVOICE_FACTURA
+  INVOICE_PAYMENT
+  AVR
+}
+
+enum DocumentStatus {
+  DRAFT
+  FINAL
+  SENT
+  SIGNED
+}
+
+enum ChangeType {
+  INSERT
+  DELETE
+}
+
+enum ChangeAuthor {
+  AI
+  USER
+}
+
+enum ChangeStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+// ─── Models ──────────────────────────────────────────────────────────────────
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+
+  users          User[]
+  counterparties Counterparty[]
+  documents      Document[]
+  fileAssets     FileAsset[]
+  templates      DocumentTemplate[]
+  settings       CompanySettings?
+}
+
+model User {
+  id             String   @id @default(cuid())
+  email          String   @unique
+  passwordHash   String
+  name           String
+  role           UserRole @default(MANAGER)
+  organizationId String
+  createdAt      DateTime @default(now())
+
+  organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdDocuments Document[]        @relation("DocumentCreatedBy")
+  versions         DocumentVersion[]
+  fileAssets       FileAsset[]
+  refreshTokens    RefreshToken[]
+
+  @@index([organizationId])
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Counterparty {
+  id             String  @id @default(cuid())
+  organizationId String
+  name           String
+  inn            String?
+  bin            String?
+  address        String?
+  phone          String?
+  email          String?
+  bankAccount    String?
+  bankName       String?
+  bankBik        String?
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  documents    Document[]
+
+  @@index([organizationId])
+  @@index([organizationId, inn])
+}
+
+model Document {
+  id             String         @id @default(cuid())
+  organizationId String
+  type           DocumentType
+  status         DocumentStatus @default(DRAFT)
+  title          String
+  number         String?
+  counterpartyId String?
+  meta           Json           @default("{}")
+  bodyJson       Json           @default("{}")
+  createdById    String
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  counterparty Counterparty?     @relation(fields: [counterpartyId], references: [id], onDelete: SetNull)
+  createdBy    User              @relation("DocumentCreatedBy", fields: [createdById], references: [id])
+  versions     DocumentVersion[]
+  changes      DocumentChange[]
+  fileAssets   FileAsset[]
+
+  @@index([organizationId])
+  @@index([organizationId, type])
+  @@index([organizationId, status])
+  @@index([organizationId, createdAt(sort: Desc)])
+}
+
+model DocumentVersion {
+  id          String   @id @default(cuid())
+  documentId  String
+  version     Int
+  bodyJson    Json
+  createdById String
+  createdAt   DateTime @default(now())
+
+  document  Document         @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  createdBy User             @relation(fields: [createdById], references: [id])
+  changes   DocumentChange[]
+
+  @@unique([documentId, version])
+  @@index([documentId])
+}
+
+model DocumentChange {
+  id         String       @id @default(cuid())
+  documentId String
+  versionId  String
+  type       ChangeType
+  author     ChangeAuthor
+  status     ChangeStatus @default(PENDING)
+  from       Int
+  to         Int
+  content    String
+  createdAt  DateTime     @default(now())
+
+  document Document        @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  version  DocumentVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+
+  @@index([documentId])
+  @@index([versionId])
+  @@index([documentId, status])
+}
+
+model FileAsset {
+  id             String   @id @default(cuid())
+  organizationId String
+  documentId     String?
+  originalName   String
+  mimeType       String
+  size           Int
+  s3Key          String   @unique
+  s3Url          String
+  createdById    String
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  document     Document?    @relation(fields: [documentId], references: [id], onDelete: SetNull)
+  createdBy    User         @relation(fields: [createdById], references: [id])
+
+  @@index([organizationId])
+  @@index([documentId])
+}
+
+model CompanySettings {
+  id             String  @id @default(cuid())
+  organizationId String  @unique
+  name           String
+  inn            String
+  bin            String?
+  address        String
+  phone          String?
+  email          String?
+  bankAccount    String?
+  bankName       String?
+  bankBik        String?
+  vatRate        Float   @default(12)
+  currency       String  @default("KGS")
+  logoAssetId    String?
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+}
+
+model DocumentTemplate {
+  id             String       @id @default(cuid())
+  organizationId String
+  type           DocumentType
+  name           String
+  description    String?
+  bodyJson       Json         @default("{}")
+  metaDefaults   Json         @default("{}")
+  isDefault      Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([organizationId, type])
+}

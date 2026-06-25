@@ -1,36 +1,57 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# AI Vault — система деловых документов
 
-## Getting Started
+Монорепо с npm workspaces + Turborepo.
 
-First, run the development server:
-
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+```
+apps/web       — Next.js 16 фронтенд  http://localhost:3000
+apps/api       — NestJS бэкенд        http://localhost:3001/api
+packages/types — общие TypeScript типы
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Быстрый старт
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### 1. Предварительные требования
+- Node.js ≥ 20.9
+- Docker Desktop
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### 2. Установить зависимости
+```bash
+npm install
+```
 
-## Learn More
+### 3. Запустить инфраструктуру (PostgreSQL + MinIO)
+```bash
+docker compose up -d
+```
 
-To learn more about Next.js, take a look at the following resources:
+### 4. Настроить переменные окружения API
+```bash
+cp apps/api/.env.example apps/api/.env
+# Отредактируй apps/api/.env при необходимости
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### 5. Применить миграции Prisma
+```bash
+npm run db:migrate --workspace=@ai-vault/api
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### 6. Запустить всё одной командой
+```bash
+npm run dev
+```
 
-## Deploy on Vercel
+Или по отдельности:
+```bash
+npm run dev --workspace=@ai-vault/web   # фронтенд :3000
+npm run dev --workspace=@ai-vault/api   # бэкенд   :3001
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## MinIO (S3-совместимое хранилище)
+Консоль: http://localhost:9001  
+Логин: `minioadmin` / `minioadmin`  
+Создай бакет `ai-vault` в консоли.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Prisma Studio
+```bash
+npm run db:studio --workspace=@ai-vault/api
+```

@@ -1,0 +1,109 @@
+const RU_MONTHS = [
+  "января","февраля","марта","апреля","мая","июня",
+  "июля","августа","сентября","октября","ноября","декабря",
+];
+
+function parseLocalDate(iso: string): Date {
+  const parts = iso.split("-").map(Number);
+  return new Date(parts[0]!, parts[1]! - 1, parts[2]!);
+}
+
+export function ruDate(d: Date): string {
+  return `${d.getDate()} ${RU_MONTHS[d.getMonth()]} ${d.getFullYear()} г.`;
+}
+
+export function todayISO(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/** Replace the old date (or initial placeholder) in the body JSON with the new date. */
+export function syncDateInBody(
+  bodyJson: unknown,
+  prevIso: string,
+  newIso: string,
+): unknown {
+  if (!newIso) return bodyJson;
+  let text = JSON.stringify(bodyJson);
+  const newFormatted = ruDate(parseLocalDate(newIso));
+
+  if (prevIso) {
+    const oldFormatted = ruDate(parseLocalDate(prevIso));
+    text = text.split(oldFormatted).join(newFormatted);
+    // without «г.» suffix
+    const oldShort = oldFormatted.slice(0, -3); // remove " г."
+    text = text.split(oldShort).join(newFormatted.slice(0, -3));
+  } else {
+    // Replace the blank placeholder used in all templates
+    text = text.split("«___» __________ 202__ г.").join(newFormatted);
+  }
+
+  return JSON.parse(text) as unknown;
+}
+
+/** Replace the old invoice/act number in the body heading. */
+export function syncNumberInBody(
+  bodyJson: unknown,
+  prevNum: string,
+  newNum: string,
+): unknown {
+  const trimNew = newNum.trim();
+  if (!trimNew) return bodyJson;
+  const trimOld = prevNum.trim() || "___";
+  if (trimOld === trimNew) return bodyJson;
+
+  let text = JSON.stringify(bodyJson);
+  text = text.split(`№ ${trimOld}`).join(`№ ${trimNew}`);
+  return JSON.parse(text) as unknown;
+}
+
+/**
+ * Inject the counterparty (buyer/Заказчик) company name into the body.
+ * Works for both INVOICE_PAYMENT (label and content in separate cells)
+ * and AVR (label and content in the same cell).
+ */
+export function injectCounterpartyInBody(
+  bodyJson: unknown,
+  companyName: string,
+): unknown {
+  const PLACEHOLDER = "ОсОО «______________»";
+  const BUYER_KW = ["Заказчик", "Покупатель"];
+
+  function hasBuyer(s: string) {
+    return BUYER_KW.some((kw) => s.includes(kw));
+  }
+
+  function replaceAll(n: unknown): unknown {
+    const s = JSON.stringify(n);
+    return JSON.parse(s.split(PLACEHOLDER).join(`ОсОО «${companyName}»`)) as unknown;
+  }
+
+  function traverse(node: unknown): unknown {
+    if (typeof node !== "object" || node === null) return node;
+    const n = node as Record<string, unknown>;
+
+    if (n.type === "tableRow") {
+      const cells = (n.content as unknown[]) ?? [];
+      const buyerIdx = cells.findIndex((c) => hasBuyer(JSON.stringify(c)));
+
+      if (buyerIdx >= 0) {
+        const buyerHasPlaceholder = JSON.stringify(cells[buyerIdx]).includes(PLACEHOLDER);
+        return {
+          ...n,
+          content: cells.map((c, i) =>
+            buyerHasPlaceholder
+              ? i === buyerIdx ? replaceAll(c) : c   // AVR: replace inside buyer cell
+              : i !== buyerIdx ? replaceAll(c) : c,  // Invoice: replace in other cell
+          ),
+        };
+      }
+    }
+
+    if (n.content) {
+      return { ...n, content: (n.content as unknown[]).map(traverse) };
+    }
+    return n;
+  }
+
+  return traverse(bodyJson);
+}

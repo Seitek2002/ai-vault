@@ -66,11 +66,17 @@ function nodeToHtml(node: PmNode): string {
     case 'tableRow':
       return `<tr>${children()}</tr>`;
 
-    case 'tableHeader':
-      return `<th>${children()}</th>`;
+    case 'tableHeader': {
+      const thColspan = node.attrs?.colspan as number | undefined;
+      const thAttr = thColspan && thColspan > 1 ? ` colspan="${thColspan}"` : '';
+      return `<th${thAttr}>${children()}</th>`;
+    }
 
-    case 'tableCell':
-      return `<td>${children()}</td>`;
+    case 'tableCell': {
+      const tdColspan = node.attrs?.colspan as number | undefined;
+      const tdAttr = tdColspan && tdColspan > 1 ? ` colspan="${tdColspan}"` : '';
+      return `<td${tdAttr}>${children()}</td>`;
+    }
 
     case 'blockquote':
       return `<blockquote>${children()}</blockquote>`;
@@ -103,7 +109,7 @@ const PAGE_CSS = `
   li { margin: 0.1em 0; }
   table { width: 100%; border-collapse: collapse; margin: 0.45em 0; font-size: 10.5pt; }
   th, td { border: 1px solid #333; padding: 3pt 6pt; vertical-align: top; }
-  th { font-weight: bold; background: #f5f5f5; }
+  th { font-weight: bold; }
   /* Реквизитные таблицы (нет th) — без рамок */
   table:not(:has(th)) { border: none; margin: 0.1em 0; }
   table:not(:has(th)) td { border: none; padding: 1.5pt 5pt; }

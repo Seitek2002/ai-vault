@@ -77,6 +77,9 @@ export function injectProviderInBody(
   settings: ProviderSettings,
 ): unknown {
   if (!settings.name) return bodyJson;
+  // Only inject when we have enough data beyond just the name (INN or bank account).
+  // If only the name is set, keep the template's hardcoded content as-is.
+  if (!settings.inn && !settings.bankAccount) return bodyJson;
 
   const PROVIDER_KW = ["Поставщик", "Исполнитель", "Продавец"];
   const isProviderCell = (s: string) => PROVIDER_KW.some((kw) => s.includes(kw));

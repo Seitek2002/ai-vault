@@ -7,6 +7,7 @@ import { RichEditor } from "@/components/editor/RichEditor";
 import { MetaFields } from "./MetaFields";
 import { useEditorStore } from "@/stores/editor.store";
 import { documentsApi } from "@/lib/api/documents";
+import { templatesApi } from "@/lib/api/templates";
 import { DOCUMENT_TEMPLATES } from "@/lib/templates";
 import { ExportMenu } from "./ExportMenu";
 import { uploadFile } from "@/lib/api/files";
@@ -15,6 +16,78 @@ import type { DocumentMeta } from "@ai-vault/types";
 import { syncDateInBody, syncNumberInBody } from "@/lib/docBody";
 
 const AUTOSAVE_DELAY = 2000;
+
+// ── Save as template modal ────────────────────────────────────────────────────
+
+function SaveAsTemplateModal({
+  docType,
+  bodyJson,
+  meta,
+  onClose,
+}: {
+  docType: DocumentType;
+  bodyJson: unknown;
+  meta: Record<string, unknown>;
+  onClose: () => void;
+}) {
+  const qc = useQueryClient();
+  const [name, setName] = useState(DOCUMENT_TEMPLATES[docType].label);
+
+  const mutation = useMutation({
+    mutationFn: () =>
+      templatesApi.create({
+        type: docType,
+        name: name.trim() || DOCUMENT_TEMPLATES[docType].label,
+        bodyJson,
+        metaDefaults: meta,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["templates"] });
+      onClose();
+    },
+  });
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div className="w-full max-w-sm rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-elevated)] shadow-xl p-5">
+        <h3 className="text-sm font-semibold text-[var(--color-text-primary)] mb-3">
+          Сохранить как шаблон
+        </h3>
+        <input
+          type="text"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Название шаблона"
+          autoFocus
+          className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-base)] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:border-[var(--color-accent)] mb-3"
+        />
+        {mutation.isError && (
+          <p className="text-xs text-red-400 mb-2">
+            {mutation.error instanceof Error ? mutation.error.message : "Ошибка сохранения"}
+          </p>
+        )}
+        <div className="flex justify-end gap-2">
+          <button
+            onClick={onClose}
+            className="px-3 py-1.5 text-sm rounded-lg border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors"
+          >
+            Отмена
+          </button>
+          <button
+            onClick={() => mutation.mutate()}
+            disabled={mutation.isPending || !name.trim()}
+            className="px-3 py-1.5 text-sm font-semibold rounded-lg bg-[var(--color-accent)] text-[#0F172A] hover:bg-[var(--color-accent-hover)] disabled:opacity-40 transition-colors"
+          >
+            {mutation.isPending ? "Сохраняю…" : "Сохранить"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function getMetaDateKey(type: DocumentType): string {
   if (type === DocumentType.AVR) return "actDate";
@@ -83,6 +156,7 @@ export function DocumentEditor({ documentId }: DocumentEditorProps) {
   const prevDateRef = useRef<string | null>(null);
   const prevNumberRef = useRef<string | null>(null);
   const [replaceError, setReplaceError] = useState<string | null>(null);
+  const [showSaveTemplate, setShowSaveTemplate] = useState(false);
 
   const [autoSave, setAutoSave] = useState<boolean>(() => {
     if (typeof window === "undefined") return true;
@@ -381,6 +455,18 @@ export function DocumentEditor({ documentId }: DocumentEditorProps) {
             />
 
             <button
+              onClick={() => setShowSaveTemplate(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elevated)] hover:bg-[var(--color-bg-subtle)] text-[var(--color-text-primary)] transition-colors"
+              title="Сохранить как шаблон"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <rect x="3" y="3" width="18" height="18" rx="2" />
+                <path d="M12 8v8m-4-4h8" />
+              </svg>
+              Шаблон
+            </button>
+
+            <button
               onClick={() => saveMutation.mutate()}
               disabled={!isDirty || isSaving}
               className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold rounded-lg bg-[var(--color-accent)] text-[#0F172A] hover:bg-[var(--color-accent-hover)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
@@ -414,6 +500,15 @@ export function DocumentEditor({ documentId }: DocumentEditorProps) {
           />
         </div>
       </div>
+
+      {showSaveTemplate && (
+        <SaveAsTemplateModal
+          docType={document.type}
+          bodyJson={document.bodyJson}
+          meta={(metaOverride ?? document.meta) as Record<string, unknown>}
+          onClose={() => setShowSaveTemplate(false)}
+        />
+      )}
     </div>
   );
 }

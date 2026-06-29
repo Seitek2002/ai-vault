@@ -58,7 +58,6 @@
   min-width: 60px;
 }
 .prose-editor .tiptap th {
-  background: var(--color-bg-elevated);
   font-weight: 600;
   color: var(--color-text-primary);
 }

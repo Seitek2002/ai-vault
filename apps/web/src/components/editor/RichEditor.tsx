@@ -1,9 +1,10 @@
 "use client";
 
-import { useEditor, EditorContent } from "@tiptap/react";
+import { useEditor, EditorContent, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
 import TextAlign from "@tiptap/extension-text-align";
+import TextStyle from "@tiptap/extension-text-style";
 import Placeholder from "@tiptap/extension-placeholder";
 import Table from "@tiptap/extension-table";
 import TableRow from "@tiptap/extension-table-row";
@@ -11,7 +12,33 @@ import TableCell from "@tiptap/extension-table-cell";
 import TableHeader from "@tiptap/extension-table-header";
 import { useCallback, useEffect } from "react";
 import type { SVGProps } from "react";
+import { FontSize } from "./extensions/fontSize";
 import "./editor.css";
+
+const FONT_SIZES = ["8", "9", "10", "10.5", "11", "12", "14", "16", "18", "20", "24", "28", "32", "36"];
+
+function FontSizeSelect({ editor }: { editor: Editor }) {
+  const current = (editor.getAttributes("textStyle").fontSize as string | undefined) ?? "";
+  const value = current.replace("pt", "");
+
+  return (
+    <select
+      title="Размер шрифта"
+      value={value}
+      onChange={(e) => {
+        const v = e.target.value;
+        if (!v) editor.chain().focus().unsetFontSize().run();
+        else editor.chain().focus().setFontSize(`${v}pt`).run();
+      }}
+      className="px-1.5 py-1 text-xs rounded-md border border-[var(--color-border)] bg-transparent text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-accent)] transition-colors"
+    >
+      <option value="">12 (по умолч.)</option>
+      {FONT_SIZES.map((s) => (
+        <option key={s} value={s}>{s}</option>
+      ))}
+    </select>
+  );
+}
 
 /* ── Icons ─────────────────────────────────────────────────────────── */
 const Icon = (d: string) =>
@@ -89,6 +116,8 @@ export function RichEditor({ initialContent, onChange, placeholder = "Начни
       StarterKit,
       Underline,
       TextAlign.configure({ types: ["heading", "paragraph"] }),
+      TextStyle,
+      FontSize,
       Placeholder.configure({ placeholder }),
       Table.configure({ resizable: false }),
       TableRow,
@@ -125,6 +154,8 @@ export function RichEditor({ initialContent, onChange, placeholder = "Начни
       {/* Toolbar */}
       {!readOnly && (
         <div className="flex flex-wrap items-center gap-0.5 px-3 py-2 border-b border-[var(--color-border)] bg-[var(--color-bg-surface)] shrink-0">
+          <FontSizeSelect editor={editor} />
+          <SEP />
           <ToolbarBtn active={editor.isActive("bold")} title="Жирный (Ctrl+B)" onClick={() => editor.chain().focus().toggleBold().run()}>
             <BoldIcon className="w-4 h-4" />
           </ToolbarBtn>

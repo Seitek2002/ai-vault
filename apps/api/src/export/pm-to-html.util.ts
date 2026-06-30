@@ -23,6 +23,11 @@ function textNodeToHtml(node: PmNode): string {
       case 'underline': html = `<u>${html}</u>`; break;
       case 'strike':    html = `<s>${html}</s>`; break;
       case 'code':      html = `<code>${html}</code>`; break;
+      case 'textStyle': {
+        const fontSize = mark.attrs?.fontSize as string | undefined;
+        if (fontSize) html = `<span style="font-size:${fontSize}">${html}</span>`;
+        break;
+      }
     }
   }
   return html;

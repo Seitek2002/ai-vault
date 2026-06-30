@@ -27,12 +27,18 @@ type DocxBlock = Paragraph | Table;
 
 function buildTextRun(node: PmNode): TextRun {
   const marks = new Set((node.marks ?? []).map((m) => m.type));
+  const textStyleMark = (node.marks ?? []).find((m) => m.type === 'textStyle');
+  const fontSizePt = textStyleMark?.attrs?.fontSize
+    ? parseFloat(String(textStyleMark.attrs.fontSize))
+    : undefined;
+
   return new TextRun({
     text: node.text ?? '',
     bold: marks.has('bold'),
     italics: marks.has('italic'),
     ...(marks.has('underline') ? { underline: { type: UnderlineType.SINGLE } } : {}),
     strike: marks.has('strike'),
+    ...(fontSizePt ? { size: Math.round(fontSizePt * 2) } : {}),
   });
 }
 

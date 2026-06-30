@@ -1,9 +1,21 @@
+/*
+ * Document canvas styles — intentionally hardcoded (no var(--color-*) from
+ * the app theme). The editor must always render as a white page with
+ * Times New Roman, matching the PDF export, regardless of the app's theme.
+ */
+
+.prose-editor {
+  background: #ffffff;
+  color: #000000;
+}
+
 .prose-editor .tiptap {
   outline: none;
-  min-height: 400px;
-  color: var(--color-text-primary);
-  font-size: 0.9375rem;
-  line-height: 1.75;
+  min-height: 600px;
+  color: #000000;
+  font-family: "Times New Roman", Times, serif;
+  font-size: 12pt;
+  line-height: 1.5;
 }
 
 .prose-editor .tiptap p {
@@ -11,23 +23,23 @@
 }
 
 .prose-editor .tiptap h1 {
-  font-size: 1.5rem;
+  font-size: 1.6rem;
   font-weight: 700;
   margin: 1.25em 0 0.5em;
-  color: var(--color-text-primary);
+  color: #000000;
   text-align: center;
 }
 .prose-editor .tiptap h2 {
-  font-size: 1.2rem;
+  font-size: 1.3rem;
   font-weight: 600;
   margin: 1em 0 0.4em;
-  color: var(--color-text-primary);
+  color: #000000;
 }
 .prose-editor .tiptap h3 {
-  font-size: 1rem;
+  font-size: 1.1rem;
   font-weight: 600;
   margin: 0.8em 0 0.3em;
-  color: var(--color-text-secondary);
+  color: #000000;
 }
 
 .prose-editor .tiptap ul,
@@ -48,21 +60,21 @@
   width: 100%;
   border-collapse: collapse;
   margin: 1em 0;
-  font-size: 0.875rem;
+  font-size: 0.95em;
 }
 .prose-editor .tiptap th,
 .prose-editor .tiptap td {
-  border: 1px solid var(--color-border);
+  border: 1px solid #333333;
   padding: 0.5em 0.75em;
   vertical-align: top;
   min-width: 60px;
 }
 .prose-editor .tiptap th {
   font-weight: 600;
-  color: var(--color-text-primary);
+  color: #000000;
 }
 .prose-editor .tiptap td {
-  color: var(--color-text-secondary);
+  color: #000000;
 }
 
 /* Реквизитные таблицы (нет th) — невидимые, только разметка */
@@ -73,22 +85,22 @@
 .prose-editor .tiptap table:not(:has(th)) td {
   border: none;
   padding: 0.25em 0.6em;
-  color: var(--color-text-secondary);
+  color: #000000;
 }
 .prose-editor .tiptap table:not(:has(th)) td:first-child {
   padding-left: 0;
   white-space: nowrap;
-  color: var(--color-text-primary);
+  color: #000000;
 }
 .prose-editor .tiptap .selectedCell::after {
-  background: var(--color-accent-dim);
+  background: rgba(59, 130, 246, 0.15);
   position: absolute;
   inset: 0;
   content: "";
   pointer-events: none;
 }
 .prose-editor .tiptap .column-resize-handle {
-  background-color: var(--color-accent);
+  background-color: #3b82f6;
   width: 2px;
   position: absolute;
   right: -1px;
@@ -102,13 +114,13 @@
 
 .prose-editor .tiptap hr {
   border: none;
-  border-top: 1.5px solid var(--color-text-primary);
+  border-top: 1.5px solid #000000;
   margin: 0.3em 0 0.6em;
 }
 
 /* Placeholder */
 .prose-editor .tiptap p.is-editor-empty:first-child::before {
-  color: var(--color-text-muted);
+  color: #9ca3af;
   content: attr(data-placeholder);
   float: left;
   pointer-events: none;
@@ -117,14 +129,14 @@
 
 /* AI diff marks */
 .prose-editor .tiptap .diff-insert {
-  background-color: var(--color-diff-insert-bg);
-  color: var(--color-diff-insert-text);
-  border-bottom: 1px solid var(--color-diff-insert-text);
+  background-color: rgba(34, 197, 94, 0.15);
+  color: #15803d;
+  border-bottom: 1px solid #15803d;
   border-radius: 2px;
 }
 .prose-editor .tiptap .diff-delete {
-  background-color: var(--color-diff-delete-bg);
-  color: var(--color-diff-delete-text);
+  background-color: rgba(239, 68, 68, 0.12);
+  color: #b91c1c;
   text-decoration: line-through;
   border-radius: 2px;
 }

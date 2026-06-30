@@ -1,7 +1,21 @@
+import { DocumentType } from "@ai-vault/types";
+
 const RU_MONTHS = [
   "января","февраля","марта","апреля","мая","июня",
   "июля","августа","сентября","октября","ноября","декабря",
 ];
+
+// ── Shared ProseMirror node helpers ─────────────────────────────────────────
+const t = (text: string) => ({ type: "text", text });
+const b = (text: string) => ({ type: "text", text, marks: [{ type: "bold" }] });
+const para = (...nodes: object[]) => ({ type: "paragraph", content: nodes });
+const boldPara = (text: string) => para(b(text));
+const plainPara = (text: string) => para(t(text));
+const emptyPara = () => ({ type: "paragraph" });
+
+function withCountry(address: string): string {
+  return /кыргыз/i.test(address) ? address : `Кыргызская Республика, ${address}`;
+}
 
 function parseLocalDate(iso: string): Date {
   const parts = iso.split("-").map(Number);
@@ -84,10 +98,6 @@ export function injectProviderInBody(
   const PROVIDER_KW = ["Поставщик", "Исполнитель", "Продавец"];
   const isProviderCell = (s: string) => PROVIDER_KW.some((kw) => s.includes(kw));
 
-  const t = (text: string) => ({ type: "text", text });
-  const b = (text: string) => ({ type: "text", text, marks: [{ type: "bold" }] });
-  const para = (...nodes: object[]) => ({ type: "paragraph", content: nodes });
-
   function buildContent(): object[] {
     const rows: object[] = [];
     // Company name — bold
@@ -147,26 +157,97 @@ export function injectProviderInBody(
   return traverse(bodyJson);
 }
 
+export interface CounterpartySettings {
+  name: string;
+  inn?: string | null;
+  bin?: string | null;
+  address?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  bankAccount?: string | null;
+  bankName?: string | null;
+  bankBik?: string | null;
+}
+
+/** Заказчик block for AVR — label + full реквизиты share one table cell. */
+function buildBuyerBlockAVR(cp: CounterpartySettings): object[] {
+  return [
+    boldPara("Заказчик:"),
+    plainPara(`ОсОО «${cp.name}»`),
+    plainPara(
+      `Юридический адрес: ${cp.address ? withCountry(cp.address) : "Кыргызская Республика, ________________"}`,
+    ),
+    plainPara("Почтовый адрес: _________"),
+    plainPara(cp.inn ? `ИНН ${cp.inn}` : "ИНН ____________"),
+    plainPara(cp.bin ? `ОКПО ${cp.bin}` : "ОКПО ___________"),
+    boldPara("Банковские реквизиты:"),
+    plainPara(cp.bankAccount ? `р/с ${cp.bankAccount}` : "р/с ______________________"),
+    plainPara(cp.bankName ? `в ${cp.bankName}` : "в ОАО «_____________»"),
+    plainPara(cp.bankBik ? `БИК ${cp.bankBik}` : "БИК ____________"),
+    plainPara("УГКНС:________"),
+    emptyPara(),
+    plainPara("________________________"),
+  ];
+}
+
+/** Заказчик block for CONTRACT section 10 — label + full реквизиты share one table cell. */
+function buildBuyerBlockContract(cp: CounterpartySettings): object[] {
+  return [
+    boldPara("Заказчик:"),
+    plainPara(`ОсОО «${cp.name}»`),
+    plainPara(
+      cp.address ? withCountry(cp.address) : "Кыргызская Республика, _____________________________",
+    ),
+    plainPara(cp.inn ? `ИНН: ${cp.inn}` : "ИНН: ________________"),
+    plainPara(cp.bin ? `ОКПО: ${cp.bin}` : "ОКПО: _________________"),
+    plainPara("ГНИ: __________________"),
+    plainPara(cp.bankName ? `Банк: ${cp.bankName}` : "Банк: ____________________"),
+    plainPara(cp.bankBik ? `БИК: ${cp.bankBik}` : "БИК: ______"),
+    plainPara(cp.bankAccount ? `Р/с: ${cp.bankAccount}` : "Р/с: _________________"),
+    plainPara(cp.email ? `Электронная почта: ${cp.email}` : "Электронная почта: __________________"),
+    emptyPara(),
+    boldPara("Генеральный директор"),
+    plainPara("____________/ ____________"),
+    plainPara("/ М.П."),
+  ];
+}
+
+/** Покупатель content cell for INVOICE_PAYMENT and other label/content-separated layouts. */
+function buildBuyerContentDefault(cp: CounterpartySettings): object[] {
+  const rows: object[] = [plainPara(`ОсОО «${cp.name}»`)];
+
+  const parts: string[] = [];
+  if (cp.inn) parts.push(`ИНН: ${cp.inn}`);
+  if (cp.bin) parts.push(`ОКПО: ${cp.bin}`);
+  if (cp.address) parts.push(`Юридический адрес: ${withCountry(cp.address)}`);
+  if (parts.length) rows.push(plainPara(`${parts.join(", ")} Почтовый адрес: ______`));
+
+  if (cp.bankAccount || cp.bankName || cp.bankBik) {
+    const bankParts = [
+      cp.bankAccount ? `р/с: ${cp.bankAccount}` : null,
+      cp.bankName ?? null,
+      cp.bankBik ? `БИК: ${cp.bankBik}` : null,
+    ].filter(Boolean).join(", ");
+    rows.push(plainPara(`${bankParts}, УГКНС: ___ ККН`));
+  }
+
+  return rows;
+}
+
 /**
- * Inject the counterparty (buyer/Заказчик) company name into the body.
- * Works for both INVOICE_PAYMENT (label and content in separate cells)
- * and AVR (label and content in the same cell).
+ * Inject the counterparty (buyer/Заказчик/Покупатель) details into the body.
+ * AVR and CONTRACT keep the label and full реквизиты block in the same table cell;
+ * INVOICE_PAYMENT (and others) split label and content into separate cells.
  */
 export function injectCounterpartyInBody(
   bodyJson: unknown,
-  companyName: string,
+  docType: DocumentType,
+  cp: CounterpartySettings,
 ): unknown {
-  const PLACEHOLDER = "ОсОО «______________»";
+  if (!cp.name) return bodyJson;
+
   const BUYER_KW = ["Заказчик", "Покупатель"];
-
-  function hasBuyer(s: string) {
-    return BUYER_KW.some((kw) => s.includes(kw));
-  }
-
-  function replaceAll(n: unknown): unknown {
-    const s = JSON.stringify(n);
-    return JSON.parse(s.split(PLACEHOLDER).join(`ОсОО «${companyName}»`)) as unknown;
-  }
+  const hasBuyer = (s: string) => BUYER_KW.some((kw) => s.includes(kw));
 
   function traverse(node: unknown): unknown {
     if (typeof node !== "object" || node === null) return node;
@@ -177,13 +258,34 @@ export function injectCounterpartyInBody(
       const buyerIdx = cells.findIndex((c) => hasBuyer(JSON.stringify(c)));
 
       if (buyerIdx >= 0) {
-        const buyerHasPlaceholder = JSON.stringify(cells[buyerIdx]).includes(PLACEHOLDER);
+        if (docType === DocumentType.AVR) {
+          return {
+            ...n,
+            content: cells.map((c, i) =>
+              i === buyerIdx
+                ? { ...(c as Record<string, unknown>), content: buildBuyerBlockAVR(cp) }
+                : c,
+            ),
+          };
+        }
+        if (docType === DocumentType.CONTRACT) {
+          return {
+            ...n,
+            content: cells.map((c, i) =>
+              i === buyerIdx
+                ? { ...(c as Record<string, unknown>), content: buildBuyerBlockContract(cp) }
+                : c,
+            ),
+          };
+        }
+        // Separate label/content cells (INVOICE_PAYMENT and others)
+        const contentIdx = buyerIdx === 0 ? 1 : 0;
         return {
           ...n,
           content: cells.map((c, i) =>
-            buyerHasPlaceholder
-              ? i === buyerIdx ? replaceAll(c) : c   // AVR: replace inside buyer cell
-              : i !== buyerIdx ? replaceAll(c) : c,  // Invoice: replace in other cell
+            i === contentIdx
+              ? { ...(c as Record<string, unknown>), content: buildBuyerContentDefault(cp) }
+              : c,
           ),
         };
       }

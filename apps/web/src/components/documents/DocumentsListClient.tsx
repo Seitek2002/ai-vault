@@ -12,7 +12,7 @@ import { syncDateInBody, syncNumberInBody, injectCounterpartyInBody, injectProvi
 import { todayISO } from "@/lib/docBody";
 import { settingsApi } from "@/lib/api/settings";
 import { DocumentType, DocumentStatus } from "@ai-vault/types";
-import type { DocumentDto } from "@ai-vault/types";
+import type { DocumentDto, CounterpartyDto } from "@ai-vault/types";
 
 // ─── Status label map ──────────────────────────────────────────────────────────
 const STATUS_LABELS: Record<DocumentStatus, string> = {
@@ -94,17 +94,17 @@ function CreateDocumentModal({ onClose }: { onClose: () => void }) {
       }
 
       let cpId = resolvedCompanyId;
-      let cpName: string | null = null;
+      let cpData: CounterpartyDto | null = null;
 
       if (companyToCreate) {
         const cp = await counterpartiesApi.quickCreate(companyToCreate);
         cpId = cp.id;
-        cpName = cp.name;
+        cpData = cp;
         void qc.invalidateQueries({ queryKey: ["companies"] });
         void qc.invalidateQueries({ queryKey: ["companies-search"] });
       } else if (resolvedCompanyId) {
         const found = (await counterpartiesApi.list()).find((c) => c.id === resolvedCompanyId);
-        cpName = found?.name ?? null;
+        cpData = found ?? null;
       }
 
       // For blank docs: inject today's date and company into body
@@ -116,8 +116,8 @@ function CreateDocumentModal({ onClose }: { onClose: () => void }) {
         meta = { ...meta, [dateKey]: today };
         bodyJson = syncDateInBody(bodyJson, "", today);
         bodyJson = syncNumberInBody(bodyJson, "", meta.invoiceNumber as string ?? "");
-        if (cpName) {
-          bodyJson = injectCounterpartyInBody(bodyJson, cpName);
+        if (cpData) {
+          bodyJson = injectCounterpartyInBody(bodyJson, selectedType, cpData);
         }
       }
 

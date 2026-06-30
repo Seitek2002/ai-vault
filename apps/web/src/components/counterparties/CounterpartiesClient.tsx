@@ -2,7 +2,14 @@
 
 import { useState, useCallback, FormEvent } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useRouter } from 'next/navigation';
 import { counterpartiesApi, type CounterpartyFormData } from '@/lib/api/counterparties';
+import { documentsApi } from '@/lib/api/documents';
+import { templatesApi } from '@/lib/api/templates';
+import { settingsApi } from '@/lib/api/settings';
+import { DOCUMENT_TEMPLATES, DOCUMENT_TYPE_LIST } from '@/lib/templates';
+import { syncDateInBody, todayISO, injectCounterpartyInBody, injectProviderInBody } from '@/lib/docBody';
+import { DocumentType } from '@ai-vault/types';
 import type { CounterpartyDto } from '@ai-vault/types';
 import { ApiError } from '@/lib/api/client';
 
@@ -256,9 +263,10 @@ interface CardProps {
   cp: CounterpartyDto;
   onEdit: (cp: CounterpartyDto) => void;
   onDelete: (cp: CounterpartyDto) => void;
+  onGenerate: (cp: CounterpartyDto) => void;
 }
 
-function CounterpartyCard({ cp, onEdit, onDelete }: CardProps) {
+function CounterpartyCard({ cp, onEdit, onDelete, onGenerate }: CardProps) {
   return (
     <div className="flex flex-col gap-3 p-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-surface)] hover:border-[var(--color-border-light)] transition-colors">
       {/* Name + actions */}
@@ -268,6 +276,15 @@ function CounterpartyCard({ cp, onEdit, onDelete }: CardProps) {
           <p className="text-xs text-[var(--color-text-muted)] mt-0.5">ИНН: {cp.inn}{cp.bin ? ` · ОКПО: ${cp.bin}` : ''}</p>
         </div>
         <div className="flex items-center gap-1 shrink-0">
+          <button
+            onClick={() => onGenerate(cp)}
+            title="Сгенерировать документ"
+            className="p-1.5 rounded-lg text-[var(--color-text-muted)] hover:text-[var(--color-accent)] hover:bg-[var(--color-bg-elevated)] transition-colors"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h3m-6 5h12a2 2 0 002-2V7a2 2 0 00-.586-1.414l-3-3A2 2 0 0011 2H6a2 2 0 00-2 2v14a2 2 0 002 2z" />
+            </svg>
+          </button>
           <button
             onClick={() => onEdit(cp)}
             title="Редактировать"
@@ -304,6 +321,137 @@ function CounterpartyCard({ cp, onEdit, onDelete }: CardProps) {
             {[cp.phone, cp.email].filter(Boolean).join(' · ')}
           </span>
         )}
+      </div>
+    </div>
+  );
+}
+
+// ── Generate document modal ─────────────────────────────────────────────────
+
+interface GenerateModalProps {
+  cp: CounterpartyDto;
+  onClose: () => void;
+}
+
+function GenerateDocumentModal({ cp, onClose }: GenerateModalProps) {
+  const router = useRouter();
+  const qc = useQueryClient();
+  const [docType, setDocType] = useState<DocumentType>(DocumentType.AVR);
+  const [templateId, setTemplateId] = useState<string>('');
+
+  const { data: templates = [] } = useQuery({
+    queryKey: ['templates', docType],
+    queryFn: () => templatesApi.list(docType),
+  });
+
+  // Auto-select the default (or first) template unless the user picked one explicitly.
+  const defaultTemplateId = (templates.find((tpl) => tpl.isDefault) ?? templates[0])?.id ?? '';
+  const effectiveTemplateId = templates.some((tpl) => tpl.id === templateId) ? templateId : defaultTemplateId;
+
+  function handleDocTypeChange(newType: DocumentType) {
+    setDocType(newType);
+    setTemplateId('');
+  }
+
+  const generateMutation = useMutation({
+    mutationFn: async () => {
+      const orgSettings = await settingsApi.getSettings().catch(() => null);
+      const chosenTemplate = templates.find((tpl) => tpl.id === effectiveTemplateId);
+      const baseTpl = DOCUMENT_TEMPLATES[docType];
+
+      let bodyJson: unknown = chosenTemplate ? chosenTemplate.bodyJson : baseTpl.bodyJson;
+      let meta: Record<string, unknown> = chosenTemplate
+        ? ((chosenTemplate.metaDefaults as Record<string, unknown>) ?? {})
+        : (baseTpl.metaDefaults as Record<string, unknown>);
+
+      const today = todayISO();
+      const dateKey =
+        docType === DocumentType.AVR ? 'actDate' :
+        docType === DocumentType.CONTRACT ? 'startDate' : 'invoiceDate';
+      meta = { ...meta, [dateKey]: today };
+      bodyJson = syncDateInBody(bodyJson, '', today);
+
+      bodyJson = injectCounterpartyInBody(bodyJson, docType, cp);
+      if (orgSettings?.name) {
+        bodyJson = injectProviderInBody(bodyJson, orgSettings);
+      }
+
+      return documentsApi.create({
+        type: docType,
+        title: `${baseTpl.label} — ${cp.name}`,
+        bodyJson,
+        meta,
+        counterpartyId: cp.id,
+      });
+    },
+    onSuccess: (doc) => {
+      void qc.invalidateQueries({ queryKey: ['documents'] });
+      router.push(`/documents/${doc.id}`);
+    },
+  });
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
+      <div className="relative w-full max-w-sm bg-[var(--color-bg-surface)] rounded-2xl border border-[var(--color-border)] shadow-2xl p-6">
+        <h2 className="text-base font-semibold text-[var(--color-text-primary)] mb-1">
+          Сгенерировать документ
+        </h2>
+        <p className="text-sm text-[var(--color-text-secondary)] mb-4">
+          для <span className="font-medium text-[var(--color-text-primary)]">{cp.name}</span>
+        </p>
+
+        <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1">
+          Тип документа
+        </label>
+        <select
+          value={docType}
+          onChange={(e) => handleDocTypeChange(e.target.value as DocumentType)}
+          className="w-full px-3 py-2 mb-3 text-sm rounded-lg bg-[var(--color-bg-base)] border border-[var(--color-border)] text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-accent)] transition-colors"
+        >
+          {DOCUMENT_TYPE_LIST.map((tpl) => (
+            <option key={tpl.type} value={tpl.type}>{tpl.label}</option>
+          ))}
+        </select>
+
+        <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1">
+          Шаблон
+        </label>
+        <select
+          value={effectiveTemplateId}
+          onChange={(e) => setTemplateId(e.target.value)}
+          className="w-full px-3 py-2 mb-4 text-sm rounded-lg bg-[var(--color-bg-base)] border border-[var(--color-border)] text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-accent)] transition-colors"
+        >
+          <option value="">Базовый шаблон ({DOCUMENT_TEMPLATES[docType].label})</option>
+          {templates.map((tpl) => (
+            <option key={tpl.id} value={tpl.id}>
+              {tpl.name}{tpl.isDefault ? ' (по умолчанию)' : ''}
+            </option>
+          ))}
+        </select>
+
+        {generateMutation.isError && (
+          <p className="text-xs text-red-400 mb-3">Не удалось создать документ</p>
+        )}
+
+        <div className="flex justify-end gap-2">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-sm rounded-lg border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-elevated)] transition-colors"
+          >
+            Отмена
+          </button>
+          <button
+            onClick={() => generateMutation.mutate()}
+            disabled={generateMutation.isPending}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg bg-[var(--color-accent)] text-[#0F172A] hover:bg-[var(--color-accent-hover)] disabled:opacity-50 transition-colors"
+          >
+            {generateMutation.isPending && (
+              <span className="w-3.5 h-3.5 rounded-full border-2 border-[#0F172A] border-t-transparent animate-spin" />
+            )}
+            Сгенерировать
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -365,6 +513,7 @@ export function CounterpartiesClient() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<CounterpartyDto | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<CounterpartyDto | null>(null);
+  const [generateTarget, setGenerateTarget] = useState<CounterpartyDto | null>(null);
 
   const handleSearch = useCallback((value: string) => {
     setSearch(value);
@@ -469,6 +618,7 @@ export function CounterpartiesClient() {
                 cp={cp}
                 onEdit={setEditTarget}
                 onDelete={setDeleteTarget}
+                onGenerate={setGenerateTarget}
               />
             ))}
           </div>
@@ -489,6 +639,13 @@ export function CounterpartiesClient() {
           cp={deleteTarget}
           onClose={() => setDeleteTarget(null)}
           onDeleted={() => setDeleteTarget(null)}
+        />
+      )}
+
+      {generateTarget && (
+        <GenerateDocumentModal
+          cp={generateTarget}
+          onClose={() => setGenerateTarget(null)}
         />
       )}
     </div>

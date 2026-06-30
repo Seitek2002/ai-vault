@@ -157,6 +157,8 @@ export function DocumentEditor({ documentId }: DocumentEditorProps) {
   const prevNumberRef = useRef<string | null>(null);
   const [replaceError, setReplaceError] = useState<string | null>(null);
   const [showSaveTemplate, setShowSaveTemplate] = useState(false);
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState("");
 
   const [autoSave, setAutoSave] = useState<boolean>(() => {
     if (typeof window === "undefined") return true;
@@ -272,6 +274,17 @@ export function DocumentEditor({ documentId }: DocumentEditorProps) {
       }
     };
   }, [isDirty, autoSave, isSaving, saveMutation]);
+
+  const titleMutation = useMutation({
+    mutationFn: (newTitle: string) => {
+      if (!document) throw new Error("No document");
+      return documentsApi.update(document.id, { title: newTitle });
+    },
+    onSuccess: (updated) => {
+      setDocument(updated);
+      qc.invalidateQueries({ queryKey: ["documents"] });
+    },
+  });
 
   const replaceFileMutation = useMutation({
     mutationFn: async (file: File) => {
@@ -435,9 +448,31 @@ export function DocumentEditor({ documentId }: DocumentEditorProps) {
                 <path d="M15 18l-6-6 6-6" />
               </svg>
             </button>
-            <span className="text-sm font-medium text-[var(--color-text-primary)] truncate">
-              {document.title}
-            </span>
+            {editingTitle ? (
+              <input
+                autoFocus
+                value={titleDraft}
+                onChange={(e) => setTitleDraft(e.target.value)}
+                onBlur={() => {
+                  setEditingTitle(false);
+                  const trimmed = titleDraft.trim();
+                  if (trimmed && trimmed !== document.title) titleMutation.mutate(trimmed);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                  if (e.key === "Escape") setEditingTitle(false);
+                }}
+                className="text-sm font-medium text-[var(--color-text-primary)] bg-transparent border-b border-[var(--color-accent)] focus:outline-none min-w-0 max-w-xs"
+              />
+            ) : (
+              <span
+                onClick={() => { setTitleDraft(document.title); setEditingTitle(true); }}
+                title="Нажмите, чтобы переименовать"
+                className="text-sm font-medium text-[var(--color-text-primary)] truncate cursor-text hover:bg-[var(--color-bg-elevated)] rounded px-1 -mx-1 transition-colors"
+              >
+                {document.title}
+              </span>
+            )}
             {statusLabel && (
               <span className="text-xs text-[var(--color-text-muted)] shrink-0">
                 {statusLabel}

@@ -17,6 +17,7 @@ import {
   usesCompanyPlaceholders,
   usesOrgPlaceholders,
 } from "@/lib/placeholders";
+import { computeInvoiceAutoFields, type InvoiceAutoFields } from "@/lib/invoiceAuto";
 import { settingsApi } from "@/lib/api/settings";
 import { DocumentType, DocumentStatus } from "@ai-vault/types";
 import type { DocumentDto, CounterpartyDto } from "@ai-vault/types";
@@ -116,27 +117,35 @@ function CreateDocumentModal({ onClose }: { onClose: () => void }) {
         cpData = found ?? null;
       }
 
-      // For blank docs: inject today's date into body
-      if (!selectedTemplate) {
-        const today = todayISO();
-        const dateKey =
-          selectedType === DocumentType.AVR ? "actDate" :
-          selectedType === DocumentType.CONTRACT ? "startDate" : "invoiceDate";
-        meta = { ...meta, [dateKey]: today };
-        bodyJson = syncDateInBody(bodyJson, "", today);
-        bodyJson = syncNumberInBody(bodyJson, "", meta.invoiceNumber as string ?? "");
+      // Автополя счёта: следующий номер (005 → 006 → …) и период по последнему счёту
+      let invoiceAuto: InvoiceAutoFields | null = null;
+      if (selectedType === DocumentType.INVOICE_PAYMENT) {
+        invoiceAuto = await computeInvoiceAutoFields();
+        meta = { ...meta, invoiceNumber: invoiceAuto.number };
       }
+
+      // Актуальная дата и номер — для любого способа создания
+      const today = todayISO();
+      const dateKey =
+        selectedType === DocumentType.AVR ? "actDate" :
+        selectedType === DocumentType.CONTRACT ? "startDate" : "invoiceDate";
+      meta = { ...meta, [dateKey]: today };
+      bodyJson = syncDateInBody(bodyJson, "", today);
+      bodyJson = syncNumberInBody(bodyJson, "", (meta.invoiceNumber as string) ?? "");
 
       // Запоминаем ДО подстановки: использует ли шаблон именованные плейсхолдеры
       const hasCompanyPh = usesCompanyPlaceholders(bodyJson);
       const hasOrgPh = usesOrgPlaceholders(bodyJson);
 
-      // Системные плейсхолдеры: {{company.*}}, {{org.*}}, {{date.today}}, {{doc.number}}
+      // Системные плейсхолдеры: {{company.*}}, {{org.*}}, даты, номер, сумма, период
       const docNumber = (meta.invoiceNumber ?? meta.actNumber ?? meta.contractNumber ?? "") as string;
       bodyJson = substitutePlaceholders(bodyJson, {
         company: cpData,
         org: orgSettings,
         number: docNumber,
+        amount: Number(meta.totalAmount ?? 0),
+        periodStart: invoiceAuto?.periodStart,
+        periodEnd: invoiceAuto?.periodEnd,
       });
 
       // Старые эвристики по ключевым словам — только для шаблонов без плейсхолдеров

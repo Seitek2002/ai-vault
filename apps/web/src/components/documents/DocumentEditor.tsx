@@ -13,7 +13,7 @@ import { ExportMenu } from "./ExportMenu";
 import { uploadFile } from "@/lib/api/files";
 import { DocumentType } from "@ai-vault/types";
 import type { DocumentMeta } from "@ai-vault/types";
-import { syncDateInBody, syncNumberInBody } from "@/lib/docBody";
+import { syncDateInBody, syncNumberInBody, syncAmountInBody } from "@/lib/docBody";
 
 const AUTOSAVE_DELAY = 2000;
 
@@ -155,6 +155,7 @@ export function DocumentEditor({ documentId }: DocumentEditorProps) {
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevDateRef = useRef<string | null>(null);
   const prevNumberRef = useRef<string | null>(null);
+  const prevAmountRef = useRef<number | null>(null);
   const [replaceError, setReplaceError] = useState<string | null>(null);
   const [showSaveTemplate, setShowSaveTemplate] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
@@ -195,6 +196,7 @@ export function DocumentEditor({ documentId }: DocumentEditorProps) {
   useEffect(() => {
     prevDateRef.current = null;
     prevNumberRef.current = null;
+    prevAmountRef.current = null;
   }, [documentId]);
 
   // Sync date/number from meta panel into the body text
@@ -209,11 +211,16 @@ export function DocumentEditor({ documentId }: DocumentEditorProps) {
       (docMeta[dateKey] as string | undefined) ?? "";
     const currentNumber = (meta?.[numberKey] as string | undefined) ??
       (docMeta[numberKey] as string | undefined) ?? "";
+    const currentAmount = Number(
+      (meta?.totalAmount as number | undefined) ??
+      (docMeta.totalAmount as number | undefined) ?? 0,
+    );
 
     // First render for this document — just capture initial values
     if (prevDateRef.current === null || prevNumberRef.current === null) {
       prevDateRef.current = currentDate;
       prevNumberRef.current = currentNumber;
+      prevAmountRef.current = currentAmount;
       return;
     }
 
@@ -229,6 +236,12 @@ export function DocumentEditor({ documentId }: DocumentEditorProps) {
     if (currentNumber !== prevNumberRef.current) {
       newBody = syncNumberInBody(newBody, prevNumberRef.current, currentNumber);
       prevNumberRef.current = currentNumber;
+      changed = true;
+    }
+
+    if (currentAmount > 0 && currentAmount !== prevAmountRef.current) {
+      newBody = syncAmountInBody(newBody, prevAmountRef.current ?? 0, currentAmount);
+      prevAmountRef.current = currentAmount;
       changed = true;
     }
 

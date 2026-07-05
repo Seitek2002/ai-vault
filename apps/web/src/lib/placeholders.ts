@@ -1,4 +1,4 @@
-import { ruDate, todayISO } from "./docBody";
+import { ruDate, todayISO, formatAmount, AMOUNT_PLACEHOLDER } from "./docBody";
 import type { CounterpartySettings, ProviderSettings } from "./docBody";
 
 /**
@@ -54,7 +54,11 @@ export const PLACEHOLDER_MENU: Array<{ group: string; items: Array<{ label: stri
     group: "Документ",
     items: [
       { label: "Сегодняшняя дата", key: "date.today" },
+      { label: "Сегодняшняя дата (числом)", key: "date.todayShort" },
       { label: "Номер документа", key: "doc.number" },
+      { label: "Сумма", key: "doc.amount" },
+      { label: "Период: начало", key: "period.start" },
+      { label: "Период: конец", key: "period.end" },
     ],
   },
 ];
@@ -63,9 +67,14 @@ export interface PlaceholderContext {
   company?: CounterpartySettings | null;
   org?: ProviderSettings | null;
   /** ISO-дата (YYYY-MM-DD); по умолчанию — сегодня */
-  dateIso?: string;
+  dateIso?: string | undefined;
   /** Номер документа; по умолчанию — «___» */
-  number?: string;
+  number?: string | undefined;
+  /** Сумма документа; 0 или пусто → заглушка «__ 000,00» */
+  amount?: number | undefined;
+  /** Период оказания услуг («2.06.26 г.»); по умолчанию — прочерки */
+  periodStart?: string | undefined;
+  periodEnd?: string | undefined;
 }
 
 /** Экранирует значение для безопасной вставки внутрь JSON-строки */
@@ -76,6 +85,12 @@ function jsonEscape(value: string): string {
 function ruDateFromISO(iso: string): string {
   const [y, m, d] = iso.split("-").map(Number);
   return ruDate(new Date(y!, m! - 1, d!));
+}
+
+/** «2.07.2026» — числовой формат даты */
+function shortDateFromISO(iso: string): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  return `${d}.${String(m).padStart(2, "0")}.${y}`;
 }
 
 /**
@@ -95,7 +110,11 @@ export function substitutePlaceholders(bodyJson: unknown, ctx: PlaceholderContex
     map[`org.${key}`] = String(org?.[key] ?? "");
   }
   map["date.today"] = ruDateFromISO(ctx.dateIso ?? todayISO());
+  map["date.todayShort"] = shortDateFromISO(ctx.dateIso ?? todayISO());
   map["doc.number"] = ctx.number?.trim() || "___";
+  map["doc.amount"] = ctx.amount && ctx.amount > 0 ? formatAmount(ctx.amount) : AMOUNT_PLACEHOLDER;
+  map["period.start"] = ctx.periodStart?.trim() || "__.__.__ г.";
+  map["period.end"] = ctx.periodEnd?.trim() || "__.__.__ г.";
 
   for (const [key, raw] of Object.entries(map)) {
     const value = raw.trim() ? raw : FALLBACK;

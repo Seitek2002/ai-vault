@@ -55,6 +55,29 @@ export function syncDateInBody(
   return JSON.parse(text) as unknown;
 }
 
+/** «20 000,00» — денежный формат как в счёте */
+export function formatAmount(n: number): string {
+  const [int, frac] = n.toFixed(2).split(".");
+  return `${int!.replace(/\B(?=(\d{3})+(?!\d))/g, " ")},${frac}`;
+}
+
+/** Заглушка суммы в шаблоне счёта — заменяется при вводе суммы */
+export const AMOUNT_PLACEHOLDER = "__ 000,00";
+
+/** Replace the previous amount (or the blank placeholder) with the new one. */
+export function syncAmountInBody(
+  bodyJson: unknown,
+  prevAmount: number,
+  newAmount: number,
+): unknown {
+  if (!newAmount || newAmount <= 0) return bodyJson;
+  const oldStr = prevAmount > 0 ? formatAmount(prevAmount) : AMOUNT_PLACEHOLDER;
+  const newStr = formatAmount(newAmount);
+  if (oldStr === newStr) return bodyJson;
+  const text = JSON.stringify(bodyJson);
+  return JSON.parse(text.split(oldStr).join(newStr)) as unknown;
+}
+
 /** Replace the old invoice/act number in the body heading. */
 export function syncNumberInBody(
   bodyJson: unknown,
@@ -102,24 +125,24 @@ export function injectProviderInBody(
     const rows: object[] = [];
     // Company name — bold
     rows.push(para(b(`ОсОО «${settings.name}»`)));
-    // INN + ОКПО + address + postal — one paragraph
+    // INN + ОКПО + address — one paragraph
     const innParts: string[] = [];
     if (settings.inn) {
       innParts.push(settings.bin
-        ? `ИНН: ${settings.inn}, код ОКПО: ${settings.bin}`
+        ? `ИНН: ${settings.inn}, ОКПО ${settings.bin}`
         : `ИНН: ${settings.inn}`);
     }
-    if (settings.address) innParts.push(`Юридический адрес: ${settings.address}`);
-    if (innParts.length) rows.push(para(t(innParts.join(", ") + " Почтовый адрес: 720001")));
-    // Bank details — bold, one line
+    if (settings.address) innParts.push(`Юридический адрес: ${withCountry(settings.address)}`);
+    if (innParts.length) rows.push(para(t(innParts.join(", "))));
+    // Bank details — bank name on its own line, then account + BIK
     if (settings.bankAccount || settings.bankName || settings.bankBik) {
       rows.push(para(b("Банковские реквизиты:")));
+      if (settings.bankName) rows.push(para(b(settings.bankName)));
       const bankLine = [
-        settings.bankAccount ? `Расчетный счет ${settings.bankAccount}` : null,
-        settings.bankName ? settings.bankName : null,
-        settings.bankBik ? `БИК банка ${settings.bankBik}` : null,
-      ].filter(Boolean).join("  ");
-      rows.push(para(b(bankLine)));
+        settings.bankAccount ? `Расчетный счет: ${settings.bankAccount}` : null,
+        settings.bankBik ? `БИК ${settings.bankBik}` : null,
+      ].filter(Boolean).join(", ");
+      if (bankLine) rows.push(para(b(bankLine)));
     }
     return rows;
   }
@@ -214,21 +237,22 @@ function buildBuyerBlockContract(cp: CounterpartySettings): object[] {
 
 /** Покупатель content cell for INVOICE_PAYMENT and other label/content-separated layouts. */
 function buildBuyerContentDefault(cp: CounterpartySettings): object[] {
-  const rows: object[] = [plainPara(`ОсОО «${cp.name}»`)];
+  const rows: object[] = [boldPara(`ОсОО «${cp.name}»`)];
 
   const parts: string[] = [];
   if (cp.inn) parts.push(`ИНН: ${cp.inn}`);
   if (cp.bin) parts.push(`ОКПО: ${cp.bin}`);
   if (cp.address) parts.push(`Юридический адрес: ${withCountry(cp.address)}`);
-  if (parts.length) rows.push(plainPara(`${parts.join(", ")} Почтовый адрес: ______`));
+  if (parts.length) rows.push(plainPara(parts.join(", ")));
 
   if (cp.bankAccount || cp.bankName || cp.bankBik) {
-    const bankParts = [
-      cp.bankAccount ? `р/с: ${cp.bankAccount}` : null,
-      cp.bankName ?? null,
-      cp.bankBik ? `БИК: ${cp.bankBik}` : null,
+    rows.push(boldPara("Банковские реквизиты:"));
+    if (cp.bankName) rows.push(boldPara(cp.bankName));
+    const bankLine = [
+      cp.bankAccount ? `Расчетный счет: ${cp.bankAccount}` : null,
+      cp.bankBik ? `БИК ${cp.bankBik}` : null,
     ].filter(Boolean).join(", ");
-    rows.push(plainPara(`${bankParts}, УГКНС: ___ ККН`));
+    if (bankLine) rows.push(boldPara(bankLine));
   }
 
   return rows;

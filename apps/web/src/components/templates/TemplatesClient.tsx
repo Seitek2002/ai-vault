@@ -6,15 +6,11 @@ import { templatesApi } from "@/lib/api/templates";
 import type { TemplateDto, CreateTemplateRequest } from "@/lib/api/templates";
 import { RichEditor } from "@/components/editor/RichEditor";
 import { DOCUMENT_TEMPLATES, DOCUMENT_TYPE_LIST } from "@/lib/templates";
+import { extractManualVariables } from "@/lib/placeholders";
 import { DocumentType } from "@ai-vault/types";
 
-// ─── Variable helper ──────────────────────────────────────────────────────────
-
-function extractVariables(bodyJson: unknown): string[] {
-  const text = JSON.stringify(bodyJson);
-  const matches = text.match(/\{\{([^}]+)\}\}/g) ?? [];
-  return [...new Set(matches.map((m) => m.slice(2, -2).trim()))];
-}
+// Ручные переменные шаблона; системные ({{company.*}} и т.п.) подставляются сами
+const extractVariables = extractManualVariables;
 
 // ─── Create / Edit modal ──────────────────────────────────────────────────────
 

@@ -9,6 +9,7 @@ import { templatesApi } from '@/lib/api/templates';
 import { settingsApi } from '@/lib/api/settings';
 import { DOCUMENT_TEMPLATES, DOCUMENT_TYPE_LIST } from '@/lib/templates';
 import { syncDateInBody, todayISO, injectCounterpartyInBody, injectProviderInBody } from '@/lib/docBody';
+import { substitutePlaceholders, usesCompanyPlaceholders, usesOrgPlaceholders } from '@/lib/placeholders';
 import { DocumentType } from '@ai-vault/types';
 import type { CounterpartyDto } from '@ai-vault/types';
 import { ApiError } from '@/lib/api/client';
@@ -371,8 +372,17 @@ function GenerateDocumentModal({ cp, onClose }: GenerateModalProps) {
       meta = { ...meta, [dateKey]: today };
       bodyJson = syncDateInBody(bodyJson, '', today);
 
-      bodyJson = injectCounterpartyInBody(bodyJson, docType, cp);
-      if (orgSettings?.name) {
+      const hasCompanyPh = usesCompanyPlaceholders(bodyJson);
+      const hasOrgPh = usesOrgPlaceholders(bodyJson);
+
+      // Системные плейсхолдеры: {{company.*}}, {{org.*}}, {{date.today}}, {{doc.number}}
+      bodyJson = substitutePlaceholders(bodyJson, { company: cp, org: orgSettings });
+
+      // Старые эвристики — только для шаблонов без плейсхолдеров
+      if (!hasCompanyPh) {
+        bodyJson = injectCounterpartyInBody(bodyJson, docType, cp);
+      }
+      if (orgSettings?.name && !hasOrgPh) {
         bodyJson = injectProviderInBody(bodyJson, orgSettings);
       }
 

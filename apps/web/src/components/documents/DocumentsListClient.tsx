@@ -6,10 +6,17 @@ import { useRouter } from "next/navigation";
 import { documentsApi } from "@/lib/api/documents";
 import { templatesApi } from "@/lib/api/templates";
 import type { TemplateDto } from "@/lib/api/templates";
-import { counterpartiesApi } from "@/lib/api/counterparties";
+import { counterpartiesApi, type CounterpartyFormData } from "@/lib/api/counterparties";
 import { DOCUMENT_TEMPLATES, DOCUMENT_TYPE_LIST } from "@/lib/templates";
 import { syncDateInBody, syncNumberInBody, injectCounterpartyInBody, injectProviderInBody } from "@/lib/docBody";
 import { todayISO } from "@/lib/docBody";
+import {
+  substitutePlaceholders,
+  substituteVariables,
+  extractManualVariables,
+  usesCompanyPlaceholders,
+  usesOrgPlaceholders,
+} from "@/lib/placeholders";
 import { settingsApi } from "@/lib/api/settings";
 import { DocumentType, DocumentStatus } from "@ai-vault/types";
 import type { DocumentDto, CounterpartyDto } from "@ai-vault/types";
@@ -29,23 +36,17 @@ const STATUS_COLORS: Record<DocumentStatus, string> = {
   [DocumentStatus.SIGNED]: "text-emerald-400 bg-emerald-900/30",
 };
 
-// ─── Variable helpers ──────────────────────────────────────────────────────────
-function extractVariables(bodyJson: unknown): string[] {
-  const text = JSON.stringify(bodyJson);
-  const matches = text.match(/\{\{([^}]+)\}\}/g) ?? [];
-  return [...new Set(matches.map((m) => m.slice(2, -2).trim()))];
-}
-
-function substituteVariables(bodyJson: unknown, values: Record<string, string>): unknown {
-  let text = JSON.stringify(bodyJson);
-  for (const [key, value] of Object.entries(values)) {
-    text = text.split(`{{${key}}}`).join(value);
-  }
-  return JSON.parse(text) as unknown;
-}
-
 // ─── Create modal ──────────────────────────────────────────────────────────────
-type ModalStep = "type" | "company" | "template-pick" | "variables" | "title";
+type ModalStep = "type" | "company" | "company-details" | "template-pick" | "variables" | "title";
+
+const EMPTY_COMPANY_DETAILS: Omit<CounterpartyFormData, "name"> = {
+  inn: "",
+  bin: "",
+  address: "",
+  bankAccount: "",
+  bankName: "",
+  bankBik: "",
+};
 
 function CreateDocumentModal({ onClose }: { onClose: () => void }) {
   const router = useRouter();
@@ -63,6 +64,9 @@ function CreateDocumentModal({ onClose }: { onClose: () => void }) {
   // Resolved after leaving the company step:
   const [resolvedCompanyId, setResolvedCompanyId] = useState<string | null>(null);
   const [companyToCreate, setCompanyToCreate] = useState<string | null>(null);
+  // Реквизиты новой компании (шаг company-details, пока только для Счёта на оплату)
+  const [companyDetails, setCompanyDetails] =
+    useState<Omit<CounterpartyFormData, "name">>(EMPTY_COMPANY_DETAILS);
 
   const { data: searchedCompanies = [] } = useQuery({
     queryKey: ["companies-search", companySearch],
@@ -97,17 +101,22 @@ function CreateDocumentModal({ onClose }: { onClose: () => void }) {
       let cpData: CounterpartyDto | null = null;
 
       if (companyToCreate) {
-        const cp = await counterpartiesApi.quickCreate(companyToCreate);
+        // Собираем только заполненные реквизиты — пустые строки не отправляем
+        const details = Object.fromEntries(
+          Object.entries(companyDetails).filter(([, v]) => v && v.trim()),
+        );
+        const cp = await counterpartiesApi.create({ name: companyToCreate, ...details });
         cpId = cp.id;
         cpData = cp;
         void qc.invalidateQueries({ queryKey: ["companies"] });
         void qc.invalidateQueries({ queryKey: ["companies-search"] });
+        void qc.invalidateQueries({ queryKey: ["counterparties"] });
       } else if (resolvedCompanyId) {
         const found = (await counterpartiesApi.list()).find((c) => c.id === resolvedCompanyId);
         cpData = found ?? null;
       }
 
-      // For blank docs: inject today's date and company into body
+      // For blank docs: inject today's date into body
       if (!selectedTemplate) {
         const today = todayISO();
         const dateKey =
@@ -116,13 +125,25 @@ function CreateDocumentModal({ onClose }: { onClose: () => void }) {
         meta = { ...meta, [dateKey]: today };
         bodyJson = syncDateInBody(bodyJson, "", today);
         bodyJson = syncNumberInBody(bodyJson, "", meta.invoiceNumber as string ?? "");
-        if (cpData) {
-          bodyJson = injectCounterpartyInBody(bodyJson, selectedType, cpData);
-        }
       }
 
-      // Always inject provider (Поставщик) from org settings
-      if (orgSettings?.name) {
+      // Запоминаем ДО подстановки: использует ли шаблон именованные плейсхолдеры
+      const hasCompanyPh = usesCompanyPlaceholders(bodyJson);
+      const hasOrgPh = usesOrgPlaceholders(bodyJson);
+
+      // Системные плейсхолдеры: {{company.*}}, {{org.*}}, {{date.today}}, {{doc.number}}
+      const docNumber = (meta.invoiceNumber ?? meta.actNumber ?? meta.contractNumber ?? "") as string;
+      bodyJson = substitutePlaceholders(bodyJson, {
+        company: cpData,
+        org: orgSettings,
+        number: docNumber,
+      });
+
+      // Старые эвристики по ключевым словам — только для шаблонов без плейсхолдеров
+      if (cpData && !hasCompanyPh) {
+        bodyJson = injectCounterpartyInBody(bodyJson, selectedType, cpData);
+      }
+      if (orgSettings?.name && !hasOrgPh) {
         bodyJson = injectProviderInBody(bodyJson, orgSettings);
       }
 
@@ -145,13 +166,20 @@ function CreateDocumentModal({ onClose }: { onClose: () => void }) {
     setStep("company");
   }
 
+  const needsCompanyDetails = (createName: string | null) =>
+    !!createName && selectedType === DocumentType.INVOICE_PAYMENT;
+
+  function stepAfterCompany(): ModalStep {
+    return mode === "template" ? "template-pick" : "title";
+  }
+
   function advanceFromCompany(cpId: string | null, createName: string | null) {
     setResolvedCompanyId(cpId);
     setCompanyToCreate(createName);
-    if (mode === "template") {
-      setStep("template-pick");
+    if (needsCompanyDetails(createName)) {
+      setStep("company-details");
     } else {
-      setStep("title");
+      setStep(stepAfterCompany());
     }
   }
 
@@ -169,7 +197,7 @@ function CreateDocumentModal({ onClose }: { onClose: () => void }) {
 
   function handleTemplateNext() {
     if (!selectedTemplate) return;
-    const vars = extractVariables(selectedTemplate.bodyJson);
+    const vars = extractManualVariables(selectedTemplate.bodyJson);
     if (vars.length > 0) {
       const initial: Record<string, string> = {};
       for (const v of vars) initial[v] = "";
@@ -184,14 +212,17 @@ function CreateDocumentModal({ onClose }: { onClose: () => void }) {
 
   function goBack() {
     if (step === "company") setStep("type");
-    else if (step === "template-pick") setStep("company");
+    else if (step === "company-details") setStep("company");
+    else if (step === "template-pick") {
+      setStep(needsCompanyDetails(companyToCreate) ? "company-details" : "company");
+    }
     else if (step === "variables") setStep("template-pick");
     else if (step === "title") {
       if (mode === "template" && selectedTemplate) {
-        const vars = extractVariables(selectedTemplate.bodyJson);
+        const vars = extractManualVariables(selectedTemplate.bodyJson);
         setStep(vars.length > 0 ? "variables" : "template-pick");
       } else {
-        setStep("company");
+        setStep(needsCompanyDetails(companyToCreate) ? "company-details" : "company");
       }
     }
   }
@@ -220,6 +251,7 @@ function CreateDocumentModal({ onClose }: { onClose: () => void }) {
             <h2 className="text-base font-semibold text-[var(--color-text-primary)]">
               {step === "type" && "Новый документ"}
               {step === "company" && "Выберите компанию"}
+              {step === "company-details" && "Реквизиты компании"}
               {step === "template-pick" && "Выберите шаблон"}
               {step === "variables" && "Заполните переменные"}
               {step === "title" && "Название документа"}
@@ -356,6 +388,42 @@ function CreateDocumentModal({ onClose }: { onClose: () => void }) {
             </div>
           )}
 
+          {/* ── Step 2.5: company details (новая компания, Счёт на оплату) ── */}
+          {step === "company-details" && (
+            <div className="space-y-3 max-h-80 overflow-y-auto">
+              <p className="text-xs text-[var(--color-text-muted)]">
+                Реквизиты компании{" "}
+                <span className="text-[var(--color-text-primary)] font-medium">«{companyToCreate}»</span>{" "}
+                будут подставлены в счёт на оплату. Поля можно оставить пустыми — в документе останутся прочерки.
+              </p>
+              {(
+                [
+                  ["inn", "ИНН", "01234567891234"],
+                  ["bin", "ОКПО", "12345678"],
+                  ["address", "Юридический адрес", "г. Бишкек, ул. ______, д. __"],
+                  ["bankAccount", "Расчётный счёт (р/с)", "1234567890123456"],
+                  ["bankName", "Банк", "ОАО «Бакай Банк»"],
+                  ["bankBik", "БИК", "124012"],
+                ] as const
+              ).map(([field, label, placeholder]) => (
+                <div key={field}>
+                  <label className="text-xs font-medium text-[var(--color-text-secondary)] block mb-1">
+                    {label}
+                  </label>
+                  <input
+                    type="text"
+                    value={companyDetails[field] ?? ""}
+                    onChange={(e) =>
+                      setCompanyDetails((prev) => ({ ...prev, [field]: e.target.value }))
+                    }
+                    placeholder={placeholder}
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--color-bg-elevated)] border border-[var(--color-border)] text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:border-[var(--color-accent)] transition-colors"
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+
           {/* ── Step 3: template pick ── */}
           {step === "template-pick" && (
             <div className="space-y-2 max-h-72 overflow-y-auto">
@@ -389,9 +457,9 @@ function CreateDocumentModal({ onClose }: { onClose: () => void }) {
                           {tpl.description}
                         </p>
                       )}
-                      {extractVariables(tpl.bodyJson).length > 0 && (
+                      {extractManualVariables(tpl.bodyJson).length > 0 && (
                         <p className="mt-1 text-xs text-[var(--color-accent)]">
-                          {extractVariables(tpl.bodyJson).length} переменных
+                          {extractManualVariables(tpl.bodyJson).length} переменных
                         </p>
                       )}
                     </div>
@@ -412,7 +480,7 @@ function CreateDocumentModal({ onClose }: { onClose: () => void }) {
               <p className="text-xs text-[var(--color-text-muted)]">
                 Заполните переменные для шаблона «{selectedTemplate.name}»
               </p>
-              {extractVariables(selectedTemplate.bodyJson).map((v) => (
+              {extractManualVariables(selectedTemplate.bodyJson).map((v) => (
                 <div key={v}>
                   <label className="text-xs font-medium text-[var(--color-text-secondary)] block mb-1">
                     <code className="font-mono text-[var(--color-accent)]">{`{{${v}}}`}</code>
@@ -494,6 +562,15 @@ function CreateDocumentModal({ onClose }: { onClose: () => void }) {
                 onClick={handleCompanyNext}
                 disabled={!canAdvanceCompany}
                 className="px-4 py-2 rounded-lg bg-[var(--color-accent)] text-[#0F172A] text-sm font-semibold hover:bg-[var(--color-accent-hover)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                Далее
+              </button>
+            )}
+
+            {step === "company-details" && (
+              <button
+                onClick={() => setStep(stepAfterCompany())}
+                className="px-4 py-2 rounded-lg bg-[var(--color-accent)] text-[#0F172A] text-sm font-semibold hover:bg-[var(--color-accent-hover)] transition-colors"
               >
                 Далее
               </button>

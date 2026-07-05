@@ -13,9 +13,33 @@ import TableHeader from "@tiptap/extension-table-header";
 import { useCallback, useEffect } from "react";
 import type { SVGProps } from "react";
 import { FontSize } from "./extensions/fontSize";
+import { PLACEHOLDER_MENU } from "@/lib/placeholders";
 import "./editor.css";
 
 const FONT_SIZES = ["8", "9", "10", "10.5", "11", "12", "14", "16", "18", "20", "24", "28", "32", "36"];
+
+function InsertFieldSelect({ editor }: { editor: Editor }) {
+  return (
+    <select
+      title="Вставить поле — подставится автоматически при создании документа"
+      value=""
+      onChange={(e) => {
+        const key = e.target.value;
+        if (key) editor.chain().focus().insertContent(`{{${key}}}`).run();
+      }}
+      className="px-1.5 py-1 text-xs rounded-md border border-[var(--color-border)] bg-transparent text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-accent)] transition-colors max-w-[130px]"
+    >
+      <option value="">Вставить поле…</option>
+      {PLACEHOLDER_MENU.map((group) => (
+        <optgroup key={group.group} label={group.group}>
+          {group.items.map((item) => (
+            <option key={item.key} value={item.key}>{item.label}</option>
+          ))}
+        </optgroup>
+      ))}
+    </select>
+  );
+}
 
 function FontSizeSelect({ editor }: { editor: Editor }) {
   const current = (editor.getAttributes("textStyle").fontSize as string | undefined) ?? "";
@@ -155,6 +179,7 @@ export function RichEditor({ initialContent, onChange, placeholder = "Начни
       {!readOnly && (
         <div className="flex flex-wrap items-center gap-0.5 px-3 py-2 border-b border-[var(--color-border)] bg-[var(--color-bg-surface)] shrink-0">
           <FontSizeSelect editor={editor} />
+          <InsertFieldSelect editor={editor} />
           <SEP />
           <ToolbarBtn active={editor.isActive("bold")} title="Жирный (Ctrl+B)" onClick={() => editor.chain().focus().toggleBold().run()}>
             <BoldIcon className="w-4 h-4" />

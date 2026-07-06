@@ -1,4 +1,4 @@
-import { ruDate, todayISO, formatAmount, AMOUNT_PLACEHOLDER } from "./docBody";
+import { ruDate, todayISO, formatAmount, AMOUNT_PLACEHOLDER, shortNumericDate } from "./docBody";
 import type { CounterpartySettings, ProviderSettings } from "./docBody";
 
 /**
@@ -87,12 +87,6 @@ function ruDateFromISO(iso: string): string {
   return ruDate(new Date(y!, m! - 1, d!));
 }
 
-/** «2.07.2026» — числовой формат даты */
-function shortDateFromISO(iso: string): string {
-  const [y, m, d] = iso.split("-").map(Number);
-  return `${d}.${String(m).padStart(2, "0")}.${y}`;
-}
-
 /**
  * Подставляет известные (системные) плейсхолдеры в bodyJson.
  * Незаполненные поля заменяются прочерками. Неизвестные {{...}} не трогает.
@@ -110,7 +104,7 @@ export function substitutePlaceholders(bodyJson: unknown, ctx: PlaceholderContex
     map[`org.${key}`] = String(org?.[key] ?? "");
   }
   map["date.today"] = ruDateFromISO(ctx.dateIso ?? todayISO());
-  map["date.todayShort"] = shortDateFromISO(ctx.dateIso ?? todayISO());
+  map["date.todayShort"] = shortNumericDate(ctx.dateIso ?? todayISO());
   map["doc.number"] = ctx.number?.trim() || "___";
   map["doc.amount"] = ctx.amount && ctx.amount > 0 ? formatAmount(ctx.amount) : AMOUNT_PLACEHOLDER;
   map["period.start"] = ctx.periodStart?.trim() || "__.__.__ г.";

@@ -121,7 +121,12 @@ function CreateDocumentModal({ onClose }: { onClose: () => void }) {
       let invoiceAuto: InvoiceAutoFields | null = null;
       if (selectedType === DocumentType.INVOICE_PAYMENT) {
         invoiceAuto = await computeInvoiceAutoFields();
-        meta = { ...meta, invoiceNumber: invoiceAuto.number };
+        meta = {
+          ...meta,
+          invoiceNumber: invoiceAuto.number,
+          periodStart: invoiceAuto.periodStartIso,
+          periodEnd: invoiceAuto.periodEndIso,
+        };
       }
 
       // Актуальная дата и номер — для любого способа создания

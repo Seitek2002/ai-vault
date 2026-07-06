@@ -128,6 +128,14 @@ export function MetaFields({ type, meta, onChange }: MetaFieldsProps) {
       {type === DocumentType.CONTRACT && dateField("endDate", "Дата окончания")}
       {type === DocumentType.KP && dateField("validUntil", "Действует до")}
 
+      {/* Период услуг — подставляется в таблицу счёта */}
+      {type === DocumentType.INVOICE_PAYMENT && (
+        <>
+          {dateField("periodStart", "Период: с")}
+          {dateField("periodEnd", "Период: по")}
+        </>
+      )}
+
       {/* Currency */}
       {currencyField()}
 

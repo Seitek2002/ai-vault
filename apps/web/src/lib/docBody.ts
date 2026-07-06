@@ -26,6 +26,18 @@ export function ruDate(d: Date): string {
   return `${d.getDate()} ${RU_MONTHS[d.getMonth()]} ${d.getFullYear()} г.`;
 }
 
+/** «6.07.2026» — числовой формат (для «Основание: Акт … от 6.07.2026 г.») */
+export function shortNumericDate(iso: string): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  return `${d}.${String(m).padStart(2, "0")}.${y}`;
+}
+
+/** «6.07.26 г.» — короткий формат для периода услуг в таблице */
+export function shortPeriodDate(iso: string): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  return `${d}.${String(m).padStart(2, "0")}.${String(y).slice(2)} г.`;
+}
+
 export function todayISO(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -47,6 +59,8 @@ export function syncDateInBody(
     // without «г.» suffix
     const oldShort = oldFormatted.slice(0, -3); // remove " г."
     text = text.split(oldShort).join(newFormatted.slice(0, -3));
+    // numeric form «6.07.2026» (используется в «Основание: Акт … от 6.07.2026 г.»)
+    text = text.split(shortNumericDate(prevIso)).join(shortNumericDate(newIso));
   } else {
     // Replace the blank placeholder used in all templates
     text = text.split("«___» __________ 202__ г.").join(newFormatted);
@@ -71,8 +85,31 @@ export function syncAmountInBody(
   newAmount: number,
 ): unknown {
   if (!newAmount || newAmount <= 0) return bodyJson;
-  const oldStr = prevAmount > 0 ? formatAmount(prevAmount) : AMOUNT_PLACEHOLDER;
   const newStr = formatAmount(newAmount);
+  let text = JSON.stringify(bodyJson);
+  // Пробуем заменить предыдущее значение; если его нет в теле — заглушку из шаблона
+  const candidates = [
+    ...(prevAmount > 0 ? [formatAmount(prevAmount)] : []),
+    AMOUNT_PLACEHOLDER,
+  ];
+  for (const oldStr of candidates) {
+    if (oldStr !== newStr && text.includes(oldStr)) {
+      text = text.split(oldStr).join(newStr);
+      break;
+    }
+  }
+  return JSON.parse(text) as unknown;
+}
+
+/** Replace one period boundary date («6.07.26 г.») with a new one. */
+export function syncPeriodDateInBody(
+  bodyJson: unknown,
+  prevIso: string,
+  newIso: string,
+): unknown {
+  if (!newIso || !prevIso) return bodyJson;
+  const oldStr = shortPeriodDate(prevIso);
+  const newStr = shortPeriodDate(newIso);
   if (oldStr === newStr) return bodyJson;
   const text = JSON.stringify(bodyJson);
   return JSON.parse(text.split(oldStr).join(newStr)) as unknown;

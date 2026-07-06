@@ -13,7 +13,7 @@ import { ExportMenu } from "./ExportMenu";
 import { uploadFile } from "@/lib/api/files";
 import { DocumentType } from "@ai-vault/types";
 import type { DocumentMeta } from "@ai-vault/types";
-import { syncDateInBody, syncNumberInBody, syncAmountInBody } from "@/lib/docBody";
+import { syncDateInBody, syncNumberInBody, syncAmountInBody, syncPeriodDateInBody } from "@/lib/docBody";
 
 const AUTOSAVE_DELAY = 2000;
 
@@ -156,6 +156,8 @@ export function DocumentEditor({ documentId }: DocumentEditorProps) {
   const prevDateRef = useRef<string | null>(null);
   const prevNumberRef = useRef<string | null>(null);
   const prevAmountRef = useRef<number | null>(null);
+  const prevPeriodStartRef = useRef<string | null>(null);
+  const prevPeriodEndRef = useRef<string | null>(null);
   const [replaceError, setReplaceError] = useState<string | null>(null);
   const [showSaveTemplate, setShowSaveTemplate] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
@@ -197,6 +199,8 @@ export function DocumentEditor({ documentId }: DocumentEditorProps) {
     prevDateRef.current = null;
     prevNumberRef.current = null;
     prevAmountRef.current = null;
+    prevPeriodStartRef.current = null;
+    prevPeriodEndRef.current = null;
   }, [documentId]);
 
   // Sync date/number from meta panel into the body text
@@ -215,12 +219,18 @@ export function DocumentEditor({ documentId }: DocumentEditorProps) {
       (meta?.totalAmount as number | undefined) ??
       (docMeta.totalAmount as number | undefined) ?? 0,
     );
+    const currentPeriodStart = (meta?.periodStart as string | undefined) ??
+      (docMeta.periodStart as string | undefined) ?? "";
+    const currentPeriodEnd = (meta?.periodEnd as string | undefined) ??
+      (docMeta.periodEnd as string | undefined) ?? "";
 
     // First render for this document — just capture initial values
     if (prevDateRef.current === null || prevNumberRef.current === null) {
       prevDateRef.current = currentDate;
       prevNumberRef.current = currentNumber;
       prevAmountRef.current = currentAmount;
+      prevPeriodStartRef.current = currentPeriodStart;
+      prevPeriodEndRef.current = currentPeriodEnd;
       return;
     }
 
@@ -242,6 +252,18 @@ export function DocumentEditor({ documentId }: DocumentEditorProps) {
     if (currentAmount > 0 && currentAmount !== prevAmountRef.current) {
       newBody = syncAmountInBody(newBody, prevAmountRef.current ?? 0, currentAmount);
       prevAmountRef.current = currentAmount;
+      changed = true;
+    }
+
+    if (currentPeriodStart && currentPeriodStart !== prevPeriodStartRef.current) {
+      newBody = syncPeriodDateInBody(newBody, prevPeriodStartRef.current ?? "", currentPeriodStart);
+      prevPeriodStartRef.current = currentPeriodStart;
+      changed = true;
+    }
+
+    if (currentPeriodEnd && currentPeriodEnd !== prevPeriodEndRef.current) {
+      newBody = syncPeriodDateInBody(newBody, prevPeriodEndRef.current ?? "", currentPeriodEnd);
+      prevPeriodEndRef.current = currentPeriodEnd;
       changed = true;
     }
 

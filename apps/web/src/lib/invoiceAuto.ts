@@ -1,12 +1,6 @@
 import { DocumentType } from "@ai-vault/types";
 import { documentsApi } from "./api/documents";
-import { todayISO } from "./docBody";
-
-/** «2.06.26 г.» — короткий формат для периода услуг */
-function shortRu(iso: string): string {
-  const [y, m, d] = iso.split("-").map(Number);
-  return `${d}.${String(m).padStart(2, "0")}.${String(y).slice(2)} г.`;
-}
+import { todayISO, shortPeriodDate } from "./docBody";
 
 function monthAgoISO(): string {
   const d = new Date();
@@ -17,9 +11,12 @@ function monthAgoISO(): string {
 export interface InvoiceAutoFields {
   /** Следующий номер счёта: максимум существующих + 1, с ведущими нулями («005») */
   number: string;
-  /** Период услуг: от даты последнего счёта до сегодня */
+  /** Период услуг («5.07.26 г.»): от даты последнего счёта до сегодня */
   periodStart: string;
   periodEnd: string;
+  /** Те же даты периода в ISO — сохраняются в meta для редактирования в панели */
+  periodStartIso: string;
+  periodEndIso: string;
 }
 
 /**
@@ -45,9 +42,12 @@ export async function computeInvoiceAutoFields(): Promise<InvoiceAutoFields> {
     (last?.createdAt ? last.createdAt.slice(0, 10) : "") ||
     monthAgoISO();
 
+  const endIso = todayISO();
   return {
     number: String(next).padStart(3, "0"),
-    periodStart: shortRu(startIso),
-    periodEnd: shortRu(todayISO()),
+    periodStart: shortPeriodDate(startIso),
+    periodEnd: shortPeriodDate(endIso),
+    periodStartIso: startIso,
+    periodEndIso: endIso,
   };
 }

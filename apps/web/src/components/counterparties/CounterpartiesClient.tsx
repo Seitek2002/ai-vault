@@ -370,7 +370,12 @@ function GenerateDocumentModal({ cp, onClose }: GenerateModalProps) {
       let invoiceAuto: InvoiceAutoFields | null = null;
       if (docType === DocumentType.INVOICE_PAYMENT) {
         invoiceAuto = await computeInvoiceAutoFields();
-        meta = { ...meta, invoiceNumber: invoiceAuto.number };
+        meta = {
+          ...meta,
+          invoiceNumber: invoiceAuto.number,
+          periodStart: invoiceAuto.periodStartIso,
+          periodEnd: invoiceAuto.periodEndIso,
+        };
       }
 
       const today = todayISO();

@@ -1,4 +1,5 @@
 import { DocumentType } from "@ai-vault/types";
+import { AMOUNT_PLACEHOLDER } from "../docBody";
 
 export interface DocTemplate {
   type: DocumentType;
@@ -83,7 +84,7 @@ const avrServicesTable = () => ({
         { type: "tableCell", content: [emptyPara()] },
         { type: "tableCell", content: [para("Пакет №_«ИИ-робот» _000 чатов __.__.26 г. – __.__.26 г.")] },
         { type: "tableCell", content: [emptyPara()] },
-        { type: "tableCell", content: [emptyPara()] },
+        { type: "tableCell", content: [para(AMOUNT_PLACEHOLDER)] },
       ],
     },
     {
@@ -92,7 +93,7 @@ const avrServicesTable = () => ({
         { type: "tableCell", content: [emptyPara()] },
         { type: "tableCell", content: [emptyPara()] },
         { type: "tableCell", content: [{ type: "paragraph", content: [bold("Итого")] }] },
-        { type: "tableCell", content: [emptyPara()] },
+        { type: "tableCell", content: [para(AMOUNT_PLACEHOLDER)] },
       ],
     },
   ],
@@ -275,7 +276,7 @@ export const DOCUMENT_TEMPLATES: Record<DocumentType, DocTemplate> = {
       type: "doc",
       content: [
         avrHeaderTable(),
-        h1("АКТ"),
+        h1("АКТ № ___"),
         centeredBold("оказанных услуг"),
         centered("к Договору об оказании услуг по предоставлению доступа к сервису ИИ-робота"),
         emptyPara(),
@@ -367,12 +368,12 @@ export const DOCUMENT_TEMPLATES: Record<DocumentType, DocTemplate> = {
     bodyJson: {
       type: "doc",
       content: [
-        h1("Договор"),
+        h1("Договор № ___"),
         centered("об оказании услуг по предоставлению доступа к сервису ИИ-робота"),
         emptyPara(),
         rekvTable(
           [para("г. Бишкек")],
-          [para("«___» ___________2026 г.")],
+          [para("«___» __________ 202__ г.")],
         ),
         emptyPara(),
         para("Общество с ограниченной ответственностью «{{company.name}}», именуемое в дальнейшем «Заказчик», в лице____________________________, действующего на основании Устава, с одной стороны."),
@@ -515,7 +516,7 @@ export const DOCUMENT_TEMPLATES: Record<DocumentType, DocTemplate> = {
         emptyPara(),
         p(bold("Итого без НДС: "), txt("____________ сом")),
         p(bold("НДС (12%): "), txt("____________ сом")),
-        p(bold("Итого с НДС: "), txt("____________ сом")),
+        p(bold("Итого с НДС: "), txt(`${AMOUNT_PLACEHOLDER} сом`)),
         emptyPara(),
         h2("Условия"),
         p(bold("Срок действия предложения: "), txt("____________")),
@@ -573,7 +574,7 @@ export const DOCUMENT_TEMPLATES: Record<DocumentType, DocTemplate> = {
         emptyPara(),
         p(bold("Итого без НДС: "), txt("____________ сом")),
         p(bold("НДС (12%): "), txt("____________ сом")),
-        p(bold("Итого с НДС: "), txt("____________ сом")),
+        p(bold("Итого с НДС: "), txt(`${AMOUNT_PLACEHOLDER} сом`)),
         p(bold("Сумма прописью: "), txt("____________")),
         emptyPara(),
         boldPara("Руководитель"),

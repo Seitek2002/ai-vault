@@ -142,8 +142,8 @@ export function MetaFields({ type, meta, onChange }: MetaFieldsProps) {
       {/* VAT */}
       {(type === DocumentType.KP || type === DocumentType.INVOICE_FACTURA) && vatField()}
 
-      {/* Amounts */}
-      {amountField("totalAmount", "Сумма")}
+      {/* Amounts — Договор ссылается на фиксированную тарифную таблицу, единой суммы нет */}
+      {type !== DocumentType.CONTRACT && amountField("totalAmount", "Сумма")}
 
       {(type === DocumentType.KP || type === DocumentType.INVOICE_FACTURA) && (
         <Field label="В т.ч. НДС">

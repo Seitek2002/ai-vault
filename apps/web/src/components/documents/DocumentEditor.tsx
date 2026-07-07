@@ -20,6 +20,7 @@ import {
   syncPeriodInBody,
   syncAvrPeriodInBody,
   syncAvrPackageInBody,
+  syncFacturaServiceInBody,
 } from "@/lib/docBody";
 
 const AUTOSAVE_DELAY = 2000;
@@ -297,6 +298,10 @@ export function DocumentEditor({ documentId }: DocumentEditorProps) {
         currentChatCount || prevChatCountRef.current || "",
       );
       prevPackageNumberRef.current = currentPackageNumber;
+      prevChatCountRef.current = currentChatCount;
+      changed = true;
+    } else if (document.type === DocumentType.INVOICE_FACTURA && chatCountChanged) {
+      newBody = syncFacturaServiceInBody(newBody, currentChatCount);
       prevChatCountRef.current = currentChatCount;
       changed = true;
     }

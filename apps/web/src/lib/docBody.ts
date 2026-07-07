@@ -177,6 +177,22 @@ export function syncAvrPackageInBody(
   return JSON.parse(newText) as unknown;
 }
 
+/**
+ * Rewrites `Пакет "ИИ робот" X чатов` (счёт-фактура service line) from the
+ * current chat count. Same safe restricted-character-class approach as
+ * syncAvrPackageInBody — matches both blank and already-filled state.
+ */
+export function syncFacturaServiceInBody(bodyJson: unknown, chatCount: string): unknown {
+  if (!chatCount) return bodyJson;
+  // Литеральные кавычки в тексте («"ИИ робот"») JSON.stringify экранирует как \" —
+  // паттерн должен искать именно экранированную форму в сериализованной строке.
+  const pattern = /Пакет \\"ИИ робот\\"\s*[\d_ ]+\s*чатов/;
+  const text = JSON.stringify(bodyJson);
+  if (!pattern.test(text)) return bodyJson;
+  const newText = text.replace(pattern, `Пакет \\"ИИ робот\\" ${chatCount || "_ 000"} чатов`);
+  return JSON.parse(newText) as unknown;
+}
+
 /** Replace the old invoice/act number in the body heading. */
 export function syncNumberInBody(
   bodyJson: unknown,

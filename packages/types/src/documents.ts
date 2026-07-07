@@ -49,11 +49,9 @@ export interface CounterpartyDto {
 
 export interface DocumentMetaKp {
   type: DocumentType.KP;
-  validUntil?: string;
+  invoiceDate?: string;
   currency: string;
-  vatRate: number;
   totalAmount: number;
-  totalVat: number;
 }
 
 export interface DocumentMetaContract {
@@ -69,6 +67,7 @@ export interface DocumentMetaInvoiceFactura {
   type: DocumentType.INVOICE_FACTURA;
   invoiceNumber?: string;
   invoiceDate?: string;
+  chatCount?: string;
   currency: string;
   vatRate: number;
   totalAmount: number;

@@ -108,8 +108,8 @@ export function MetaFields({ type, meta, onChange }: MetaFieldsProps) {
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Common: number */}
-      {numberField(
+      {/* Common: number — КП в тексте номер не упоминает, поле скрыто */}
+      {type !== DocumentType.KP && numberField(
         type === DocumentType.AVR ? "actNumber" :
         type === DocumentType.CONTRACT ? "contractNumber" : "invoiceNumber",
         type === DocumentType.AVR ? "Номер акта" :
@@ -126,7 +126,6 @@ export function MetaFields({ type, meta, onChange }: MetaFieldsProps) {
           )}
 
       {type === DocumentType.CONTRACT && dateField("endDate", "Дата окончания")}
-      {type === DocumentType.KP && dateField("validUntil", "Действует до")}
 
       {/* Пакет услуг — подставляется в таблицу АВР */}
       {type === DocumentType.AVR && (
@@ -135,6 +134,7 @@ export function MetaFields({ type, meta, onChange }: MetaFieldsProps) {
           {numberField("chatCount", "Количество чатов", "2 000")}
         </>
       )}
+      {type === DocumentType.INVOICE_FACTURA && numberField("chatCount", "Количество чатов", "2 000")}
 
       {/* Период услуг — подставляется в таблицу счёта / АВР */}
       {(type === DocumentType.INVOICE_PAYMENT || type === DocumentType.AVR) && (
@@ -148,12 +148,12 @@ export function MetaFields({ type, meta, onChange }: MetaFieldsProps) {
       {currencyField()}
 
       {/* VAT */}
-      {(type === DocumentType.KP || type === DocumentType.INVOICE_FACTURA) && vatField()}
+      {type === DocumentType.INVOICE_FACTURA && vatField()}
 
       {/* Amounts — Договор ссылается на фиксированную тарифную таблицу, единой суммы нет */}
       {type !== DocumentType.CONTRACT && amountField("totalAmount", "Сумма")}
 
-      {(type === DocumentType.KP || type === DocumentType.INVOICE_FACTURA) && (
+      {type === DocumentType.INVOICE_FACTURA && (
         <Field label="В т.ч. НДС">
           <div className="px-3 py-1.5 rounded-md bg-[var(--color-bg-elevated)] border border-[var(--color-border)] text-sm text-[var(--color-text-muted)]">
             {(

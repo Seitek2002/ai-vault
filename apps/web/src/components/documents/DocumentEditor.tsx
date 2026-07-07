@@ -13,7 +13,7 @@ import { ExportMenu } from "./ExportMenu";
 import { uploadFile } from "@/lib/api/files";
 import { DocumentType } from "@ai-vault/types";
 import type { DocumentMeta } from "@ai-vault/types";
-import { syncDateInBody, syncNumberInBody, syncAmountInBody, syncPeriodDateInBody } from "@/lib/docBody";
+import { syncDateInBody, syncNumberInBody, syncAmountInBody, syncPeriodInBody } from "@/lib/docBody";
 
 const AUTOSAVE_DELAY = 2000;
 
@@ -255,14 +255,17 @@ export function DocumentEditor({ documentId }: DocumentEditorProps) {
       changed = true;
     }
 
-    if (currentPeriodStart && currentPeriodStart !== prevPeriodStartRef.current) {
-      newBody = syncPeriodDateInBody(newBody, prevPeriodStartRef.current ?? "", currentPeriodStart);
+    const periodStartChanged = currentPeriodStart && currentPeriodStart !== prevPeriodStartRef.current;
+    const periodEndChanged = currentPeriodEnd && currentPeriodEnd !== prevPeriodEndRef.current;
+    if (periodStartChanged || periodEndChanged) {
+      // Перестраиваем всю фразу «за период X - Y» разом из обеих актуальных дат —
+      // точечная замена «старое → новое» ломается, если даты периода совпадают.
+      newBody = syncPeriodInBody(
+        newBody,
+        currentPeriodStart || prevPeriodStartRef.current || "",
+        currentPeriodEnd || prevPeriodEndRef.current || "",
+      );
       prevPeriodStartRef.current = currentPeriodStart;
-      changed = true;
-    }
-
-    if (currentPeriodEnd && currentPeriodEnd !== prevPeriodEndRef.current) {
-      newBody = syncPeriodDateInBody(newBody, prevPeriodEndRef.current ?? "", currentPeriodEnd);
       prevPeriodEndRef.current = currentPeriodEnd;
       changed = true;
     }

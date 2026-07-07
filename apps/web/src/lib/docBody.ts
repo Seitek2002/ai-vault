@@ -101,18 +101,27 @@ export function syncAmountInBody(
   return JSON.parse(text) as unknown;
 }
 
-/** Replace one period boundary date («6.07.26 г.») with a new one. */
-export function syncPeriodDateInBody(
+/**
+ * Rewrites the whole «за период D.MM.YY г. - D.MM.YY г.» phrase from the
+ * current start/end ISO dates. Matches by pattern rather than diffing the
+ * previous string — если периоды совпадают (например, две накладные созданы
+ * в один день), обе даты текстуально идентичны, и точечная замена «старое
+ * значение → новое» находит 0 совпадений после первой правки. Полная
+ * перестройка фразы из актуальных дат исключает эту гонку.
+ */
+export function syncPeriodInBody(
   bodyJson: unknown,
-  prevIso: string,
-  newIso: string,
+  startIso: string,
+  endIso: string,
 ): unknown {
-  if (!newIso || !prevIso) return bodyJson;
-  const oldStr = shortPeriodDate(prevIso);
-  const newStr = shortPeriodDate(newIso);
-  if (oldStr === newStr) return bodyJson;
+  if (!startIso || !endIso) return bodyJson;
+  const newStart = shortPeriodDate(startIso);
+  const newEnd = shortPeriodDate(endIso);
+  const pattern = /за период\s+\d{1,2}\.\d{2}\.\d{2}\s*г\.\s*-\s*\d{1,2}\.\d{2}\.\d{2}\s*г\./;
   const text = JSON.stringify(bodyJson);
-  return JSON.parse(text.split(oldStr).join(newStr)) as unknown;
+  if (!pattern.test(text)) return bodyJson;
+  const newText = text.replace(pattern, `за период ${newStart} - ${newEnd}`);
+  return JSON.parse(newText) as unknown;
 }
 
 /** Replace the old invoice/act number in the body heading. */

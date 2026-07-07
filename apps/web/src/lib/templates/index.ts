@@ -82,17 +82,19 @@ const avrServicesTable = () => ({
       type: "tableRow",
       content: [
         { type: "tableCell", content: [emptyPara()] },
-        { type: "tableCell", content: [para("Пакет №_«ИИ-робот» _000 чатов __.__.26 г. – __.__.26 г.")] },
-        { type: "tableCell", content: [emptyPara()] },
+        { type: "tableCell", content: [para("Пакет №_ «ИИ-робот» _ 000 чатов")] },
+        { type: "tableCell", content: [para("__.__.26 г. – __.__.26 г.")] },
         { type: "tableCell", content: [para(AMOUNT_PLACEHOLDER)] },
       ],
     },
     {
       type: "tableRow",
       content: [
-        { type: "tableCell", content: [emptyPara()] },
-        { type: "tableCell", content: [emptyPara()] },
-        { type: "tableCell", content: [{ type: "paragraph", content: [bold("Итого")] }] },
+        {
+          type: "tableCell",
+          attrs: { colspan: 3, rowspan: 1, colwidth: null },
+          content: [{ type: "paragraph", content: [bold("Итого")] }],
+        },
         { type: "tableCell", content: [para(AMOUNT_PLACEHOLDER)] },
       ],
     },
@@ -271,7 +273,10 @@ export const DOCUMENT_TEMPLATES: Record<DocumentType, DocTemplate> = {
     label: "Акт оказанных услуг",
     shortLabel: "АВР",
     color: "#10B981",
-    metaDefaults: { actNumber: "", actDate: "", currency: "KGS", totalAmount: 0 },
+    metaDefaults: {
+      actNumber: "", actDate: "", packageNumber: "", chatCount: "",
+      periodStart: "", periodEnd: "", currency: "KGS", totalAmount: 0,
+    },
     bodyJson: {
       type: "doc",
       content: [

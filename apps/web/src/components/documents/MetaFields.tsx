@@ -128,8 +128,16 @@ export function MetaFields({ type, meta, onChange }: MetaFieldsProps) {
       {type === DocumentType.CONTRACT && dateField("endDate", "Дата окончания")}
       {type === DocumentType.KP && dateField("validUntil", "Действует до")}
 
-      {/* Период услуг — подставляется в таблицу счёта */}
-      {type === DocumentType.INVOICE_PAYMENT && (
+      {/* Пакет услуг — подставляется в таблицу АВР */}
+      {type === DocumentType.AVR && (
+        <>
+          {numberField("packageNumber", "Номер пакета", "2")}
+          {numberField("chatCount", "Количество чатов", "2 000")}
+        </>
+      )}
+
+      {/* Период услуг — подставляется в таблицу счёта / АВР */}
+      {(type === DocumentType.INVOICE_PAYMENT || type === DocumentType.AVR) && (
         <>
           {dateField("periodStart", "Период: с")}
           {dateField("periodEnd", "Период: по")}

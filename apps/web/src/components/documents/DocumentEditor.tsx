@@ -13,7 +13,14 @@ import { ExportMenu } from "./ExportMenu";
 import { uploadFile } from "@/lib/api/files";
 import { DocumentType } from "@ai-vault/types";
 import type { DocumentMeta } from "@ai-vault/types";
-import { syncDateInBody, syncNumberInBody, syncAmountInBody, syncPeriodInBody } from "@/lib/docBody";
+import {
+  syncDateInBody,
+  syncNumberInBody,
+  syncAmountInBody,
+  syncPeriodInBody,
+  syncAvrPeriodInBody,
+  syncAvrPackageInBody,
+} from "@/lib/docBody";
 
 const AUTOSAVE_DELAY = 2000;
 
@@ -158,6 +165,8 @@ export function DocumentEditor({ documentId }: DocumentEditorProps) {
   const prevAmountRef = useRef<number | null>(null);
   const prevPeriodStartRef = useRef<string | null>(null);
   const prevPeriodEndRef = useRef<string | null>(null);
+  const prevPackageNumberRef = useRef<string | null>(null);
+  const prevChatCountRef = useRef<string | null>(null);
   const [replaceError, setReplaceError] = useState<string | null>(null);
   const [showSaveTemplate, setShowSaveTemplate] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
@@ -201,6 +210,8 @@ export function DocumentEditor({ documentId }: DocumentEditorProps) {
     prevAmountRef.current = null;
     prevPeriodStartRef.current = null;
     prevPeriodEndRef.current = null;
+    prevPackageNumberRef.current = null;
+    prevChatCountRef.current = null;
   }, [documentId]);
 
   // Sync date/number from meta panel into the body text
@@ -223,6 +234,10 @@ export function DocumentEditor({ documentId }: DocumentEditorProps) {
       (docMeta.periodStart as string | undefined) ?? "";
     const currentPeriodEnd = (meta?.periodEnd as string | undefined) ??
       (docMeta.periodEnd as string | undefined) ?? "";
+    const currentPackageNumber = (meta?.packageNumber as string | undefined) ??
+      (docMeta.packageNumber as string | undefined) ?? "";
+    const currentChatCount = (meta?.chatCount as string | undefined) ??
+      (docMeta.chatCount as string | undefined) ?? "";
 
     // First render for this document — just capture initial values
     if (prevDateRef.current === null || prevNumberRef.current === null) {
@@ -231,6 +246,8 @@ export function DocumentEditor({ documentId }: DocumentEditorProps) {
       prevAmountRef.current = currentAmount;
       prevPeriodStartRef.current = currentPeriodStart;
       prevPeriodEndRef.current = currentPeriodEnd;
+      prevPackageNumberRef.current = currentPackageNumber;
+      prevChatCountRef.current = currentChatCount;
       return;
     }
 
@@ -258,15 +275,29 @@ export function DocumentEditor({ documentId }: DocumentEditorProps) {
     const periodStartChanged = currentPeriodStart && currentPeriodStart !== prevPeriodStartRef.current;
     const periodEndChanged = currentPeriodEnd && currentPeriodEnd !== prevPeriodEndRef.current;
     if (periodStartChanged || periodEndChanged) {
-      // Перестраиваем всю фразу «за период X - Y» разом из обеих актуальных дат —
+      // Перестраиваем всю фразу «период X - Y» разом из обеих актуальных дат —
       // точечная замена «старое → новое» ломается, если даты периода совпадают.
-      newBody = syncPeriodInBody(
+      const syncPeriod = document.type === DocumentType.AVR ? syncAvrPeriodInBody : syncPeriodInBody;
+      newBody = syncPeriod(
         newBody,
         currentPeriodStart || prevPeriodStartRef.current || "",
         currentPeriodEnd || prevPeriodEndRef.current || "",
       );
       prevPeriodStartRef.current = currentPeriodStart;
       prevPeriodEndRef.current = currentPeriodEnd;
+      changed = true;
+    }
+
+    const packageNumberChanged = currentPackageNumber && currentPackageNumber !== prevPackageNumberRef.current;
+    const chatCountChanged = currentChatCount && currentChatCount !== prevChatCountRef.current;
+    if (document.type === DocumentType.AVR && (packageNumberChanged || chatCountChanged)) {
+      newBody = syncAvrPackageInBody(
+        newBody,
+        currentPackageNumber || prevPackageNumberRef.current || "",
+        currentChatCount || prevChatCountRef.current || "",
+      );
+      prevPackageNumberRef.current = currentPackageNumber;
+      prevChatCountRef.current = currentChatCount;
       changed = true;
     }
 

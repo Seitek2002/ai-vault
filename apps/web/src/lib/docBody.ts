@@ -102,25 +102,78 @@ export function syncAmountInBody(
 }
 
 /**
- * Rewrites the whole «за период D.MM.YY г. - D.MM.YY г.» phrase from the
- * current start/end ISO dates. Matches by pattern rather than diffing the
- * previous string — если периоды совпадают (например, две накладные созданы
- * в один день), обе даты текстуально идентичны, и точечная замена «старое
- * значение → новое» находит 0 совпадений после первой правки. Полная
- * перестройка фразы из актуальных дат исключает эту гонку.
+ * A run of digits/underscores — never matches JSON syntax characters
+ * (quotes, braces, colons, commas), so a pattern built from this piece
+ * can never "bridge" across a JSON string boundary into an unrelated
+ * text node. `\S+`/`.+` are UNSAFE here: JSON.stringify emits no spaces
+ * between adjacent nodes, so an unbounded non-whitespace class can span
+ * clean across `"}]},{"type":"text","text":"` and corrupt neighbouring
+ * paragraphs. Always build date/number patterns from this instead.
  */
-export function syncPeriodInBody(
+const DATE_SEG = "[\\d_]+";
+const DATE_TOKEN = `${DATE_SEG}\\.${DATE_SEG}\\.${DATE_SEG}\\s*г\\.`;
+
+/**
+ * Rewrites a whole "period" phrase from the current start/end ISO dates,
+ * matching by an anchor pattern rather than diffing the previous string —
+ * если периоды совпадают (например, две накладные созданы в один день),
+ * обе даты текстуально идентичны, и точечная замена «старое значение →
+ * новое» находит 0 совпадений после первой правки. Полная перестройка
+ * фразы из актуальных дат исключает эту гонку.
+ */
+function syncPeriodPhraseInBody(
   bodyJson: unknown,
   startIso: string,
   endIso: string,
+  pattern: RegExp,
+  build: (start: string, end: string) => string,
 ): unknown {
   if (!startIso || !endIso) return bodyJson;
-  const newStart = shortPeriodDate(startIso);
-  const newEnd = shortPeriodDate(endIso);
-  const pattern = /за период\s+\d{1,2}\.\d{2}\.\d{2}\s*г\.\s*-\s*\d{1,2}\.\d{2}\.\d{2}\s*г\./;
   const text = JSON.stringify(bodyJson);
   if (!pattern.test(text)) return bodyJson;
-  const newText = text.replace(pattern, `за период ${newStart} - ${newEnd}`);
+  const newText = text.replace(pattern, build(shortPeriodDate(startIso), shortPeriodDate(endIso)));
+  return JSON.parse(newText) as unknown;
+}
+
+/** «за период D.MM.YY г. - D.MM.YY г.» — используется в тексте счёта на оплату. */
+export function syncPeriodInBody(bodyJson: unknown, startIso: string, endIso: string): unknown {
+  return syncPeriodPhraseInBody(
+    bodyJson, startIso, endIso,
+    new RegExp(`за период\\s+${DATE_TOKEN}\\s*-\\s*${DATE_TOKEN}`),
+    (s, e) => `за период ${s} - ${e}`,
+  );
+}
+
+/** «D.MM.YY г. – D.MM.YY г.» — отдельная ячейка «Период» в таблице АВР (тире, не дефис). */
+export function syncAvrPeriodInBody(bodyJson: unknown, startIso: string, endIso: string): unknown {
+  return syncPeriodPhraseInBody(
+    bodyJson, startIso, endIso,
+    new RegExp(`${DATE_TOKEN}\\s*–\\s*${DATE_TOKEN}`),
+    (s, e) => `${s} – ${e}`,
+  );
+}
+
+/**
+ * Rewrites "Пакет №X «ИИ-робот» Y чатов" from the current package number
+ * and chat count. Same anchor-pattern-rebuild approach as period sync —
+ * matches both the blank placeholder and an already-filled value.
+ * Chat count needs a space (thousand separator, e.g. "2 000"), so its
+ * segment allows spaces too, but — critically — excludes the JSON quote
+ * character so the match can never cross into a neighbouring text node.
+ */
+export function syncAvrPackageInBody(
+  bodyJson: unknown,
+  packageNumber: string,
+  chatCount: string,
+): unknown {
+  if (!packageNumber && !chatCount) return bodyJson;
+  const pattern = /Пакет №[\d_]*\s*«ИИ-робот»\s*[\d_ ]+\s*чатов/;
+  const text = JSON.stringify(bodyJson);
+  if (!pattern.test(text)) return bodyJson;
+  const newText = text.replace(
+    pattern,
+    `Пакет №${packageNumber || "_"} «ИИ-робот» ${chatCount || "_ 000"} чатов`,
+  );
   return JSON.parse(newText) as unknown;
 }
 

@@ -79,6 +79,8 @@ export interface DocumentMetaInvoicePayment {
   type: DocumentType.INVOICE_PAYMENT;
   invoiceNumber?: string;
   invoiceDate?: string;
+  periodStart?: string;
+  periodEnd?: string;
   currency: string;
   totalAmount: number;
 }
@@ -87,6 +89,10 @@ export interface DocumentMetaAvr {
   type: DocumentType.AVR;
   actNumber?: string;
   actDate?: string;
+  packageNumber?: string;
+  chatCount?: string;
+  periodStart?: string;
+  periodEnd?: string;
   currency: string;
   totalAmount: number;
 }

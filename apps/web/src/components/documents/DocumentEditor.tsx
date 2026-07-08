@@ -5,6 +5,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { RichEditor } from "@/components/editor/RichEditor";
 import { MetaFields } from "./MetaFields";
+import { VariableFields } from "./VariableFields";
+import { setVariableInBody, setVariableLabelInBody } from "@/lib/variableTokens";
 import { useEditorStore } from "@/stores/editor.store";
 import { documentsApi } from "@/lib/api/documents";
 import { templatesApi } from "@/lib/api/templates";
@@ -386,6 +388,22 @@ export function DocumentEditor({ documentId }: DocumentEditorProps) {
     [setMeta],
   );
 
+  const handleVariableValueChange = useCallback(
+    (key: string, value: string) => {
+      if (!document) return;
+      setBodyJson(setVariableInBody(document.bodyJson, key, value));
+    },
+    [document, setBodyJson],
+  );
+
+  const handleVariableLabelChange = useCallback(
+    (key: string, label: string) => {
+      if (!document) return;
+      setBodyJson(setVariableLabelInBody(document.bodyJson, key, label));
+    },
+    [document, setBodyJson],
+  );
+
   const handleReplaceFile = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
@@ -450,11 +468,19 @@ export function DocumentEditor({ documentId }: DocumentEditorProps) {
           <p className="text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-wider mb-3">
             Реквизиты
           </p>
-          <MetaFields
-            type={document.type}
-            meta={effectiveMeta}
-            onChange={handleMetaChange}
-          />
+          {document.type === DocumentType.CUSTOM ? (
+            <VariableFields
+              bodyJson={document.bodyJson}
+              onChangeValue={handleVariableValueChange}
+              onChangeLabel={handleVariableLabelChange}
+            />
+          ) : (
+            <MetaFields
+              type={document.type}
+              meta={effectiveMeta}
+              onChange={handleMetaChange}
+            />
+          )}
         </div>
 
         {/* Replace file section */}

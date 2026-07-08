@@ -688,6 +688,24 @@ export const DOCUMENT_TEMPLATES: Record<DocumentType, DocTemplate> = {
       ],
     },
   },
+
+  // ── СВОЙ ШАБЛОН (конструктор) ─────────────────────────────────────────────────
+  [DocumentType.CUSTOM]: {
+    type: DocumentType.CUSTOM,
+    label: "Свой шаблон",
+    shortLabel: "СВОЙ",
+    color: "#8B5CF6",
+    metaDefaults: {},
+    bodyJson: {
+      type: "doc",
+      content: [emptyPara()],
+    },
+  },
 };
 
 export const DOCUMENT_TYPE_LIST = Object.values(DOCUMENT_TEMPLATES);
+
+/** Built-in document types only — excludes CUSTOM, which is managed via the template constructor */
+export const BUILTIN_DOCUMENT_TYPE_LIST = DOCUMENT_TYPE_LIST.filter(
+  (tpl) => tpl.type !== DocumentType.CUSTOM,
+);

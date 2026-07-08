@@ -20,6 +20,7 @@ enum DocumentType {
   INVOICE_FACTURA
   INVOICE_PAYMENT
   AVR
+  CUSTOM
 }
 
 enum DocumentStatus {

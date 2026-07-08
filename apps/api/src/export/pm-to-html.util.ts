@@ -6,6 +6,15 @@ interface PmNode {
   marks?: Array<{ type: string; attrs?: Record<string, unknown> }>;
 }
 
+/** `date` variables are stored ISO but rendered DD.MM.YYYY (RU/KG convention). */
+function formatVariableValue(value: string, varType: string): string {
+  if (varType === 'date' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const [y, m, d] = value.split('-');
+    return `${d}.${m}.${y}`;
+  }
+  return value;
+}
+
 function esc(text: string): string {
   return text
     .replace(/&/g, '&amp;')
@@ -52,6 +61,13 @@ function nodeToHtml(node: PmNode): string {
 
     case 'text':
       return textNodeToHtml(node);
+
+    case 'variableToken': {
+      const value = (node.attrs?.value as string | undefined)?.trim();
+      const label = (node.attrs?.label as string | undefined) ?? '';
+      const varType = (node.attrs?.varType as string | undefined) ?? 'text';
+      return esc(value ? formatVariableValue(value, varType) : `[${label}]`);
+    }
 
     case 'hardBreak':
       return '<br>';

@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { templatesApi } from "@/lib/api/templates";
 import type { TemplateDto, CreateTemplateRequest } from "@/lib/api/templates";
 import { RichEditor } from "@/components/editor/RichEditor";
-import { DOCUMENT_TEMPLATES, DOCUMENT_TYPE_LIST } from "@/lib/templates";
+import { DOCUMENT_TEMPLATES, BUILTIN_DOCUMENT_TYPE_LIST } from "@/lib/templates";
 import { extractManualVariables } from "@/lib/placeholders";
 import { DocumentType } from "@ai-vault/types";
 
@@ -82,7 +82,7 @@ function TemplateModal({ initial, onClose }: TemplateModalProps) {
                 disabled={isEdit}
                 className="w-full px-3 py-2 rounded-lg bg-[var(--color-bg-elevated)] border border-[var(--color-border)] text-sm text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-accent)] transition-colors disabled:opacity-50"
               >
-                {DOCUMENT_TYPE_LIST.map((tpl) => (
+                {BUILTIN_DOCUMENT_TYPE_LIST.map((tpl) => (
                   <option key={tpl.type} value={tpl.type}>
                     {tpl.shortLabel} — {tpl.label}
                   </option>
@@ -328,7 +328,7 @@ export function TemplatesClient() {
           className="px-3 py-1.5 rounded-lg bg-[var(--color-bg-surface)] border border-[var(--color-border)] text-sm text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-accent)] transition-colors"
         >
           <option value="">Все типы</option>
-          {DOCUMENT_TYPE_LIST.map((tpl) => (
+          {BUILTIN_DOCUMENT_TYPE_LIST.map((tpl) => (
             <option key={tpl.type} value={tpl.type}>
               {tpl.shortLabel} — {tpl.label}
             </option>

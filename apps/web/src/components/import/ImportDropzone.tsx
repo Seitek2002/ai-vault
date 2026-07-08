@@ -5,7 +5,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { uploadFile } from "@/lib/api/files";
 import { api } from "@/lib/api/client";
-import { DOCUMENT_TYPE_LIST } from "@/lib/templates";
+import { BUILTIN_DOCUMENT_TYPE_LIST } from "@/lib/templates";
 import { DocumentType } from "@ai-vault/types";
 import type { DocumentDto } from "@ai-vault/types";
 
@@ -96,7 +96,7 @@ export function ImportDropzone() {
           Выберите тип документа
         </h2>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          {DOCUMENT_TYPE_LIST.map((tpl) => (
+          {BUILTIN_DOCUMENT_TYPE_LIST.map((tpl) => (
             <button
               key={tpl.type}
               onClick={() => {
@@ -128,7 +128,7 @@ export function ImportDropzone() {
 
   /* ── Step 2: drop zone ── */
   if (step === "drop-file") {
-    const tpl = docType ? DOCUMENT_TYPE_LIST.find((t) => t.type === docType) : null;
+    const tpl = docType ? BUILTIN_DOCUMENT_TYPE_LIST.find((t) => t.type === docType) : null;
     return (
       <div className="max-w-lg mx-auto space-y-4">
         {/* Back + type badge */}

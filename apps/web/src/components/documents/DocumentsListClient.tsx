@@ -7,7 +7,7 @@ import { documentsApi } from "@/lib/api/documents";
 import { templatesApi } from "@/lib/api/templates";
 import type { TemplateDto } from "@/lib/api/templates";
 import { counterpartiesApi, type CounterpartyFormData } from "@/lib/api/counterparties";
-import { DOCUMENT_TEMPLATES, DOCUMENT_TYPE_LIST } from "@/lib/templates";
+import { DOCUMENT_TEMPLATES, DOCUMENT_TYPE_LIST, BUILTIN_DOCUMENT_TYPE_LIST } from "@/lib/templates";
 import { syncDateInBody, syncNumberInBody, injectCounterpartyInBody, injectProviderInBody } from "@/lib/docBody";
 import { todayISO } from "@/lib/docBody";
 import {
@@ -117,48 +117,54 @@ function CreateDocumentModal({ onClose }: { onClose: () => void }) {
         cpData = found ?? null;
       }
 
-      // Автополя счёта: следующий номер (005 → 006 → …) и период по последнему счёту
-      let invoiceAuto: InvoiceAutoFields | null = null;
-      if (selectedType === DocumentType.INVOICE_PAYMENT) {
-        invoiceAuto = await computeInvoiceAutoFields();
-        meta = {
-          ...meta,
-          invoiceNumber: invoiceAuto.number,
-          periodStart: invoiceAuto.periodStartIso,
-          periodEnd: invoiceAuto.periodEndIso,
-        };
-      }
+      // Кастомные шаблоны (конструктор) заполняются через переменные-чипы в самом
+      // документе — системные {{...}}-плейсхолдеры и авто-дата/номер тут не нужны.
+      if (selectedType !== DocumentType.CUSTOM) {
+        // Автополя счёта: следующий номер (005 → 006 → …) и период по последнему счёту
+        let invoiceAuto: InvoiceAutoFields | null = null;
+        if (selectedType === DocumentType.INVOICE_PAYMENT) {
+          invoiceAuto = await computeInvoiceAutoFields();
+          meta = {
+            ...meta,
+            invoiceNumber: invoiceAuto.number,
+            periodStart: invoiceAuto.periodStartIso,
+            periodEnd: invoiceAuto.periodEndIso,
+          };
+        }
 
-      // Актуальная дата и номер — для любого способа создания
-      const today = todayISO();
-      const dateKey =
-        selectedType === DocumentType.AVR ? "actDate" :
-        selectedType === DocumentType.CONTRACT ? "startDate" : "invoiceDate";
-      meta = { ...meta, [dateKey]: today };
-      bodyJson = syncDateInBody(bodyJson, "", today);
-      bodyJson = syncNumberInBody(bodyJson, "", (meta.invoiceNumber as string) ?? "");
+        // Актуальная дата и номер — для любого способа создания
+        const today = todayISO();
+        const dateKey =
+          selectedType === DocumentType.AVR ? "actDate" :
+          selectedType === DocumentType.CONTRACT ? "startDate" : "invoiceDate";
+        meta = { ...meta, [dateKey]: today };
+        bodyJson = syncDateInBody(bodyJson, "", today);
+        bodyJson = syncNumberInBody(bodyJson, "", (meta.invoiceNumber as string) ?? "");
 
-      // Запоминаем ДО подстановки: использует ли шаблон именованные плейсхолдеры
-      const hasCompanyPh = usesCompanyPlaceholders(bodyJson);
-      const hasOrgPh = usesOrgPlaceholders(bodyJson);
+        // Запоминаем ДО подстановки: использует ли шаблон именованные плейсхолдеры
+        const hasCompanyPh = usesCompanyPlaceholders(bodyJson);
+        const hasOrgPh = usesOrgPlaceholders(bodyJson);
 
-      // Системные плейсхолдеры: {{company.*}}, {{org.*}}, даты, номер, сумма, период
-      const docNumber = (meta.invoiceNumber ?? meta.actNumber ?? meta.contractNumber ?? "") as string;
-      bodyJson = substitutePlaceholders(bodyJson, {
-        company: cpData,
-        org: orgSettings,
-        number: docNumber,
-        amount: Number(meta.totalAmount ?? 0),
-        periodStart: invoiceAuto?.periodStart,
-        periodEnd: invoiceAuto?.periodEnd,
-      });
+        // Системные плейсхолдеры: {{company.*}}, {{org.*}}, даты, номер, сумма, период
+        const docNumber = (meta.invoiceNumber ?? meta.actNumber ?? meta.contractNumber ?? "") as string;
+        bodyJson = substitutePlaceholders(bodyJson, {
+          company: cpData,
+          org: orgSettings,
+          number: docNumber,
+          amount: Number(meta.totalAmount ?? 0),
+          periodStart: invoiceAuto?.periodStart,
+          periodEnd: invoiceAuto?.periodEnd,
+        });
 
-      // Старые эвристики по ключевым словам — только для шаблонов без плейсхолдеров
-      if (cpData && !hasCompanyPh) {
-        bodyJson = injectCounterpartyInBody(bodyJson, selectedType, cpData);
-      }
-      if (orgSettings?.name && !hasOrgPh) {
-        bodyJson = injectProviderInBody(bodyJson, orgSettings);
+        // Старые эвристики по ключевым словам — только для шаблонов без плейсхолдеров
+        if (cpData && !hasCompanyPh) {
+          bodyJson = injectCounterpartyInBody(bodyJson, selectedType, cpData);
+        }
+        if (orgSettings?.name && !hasOrgPh) {
+          bodyJson = injectProviderInBody(bodyJson, orgSettings);
+        }
+      } else {
+        meta = { type: DocumentType.CUSTOM };
       }
 
       return documentsApi.create({
@@ -304,7 +310,7 @@ function CreateDocumentModal({ onClose }: { onClose: () => void }) {
                   Тип документа
                 </p>
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                  {DOCUMENT_TYPE_LIST.map((tpl) => (
+                  {BUILTIN_DOCUMENT_TYPE_LIST.map((tpl) => (
                     <button
                       key={tpl.type}
                       onClick={() => setSelectedType(tpl.type)}
@@ -328,6 +334,21 @@ function CreateDocumentModal({ onClose }: { onClose: () => void }) {
                   ))}
                 </div>
               </div>
+
+              <button
+                onClick={() => {
+                  setSelectedType(DocumentType.CUSTOM);
+                  setMode("template");
+                  setStep("company");
+                }}
+                className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl border border-dashed border-[var(--color-border)] text-left text-sm text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:border-[var(--color-border-hover)] transition-colors"
+              >
+                <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                  <rect x="3" y="6" width="18" height="12" rx="2" />
+                  <path d="M12 9v6M9 12h6" />
+                </svg>
+                Использовать свой шаблон из конструктора
+              </button>
             </>
           )}
 

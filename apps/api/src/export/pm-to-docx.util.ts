@@ -23,6 +23,15 @@ interface PmNode {
 
 type DocxBlock = Paragraph | Table;
 
+/** `date` variables are stored ISO but rendered DD.MM.YYYY (RU/KG convention). */
+function formatVariableValue(value: string, varType: string): string {
+  if (varType === 'date' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const [y, m, d] = value.split('-');
+    return `${d}.${m}.${y}`;
+  }
+  return value;
+}
+
 // ─── Text runs ────────────────────────────────────────────────────────────────
 
 function buildTextRun(node: PmNode): TextRun {
@@ -51,6 +60,11 @@ function inlineChildren(node: PmNode): TextRun[] {
       runs.push(buildTextRun(child));
     } else if (child.type === 'hardBreak') {
       runs.push(new TextRun({ break: 1 }));
+    } else if (child.type === 'variableToken') {
+      const value = (child.attrs?.value as string | undefined)?.trim();
+      const label = (child.attrs?.label as string | undefined) ?? '';
+      const varType = (child.attrs?.varType as string | undefined) ?? 'text';
+      runs.push(new TextRun({ text: value ? formatVariableValue(value, varType) : `[${label}]` }));
     }
   }
   return runs;

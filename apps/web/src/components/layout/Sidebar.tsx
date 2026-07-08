@@ -51,6 +51,14 @@ function TemplateIcon(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+function WandIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M15 4V2M15 16v-2M8 9h2M20 9h2M17.8 11.8 19 13M15 9h0M17.8 6.2 19 5M3 21l9-9M12.2 6.2 11 5" />
+    </svg>
+  );
+}
+
 function SettingsIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" {...props}>
@@ -64,6 +72,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/documents", label: "Документы", icon: FileTextIcon },
   { href: "/companies", label: "Компании", icon: BuildingIcon },
   { href: "/templates", label: "Шаблоны", icon: TemplateIcon },
+  { href: "/builder", label: "Конструктор", icon: WandIcon },
   { href: "/import", label: "Импорт", icon: UploadIcon },
   { href: "/settings", label: "Настройки", icon: SettingsIcon },
 ];

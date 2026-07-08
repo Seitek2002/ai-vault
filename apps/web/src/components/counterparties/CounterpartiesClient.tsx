@@ -7,7 +7,7 @@ import { counterpartiesApi, type CounterpartyFormData } from '@/lib/api/counterp
 import { documentsApi } from '@/lib/api/documents';
 import { templatesApi } from '@/lib/api/templates';
 import { settingsApi } from '@/lib/api/settings';
-import { DOCUMENT_TEMPLATES, DOCUMENT_TYPE_LIST } from '@/lib/templates';
+import { DOCUMENT_TEMPLATES, BUILTIN_DOCUMENT_TYPE_LIST } from '@/lib/templates';
 import { syncDateInBody, syncNumberInBody, todayISO, injectCounterpartyInBody, injectProviderInBody } from '@/lib/docBody';
 import { substitutePlaceholders, usesCompanyPlaceholders, usesOrgPlaceholders } from '@/lib/placeholders';
 import { computeInvoiceAutoFields, type InvoiceAutoFields } from '@/lib/invoiceAuto';
@@ -440,7 +440,7 @@ function GenerateDocumentModal({ cp, onClose }: GenerateModalProps) {
           onChange={(e) => handleDocTypeChange(e.target.value as DocumentType)}
           className="w-full px-3 py-2 mb-3 text-sm rounded-lg bg-[var(--color-bg-base)] border border-[var(--color-border)] text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-accent)] transition-colors"
         >
-          {DOCUMENT_TYPE_LIST.map((tpl) => (
+          {BUILTIN_DOCUMENT_TYPE_LIST.map((tpl) => (
             <option key={tpl.type} value={tpl.type}>{tpl.label}</option>
           ))}
         </select>

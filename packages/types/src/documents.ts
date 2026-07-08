@@ -4,6 +4,17 @@ export enum DocumentType {
   INVOICE_FACTURA = 'INVOICE_FACTURA',
   INVOICE_PAYMENT = 'INVOICE_PAYMENT',
   AVR = 'AVR',
+  CUSTOM = 'CUSTOM',
+}
+
+export type TemplateVariableType = 'text' | 'date';
+
+/** A variable defined in a custom template's body via the constructor's variableToken node */
+export interface TemplateVariable {
+  key: string;
+  label: string;
+  varType: TemplateVariableType;
+  value: string;
 }
 
 export enum DocumentStatus {
@@ -96,12 +107,17 @@ export interface DocumentMetaAvr {
   totalAmount: number;
 }
 
+export interface DocumentMetaCustom {
+  type: DocumentType.CUSTOM;
+}
+
 export type DocumentMeta =
   | DocumentMetaKp
   | DocumentMetaContract
   | DocumentMetaInvoiceFactura
   | DocumentMetaInvoicePayment
-  | DocumentMetaAvr;
+  | DocumentMetaAvr
+  | DocumentMetaCustom;
 
 export interface FileAssetDto {
   id: string;

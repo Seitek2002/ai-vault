@@ -289,10 +289,13 @@ export function TemplatesClient() {
   const [editing, setEditing] = useState<TemplateDto | null>(null);
   const [typeFilter, setTypeFilter] = useState<DocumentType | "">("");
 
-  const { data: templates = [], isLoading } = useQuery({
+  const { data: rawTemplates = [], isLoading } = useQuery({
     queryKey: ["templates", typeFilter],
     queryFn: () => templatesApi.list(typeFilter || undefined),
   });
+
+  // CUSTOM-типом шаблоны управляются на отдельной странице «Конструктор»
+  const templates = rawTemplates.filter((t) => t.type !== DocumentType.CUSTOM);
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => templatesApi.delete(id),

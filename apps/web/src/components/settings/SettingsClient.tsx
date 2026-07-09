@@ -6,6 +6,7 @@ import {
   settingsApi,
   type UpdateSettingsDto,
   type UpdateMeDto,
+  type AddMemberDto,
 } from '@/lib/api/settings';
 import { ApiError } from '@/lib/api/client';
 
@@ -281,12 +282,123 @@ function ProfileTab() {
   );
 }
 
+// ── Team tab ─────────────────────────────────────────────────────────────────
+
+function TeamTab() {
+  const qc = useQueryClient();
+  const { data: me } = useQuery({ queryKey: ['me'], queryFn: settingsApi.getMe });
+  const { data: members = [], isLoading } = useQuery({
+    queryKey: ['members'],
+    queryFn: settingsApi.listMembers,
+  });
+
+  const [form, setForm] = useState<AddMemberDto>({ name: '', email: '', password: '' });
+  const [success, setSuccess] = useState('');
+  const [error, setError] = useState('');
+
+  const mutation = useMutation({
+    mutationFn: (dto: AddMemberDto) => settingsApi.addMember(dto),
+    onSuccess: (created) => {
+      void qc.invalidateQueries({ queryKey: ['members'] });
+      setSuccess(`Сотрудник ${created.name} добавлен`);
+      setError('');
+      setForm({ name: '', email: '', password: '' });
+      setTimeout(() => setSuccess(''), 3000);
+    },
+    onError: (err) => {
+      setError(
+        err instanceof ApiError
+          ? err.status === 409
+            ? 'Этот email уже зарегистрирован'
+            : err.message
+          : 'Ошибка добавления сотрудника',
+      );
+    },
+  });
+
+  const set = (key: keyof AddMemberDto) => (val: string) =>
+    setForm((f) => ({ ...f, [key]: val }));
+
+  const handleSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    if (form.password.length < 8) {
+      setError('Пароль должен содержать минимум 8 символов');
+      return;
+    }
+    mutation.mutate(form);
+  };
+
+  return (
+    <div className="space-y-8">
+      <div>
+        <SectionTitle>Сотрудники организации</SectionTitle>
+        {isLoading ? (
+          <div className="space-y-2">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="h-12 animate-pulse rounded-lg bg-[var(--color-bg-elevated)]" />
+            ))}
+          </div>
+        ) : (
+          <ul className="divide-y divide-[var(--color-border)] rounded-lg border border-[var(--color-border)]">
+            {members.map((m) => (
+              <li key={m.id} className="flex items-center justify-between px-4 py-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-[var(--color-text-primary)]">
+                    {m.name}
+                    {m.id === me?.id && (
+                      <span className="ml-2 text-xs text-[var(--color-text-muted)]">(вы)</span>
+                    )}
+                  </p>
+                  <p className="truncate text-xs text-[var(--color-text-muted)]">{m.email}</p>
+                </div>
+                <span className="shrink-0 rounded-full bg-[var(--color-bg-elevated)] px-2.5 py-1 text-xs font-medium text-[var(--color-text-secondary)]">
+                  {m.role === 'ADMIN' ? 'Администратор' : 'Сотрудник'}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <SectionTitle>Добавить сотрудника</SectionTitle>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Имя" name="memberName" value={form.name} onChange={set('name')} required />
+          <Field label="E-mail" name="memberEmail" type="email" value={form.email} onChange={set('email')} placeholder="employee@company.kg" required />
+          <Field label="Пароль" name="memberPassword" type="password" value={form.password} onChange={set('password')} placeholder="Минимум 8 символов" required />
+        </div>
+        <p className="text-xs text-[var(--color-text-muted)]">
+          Новый сотрудник войдёт с этим email и паролем и получит доступ к документам вашей организации.
+        </p>
+
+        {error && (
+          <p className="rounded-lg bg-red-500/10 px-4 py-3 text-sm text-red-400">{error}</p>
+        )}
+        {success && (
+          <p className="rounded-lg bg-green-500/10 px-4 py-3 text-sm text-green-400">{success}</p>
+        )}
+
+        <div className="flex justify-end">
+          <button
+            type="submit"
+            disabled={mutation.isPending}
+            className="rounded-lg bg-[var(--color-accent)] px-5 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
+          >
+            {mutation.isPending ? 'Добавление…' : 'Добавить сотрудника'}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 // ── Main ───────────────────────────────────────────────────────────────────────
 
-type Tab = 'requisites' | 'profile';
+type Tab = 'requisites' | 'team' | 'profile';
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'requisites', label: 'Реквизиты организации' },
+  { id: 'team', label: 'Сотрудники' },
   { id: 'profile', label: 'Профиль' },
 ];
 
@@ -323,7 +435,9 @@ export function SettingsClient() {
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6">
           <div className="mx-auto max-w-2xl">
-            {tab === 'requisites' ? <RequisitesTab /> : <ProfileTab />}
+            {tab === 'requisites' && <RequisitesTab />}
+            {tab === 'team' && <TeamTab />}
+            {tab === 'profile' && <ProfileTab />}
           </div>
         </div>
       </div>

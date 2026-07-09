@@ -8,7 +8,7 @@ import { ConfigService } from '@nestjs/config';
 import * as argon2 from 'argon2';
 import { createHash } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
-import type { RegisterDto, LoginDto, RefreshDto, UpdateMeDto } from './dto/auth.dto';
+import type { RegisterDto, LoginDto, RefreshDto, UpdateMeDto, AddMemberDto } from './dto/auth.dto';
 import type { JwtPayload } from '../common/decorators/current-user.decorator';
 
 @Injectable()
@@ -111,6 +111,33 @@ export class AuthService {
     return this.prisma.user.findUniqueOrThrow({
       where: { id: userId },
       select: { id: true, email: true, name: true, role: true, organizationId: true },
+    });
+  }
+
+  /** Lists every user in the caller's organization (team roster). */
+  async listMembers(organizationId: string) {
+    return this.prisma.user.findMany({
+      where: { organizationId },
+      select: { id: true, email: true, name: true, role: true, createdAt: true },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  /** Adds a new employee to the caller's organization (shares its documents). */
+  async addMember(organizationId: string, dto: AddMemberDto) {
+    const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });
+    if (existing) throw new ConflictException('Email already registered');
+
+    const passwordHash = await argon2.hash(dto.password);
+    return this.prisma.user.create({
+      data: {
+        email: dto.email,
+        name: dto.name,
+        passwordHash,
+        organizationId,
+        role: 'MANAGER',
+      },
+      select: { id: true, email: true, name: true, role: true, createdAt: true },
     });
   }
 

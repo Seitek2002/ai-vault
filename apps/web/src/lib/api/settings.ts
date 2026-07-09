@@ -44,9 +44,25 @@ export interface UpdateMeDto {
   currentPassword?: string;
 }
 
+export interface Member {
+  id: string;
+  email: string;
+  name: string;
+  role: string;
+  createdAt: string;
+}
+
+export interface AddMemberDto {
+  name: string;
+  email: string;
+  password: string;
+}
+
 export const settingsApi = {
   getSettings: () => api.get<CompanySettings>('/settings'),
   updateSettings: (dto: UpdateSettingsDto) => api.patch<CompanySettings>('/settings', dto),
   getMe: () => api.get<UserProfile>('/auth/me'),
   updateMe: (dto: UpdateMeDto) => api.patch<UserProfile>('/auth/me', dto),
+  listMembers: () => api.get<Member[]>('/auth/members'),
+  addMember: (dto: AddMemberDto) => api.post<Member>('/auth/members', dto),
 };

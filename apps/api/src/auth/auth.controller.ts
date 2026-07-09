@@ -1,6 +1,6 @@
 import { Controller, Post, Get, Patch, Body, HttpCode, HttpStatus, SetMetadata } from '@nestjs/common';
 import { AuthService } from './auth.service';
-import { RegisterDto, LoginDto, RefreshDto, UpdateMeDto } from './dto/auth.dto';
+import { RegisterDto, LoginDto, RefreshDto, UpdateMeDto, AddMemberDto } from './dto/auth.dto';
 import { CurrentUser, type JwtPayload } from '../common/decorators/current-user.decorator';
 import { IS_PUBLIC_KEY } from './guards/jwt-auth.guard';
 
@@ -44,5 +44,15 @@ export class AuthController {
   @Patch('me')
   updateMe(@CurrentUser() user: JwtPayload, @Body() dto: UpdateMeDto) {
     return this.auth.updateMe(user.sub, dto);
+  }
+
+  @Get('members')
+  listMembers(@CurrentUser() user: JwtPayload) {
+    return this.auth.listMembers(user.organizationId);
+  }
+
+  @Post('members')
+  addMember(@CurrentUser() user: JwtPayload, @Body() dto: AddMemberDto) {
+    return this.auth.addMember(user.organizationId, dto);
   }
 }

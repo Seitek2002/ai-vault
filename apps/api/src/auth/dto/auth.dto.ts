@@ -32,6 +32,20 @@ export class RefreshDto {
   declare refreshToken: string;
 }
 
+export class AddMemberDto {
+  @IsString()
+  @MinLength(2)
+  @MaxLength(100)
+  declare name: string;
+
+  @IsEmail()
+  declare email: string;
+
+  @IsString()
+  @MinLength(8)
+  declare password: string;
+}
+
 export class UpdateMeDto {
   @IsString()
   @MinLength(2)

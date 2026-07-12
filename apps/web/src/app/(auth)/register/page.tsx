@@ -22,7 +22,8 @@ export default function RegisterPage() {
     setLoading(true);
 
     try {
-      await authApi.register({ name, email, password, organizationName });
+      const trimmedOrgName = organizationName.trim();
+      await authApi.register({ name, email, password, ...(trimmedOrgName ? { organizationName: trimmedOrgName } : {}) });
       router.push('/documents');
       router.refresh();
     } catch (err) {
@@ -104,16 +105,18 @@ export default function RegisterPage() {
 
           <div>
             <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1.5">
-              Название организации
+              Название организации <span className="font-normal text-[var(--color-text-muted)]">(необязательно)</span>
             </label>
             <input
               type="text"
-              required
               value={organizationName}
               onChange={(e) => setOrganizationName(e.target.value)}
               placeholder="ООО «Моя компания»"
               className="w-full px-3.5 py-2.5 text-sm rounded-lg bg-[var(--color-bg-base)] border border-[var(--color-border)] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:border-[var(--color-accent)] focus:ring-1 focus:ring-[var(--color-accent)] transition-colors"
             />
+            <p className="mt-1.5 text-xs text-[var(--color-text-muted)]">
+              Можно оставить пустым и создать или присоединиться к организации позже в настройках.
+            </p>
           </div>
 
           {error && (

@@ -1,38 +1,38 @@
 import { Controller, Get, Post, Patch, Delete, Body, Param, Query } from '@nestjs/common';
 import { TemplatesService } from './templates.service';
 import { CreateTemplateDto, UpdateTemplateDto, ListTemplatesDto } from './dto/template.dto';
-import { CurrentUser, type JwtPayload } from '../common/decorators/current-user.decorator';
+import { CurrentOrgId } from '../common/decorators/current-user.decorator';
 
 @Controller('templates')
 export class TemplatesController {
   constructor(private service: TemplatesService) {}
 
   @Get()
-  findAll(@CurrentUser() user: JwtPayload, @Query() query: ListTemplatesDto) {
-    return this.service.findAll(user.organizationId, query);
+  findAll(@CurrentOrgId() organizationId: string, @Query() query: ListTemplatesDto) {
+    return this.service.findAll(organizationId, query);
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
-    return this.service.findOne(id, user.organizationId);
+  findOne(@Param('id') id: string, @CurrentOrgId() organizationId: string) {
+    return this.service.findOne(id, organizationId);
   }
 
   @Post()
-  create(@Body() dto: CreateTemplateDto, @CurrentUser() user: JwtPayload) {
-    return this.service.create(user.organizationId, dto);
+  create(@Body() dto: CreateTemplateDto, @CurrentOrgId() organizationId: string) {
+    return this.service.create(organizationId, dto);
   }
 
   @Patch(':id')
   update(
     @Param('id') id: string,
     @Body() dto: UpdateTemplateDto,
-    @CurrentUser() user: JwtPayload,
+    @CurrentOrgId() organizationId: string,
   ) {
-    return this.service.update(id, user.organizationId, dto);
+    return this.service.update(id, organizationId, dto);
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
-    return this.service.remove(id, user.organizationId);
+  remove(@Param('id') id: string, @CurrentOrgId() organizationId: string) {
+    return this.service.remove(id, organizationId);
   }
 }

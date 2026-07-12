@@ -16,7 +16,8 @@ export class RegisterDto {
   @IsString()
   @MinLength(2)
   @MaxLength(100)
-  declare organizationName: string;
+  @IsOptional()
+  organizationName?: string;
 }
 
 export class LoginDto {
@@ -33,6 +34,12 @@ export class RefreshDto {
 }
 
 export class AddMemberDto {
+  @IsEmail()
+  declare email: string;
+}
+
+/** Mode 2: create a brand-new account and attach it to the caller's organization directly. */
+export class CreateMemberDto {
   @IsString()
   @MinLength(2)
   @MaxLength(100)
@@ -44,6 +51,13 @@ export class AddMemberDto {
   @IsString()
   @MinLength(8)
   declare password: string;
+}
+
+export class CreateOrganizationDto {
+  @IsString()
+  @MinLength(2)
+  @MaxLength(100)
+  declare name: string;
 }
 
 export class UpdateMeDto {

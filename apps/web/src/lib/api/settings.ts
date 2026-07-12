@@ -21,7 +21,7 @@ export interface UserProfile {
   email: string;
   name: string;
   role: string;
-  organizationId: string;
+  organizationId: string | null;
 }
 
 export interface UpdateSettingsDto {
@@ -53,9 +53,22 @@ export interface Member {
 }
 
 export interface AddMemberDto {
+  email: string;
+}
+
+export interface CreateMemberDto {
   name: string;
   email: string;
   password: string;
+}
+
+export interface CreateOrganizationDto {
+  name: string;
+}
+
+export interface AuthTokens {
+  accessToken: string;
+  refreshToken: string;
 }
 
 export const settingsApi = {
@@ -65,4 +78,6 @@ export const settingsApi = {
   updateMe: (dto: UpdateMeDto) => api.patch<UserProfile>('/auth/me', dto),
   listMembers: () => api.get<Member[]>('/auth/members'),
   addMember: (dto: AddMemberDto) => api.post<Member>('/auth/members', dto),
+  createMember: (dto: CreateMemberDto) => api.post<Member>('/auth/members/create', dto),
+  createOrganization: (dto: CreateOrganizationDto) => api.post<AuthTokens>('/auth/organization', dto),
 };

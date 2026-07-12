@@ -68,10 +68,10 @@ model User {
   passwordHash   String
   name           String
   role           UserRole @default(MANAGER)
-  organizationId String
+  organizationId String?
   createdAt      DateTime @default(now())
 
-  organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization     Organization?     @relation(fields: [organizationId], references: [id], onDelete: SetNull)
   createdDocuments Document[]        @relation("DocumentCreatedBy")
   versions         DocumentVersion[]
   fileAssets       FileAsset[]

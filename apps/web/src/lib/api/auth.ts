@@ -9,7 +9,7 @@ export const authApi = {
     return res;
   },
 
-  async register(body: { name: string; email: string; password: string; organizationName: string }): Promise<LoginResponse> {
+  async register(body: { name: string; email: string; password: string; organizationName?: string }): Promise<LoginResponse> {
     const res = await api.post<LoginResponse>('/auth/register', body);
     saveTokens(res.accessToken, res.refreshToken);
     return res;

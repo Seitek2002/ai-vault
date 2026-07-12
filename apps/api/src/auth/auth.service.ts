@@ -2,13 +2,22 @@ import {
   Injectable,
   UnauthorizedException,
   ConflictException,
+  NotFoundException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as argon2 from 'argon2';
 import { createHash } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
-import type { RegisterDto, LoginDto, RefreshDto, UpdateMeDto, AddMemberDto } from './dto/auth.dto';
+import type {
+  RegisterDto,
+  LoginDto,
+  RefreshDto,
+  UpdateMeDto,
+  AddMemberDto,
+  CreateMemberDto,
+  CreateOrganizationDto,
+} from './dto/auth.dto';
 import type { JwtPayload } from '../common/decorators/current-user.decorator';
 
 @Injectable()
@@ -23,12 +32,24 @@ export class AuthService {
     const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });
     if (existing) throw new ConflictException('Email already registered');
 
-    const slug = dto.organizationName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') + '-' + Date.now();
-    const org = await this.prisma.organization.create({
-      data: { name: dto.organizationName, slug },
-    });
-
     const passwordHash = await argon2.hash(dto.password);
+
+    // Organization is optional at signup — an unattached account can create
+    // or join one later from Settings.
+    if (!dto.organizationName) {
+      const user = await this.prisma.user.create({
+        data: {
+          email: dto.email,
+          name: dto.name,
+          passwordHash,
+          organizationId: null,
+          role: 'MANAGER',
+        },
+      });
+      return this.issueTokens(user.id, user.email, user.role, user.organizationId);
+    }
+
+    const org = await this.createOrganizationRecord(dto.organizationName);
     const user = await this.prisma.user.create({
       data: {
         email: dto.email,
@@ -39,16 +60,32 @@ export class AuthService {
       },
     });
 
+    return this.issueTokens(user.id, user.email, user.role, user.organizationId);
+  }
+
+  private async createOrganizationRecord(name: string) {
+    const slug = name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') + '-' + Date.now();
+    const org = await this.prisma.organization.create({ data: { name, slug } });
     await this.prisma.companySettings.create({
-      data: {
-        organizationId: org.id,
-        name: dto.organizationName,
-        inn: '',
-        address: '',
-      },
+      data: { organizationId: org.id, name, inn: '', address: '' },
+    });
+    return org;
+  }
+
+  /** For an unattached account: creates a new organization and makes the caller its admin. */
+  async createOrganization(userId: string, dto: CreateOrganizationDto) {
+    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    if (user.organizationId) {
+      throw new ConflictException('You already belong to an organization');
+    }
+
+    const org = await this.createOrganizationRecord(dto.name);
+    const updated = await this.prisma.user.update({
+      where: { id: userId },
+      data: { organizationId: org.id, role: 'ADMIN' },
     });
 
-    return this.issueTokens(user.id, user.email, user.role, user.organizationId);
+    return this.issueTokens(updated.id, updated.email, updated.role, updated.organizationId);
   }
 
   async login(dto: LoginDto) {
@@ -83,7 +120,7 @@ export class AuthService {
     userId: string,
     email: string,
     role: string,
-    organizationId: string,
+    organizationId: string | null,
   ) {
     const payload: JwtPayload = { sub: userId, email, role, organizationId };
 
@@ -123,8 +160,28 @@ export class AuthService {
     });
   }
 
-  /** Adds a new employee to the caller's organization (shares its documents). */
+  /**
+   * Attaches an already-registered user (by email) to the caller's organization —
+   * moves them out of whichever organization they previously belonged to.
+   */
   async addMember(organizationId: string, dto: AddMemberDto) {
+    const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });
+    if (!existing) {
+      throw new NotFoundException('No account with this email — they need to register first');
+    }
+    if (existing.organizationId === organizationId) {
+      throw new ConflictException('This user is already a member of your organization');
+    }
+
+    return this.prisma.user.update({
+      where: { id: existing.id },
+      data: { organizationId, role: 'MANAGER' },
+      select: { id: true, email: true, name: true, role: true, createdAt: true },
+    });
+  }
+
+  /** Mode 2: creates a brand-new account and attaches it directly to the caller's organization. */
+  async createMember(organizationId: string, dto: CreateMemberDto) {
     const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });
     if (existing) throw new ConflictException('Email already registered');
 

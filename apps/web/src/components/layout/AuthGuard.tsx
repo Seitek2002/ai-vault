@@ -1,11 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
 import { getAccessToken, getRefreshToken, clearTokens, saveTokens } from "@/lib/tokens";
+import { settingsApi } from "@/lib/api/settings";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001/api";
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const router = useRouter();
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -42,6 +47,20 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
 
     void init();
   }, []);
+
+  const { data: me } = useQuery({
+    queryKey: ["me"],
+    queryFn: settingsApi.getMe,
+    enabled: ready,
+  });
+
+  // Accounts not yet attached to an organization can only use Settings
+  // (to create/join one) — everything else needs an organizationId.
+  useEffect(() => {
+    if (ready && me && !me.organizationId && pathname !== "/settings") {
+      router.replace("/settings");
+    }
+  }, [ready, me, pathname, router]);
 
   if (!ready) {
     return (

@@ -1,7 +1,15 @@
 import { Controller, Post, Get, Patch, Body, HttpCode, HttpStatus, SetMetadata } from '@nestjs/common';
 import { AuthService } from './auth.service';
-import { RegisterDto, LoginDto, RefreshDto, UpdateMeDto, AddMemberDto } from './dto/auth.dto';
-import { CurrentUser, type JwtPayload } from '../common/decorators/current-user.decorator';
+import {
+  RegisterDto,
+  LoginDto,
+  RefreshDto,
+  UpdateMeDto,
+  AddMemberDto,
+  CreateMemberDto,
+  CreateOrganizationDto,
+} from './dto/auth.dto';
+import { CurrentUser, CurrentOrgId, type JwtPayload } from '../common/decorators/current-user.decorator';
 import { IS_PUBLIC_KEY } from './guards/jwt-auth.guard';
 
 const Public = () => SetMetadata(IS_PUBLIC_KEY, true);
@@ -46,13 +54,23 @@ export class AuthController {
     return this.auth.updateMe(user.sub, dto);
   }
 
+  @Post('organization')
+  createOrganization(@CurrentUser() user: JwtPayload, @Body() dto: CreateOrganizationDto) {
+    return this.auth.createOrganization(user.sub, dto);
+  }
+
   @Get('members')
-  listMembers(@CurrentUser() user: JwtPayload) {
-    return this.auth.listMembers(user.organizationId);
+  listMembers(@CurrentOrgId() organizationId: string) {
+    return this.auth.listMembers(organizationId);
   }
 
   @Post('members')
-  addMember(@CurrentUser() user: JwtPayload, @Body() dto: AddMemberDto) {
-    return this.auth.addMember(user.organizationId, dto);
+  addMember(@CurrentOrgId() organizationId: string, @Body() dto: AddMemberDto) {
+    return this.auth.addMember(organizationId, dto);
+  }
+
+  @Post('members/create')
+  createMember(@CurrentOrgId() organizationId: string, @Body() dto: CreateMemberDto) {
+    return this.auth.createMember(organizationId, dto);
   }
 }

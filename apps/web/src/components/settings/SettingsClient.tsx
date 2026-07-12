@@ -7,8 +7,10 @@ import {
   type UpdateSettingsDto,
   type UpdateMeDto,
   type AddMemberDto,
+  type CreateMemberDto,
 } from '@/lib/api/settings';
 import { ApiError } from '@/lib/api/client';
+import { saveTokens } from '@/lib/tokens';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -52,6 +54,67 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
     <h3 className="mb-4 text-sm font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">
       {children}
     </h3>
+  );
+}
+
+// ── Organization setup (no organization yet) ────────────────────────────────────
+
+function OrganizationSetupTab() {
+  const qc = useQueryClient();
+  const [name, setName] = useState('');
+  const [error, setError] = useState('');
+
+  const mutation = useMutation({
+    mutationFn: () => settingsApi.createOrganization({ name }),
+    onSuccess: (tokens) => {
+      saveTokens(tokens.accessToken, tokens.refreshToken);
+      void qc.invalidateQueries({ queryKey: ['me'] });
+    },
+    onError: (err) => {
+      setError(err instanceof ApiError ? err.message : 'Ошибка создания организации');
+    },
+  });
+
+  const handleSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    if (!name.trim()) return;
+    mutation.mutate();
+  };
+
+  return (
+    <div className="mx-auto max-w-lg">
+      <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-surface)] p-6">
+        <h2 className="mb-1 text-base font-semibold text-[var(--color-text-primary)]">
+          Ваш аккаунт пока не привязан к организации
+        </h2>
+        <p className="mb-5 text-sm text-[var(--color-text-muted)]">
+          Создайте свою организацию, чтобы начать работу с документами. Либо попросите
+          администратора существующей организации добавить вас по email в разделе «Сотрудники».
+        </p>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <Field
+            label="Название организации"
+            name="orgName"
+            value={name}
+            onChange={setName}
+            placeholder="ООО «Моя компания»"
+            required
+          />
+          {error && (
+            <p className="rounded-lg bg-red-500/10 px-4 py-3 text-sm text-red-400">{error}</p>
+          )}
+          <div className="flex justify-end">
+            <button
+              type="submit"
+              disabled={mutation.isPending || !name.trim()}
+              className="rounded-lg bg-[var(--color-accent)] px-5 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
+            >
+              {mutation.isPending ? 'Создание…' : 'Создать организацию'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
   );
 }
 
@@ -284,39 +347,90 @@ function ProfileTab() {
 
 // ── Team tab ─────────────────────────────────────────────────────────────────
 
-function TeamTab() {
-  const qc = useQueryClient();
-  const { data: me } = useQuery({ queryKey: ['me'], queryFn: settingsApi.getMe });
-  const { data: members = [], isLoading } = useQuery({
-    queryKey: ['members'],
-    queryFn: settingsApi.listMembers,
-  });
+type AddMemberMode = 'existing' | 'create';
 
-  const [form, setForm] = useState<AddMemberDto>({ name: '', email: '', password: '' });
-  const [success, setSuccess] = useState('');
+function AddExistingMemberForm({ onDone }: { onDone: (email: string) => void }) {
+  const qc = useQueryClient();
+  const [email, setEmail] = useState('');
   const [error, setError] = useState('');
 
   const mutation = useMutation({
     mutationFn: (dto: AddMemberDto) => settingsApi.addMember(dto),
     onSuccess: (created) => {
       void qc.invalidateQueries({ queryKey: ['members'] });
-      setSuccess(`Сотрудник ${created.name} добавлен`);
       setError('');
-      setForm({ name: '', email: '', password: '' });
-      setTimeout(() => setSuccess(''), 3000);
+      setEmail('');
+      onDone(created.email);
     },
     onError: (err) => {
       setError(
         err instanceof ApiError
-          ? err.status === 409
-            ? 'Этот email уже зарегистрирован'
-            : err.message
+          ? err.status === 404
+            ? 'Пользователь с таким email не найден — он должен сначала зарегистрироваться'
+            : err.status === 409
+              ? 'Этот пользователь уже состоит в вашей организации'
+              : err.message
           : 'Ошибка добавления сотрудника',
       );
     },
   });
 
-  const set = (key: keyof AddMemberDto) => (val: string) =>
+  const handleSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    mutation.mutate({ email });
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="E-mail" name="memberEmail" type="email" value={email} onChange={setEmail} placeholder="employee@company.kg" required />
+      </div>
+      <p className="text-xs text-[var(--color-text-muted)]">
+        Сотрудник должен уже иметь аккаунт в системе (зарегистрированный на этот email). Он будет перенесён в вашу организацию и получит доступ к её документам.
+      </p>
+
+      {error && (
+        <p className="rounded-lg bg-red-500/10 px-4 py-3 text-sm text-red-400">{error}</p>
+      )}
+
+      <div className="flex justify-end">
+        <button
+          type="submit"
+          disabled={mutation.isPending}
+          className="rounded-lg bg-[var(--color-accent)] px-5 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
+        >
+          {mutation.isPending ? 'Добавление…' : 'Добавить сотрудника'}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function CreateMemberForm({ onDone }: { onDone: (email: string) => void }) {
+  const qc = useQueryClient();
+  const [form, setForm] = useState<CreateMemberDto>({ name: '', email: '', password: '' });
+  const [error, setError] = useState('');
+
+  const mutation = useMutation({
+    mutationFn: (dto: CreateMemberDto) => settingsApi.createMember(dto),
+    onSuccess: (created) => {
+      void qc.invalidateQueries({ queryKey: ['members'] });
+      setError('');
+      setForm({ name: '', email: '', password: '' });
+      onDone(created.email);
+    },
+    onError: (err) => {
+      setError(
+        err instanceof ApiError
+          ? err.status === 409
+            ? 'Этот email уже зарегистрирован — используйте режим «Существующий аккаунт»'
+            : err.message
+          : 'Ошибка создания сотрудника',
+      );
+    },
+  });
+
+  const set = (key: keyof CreateMemberDto) => (val: string) =>
     setForm((f) => ({ ...f, [key]: val }));
 
   const handleSubmit = (e: FormEvent) => {
@@ -326,6 +440,49 @@ function TeamTab() {
       return;
     }
     mutation.mutate(form);
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Имя" name="newMemberName" value={form.name} onChange={set('name')} required />
+        <Field label="E-mail" name="newMemberEmail" type="email" value={form.email} onChange={set('email')} placeholder="employee@company.kg" required />
+        <Field label="Пароль" name="newMemberPassword" type="password" value={form.password} onChange={set('password')} placeholder="Минимум 8 символов" required />
+      </div>
+      <p className="text-xs text-[var(--color-text-muted)]">
+        Создаст новый аккаунт сразу в вашей организации. Сообщите сотруднику email и пароль для входа.
+      </p>
+
+      {error && (
+        <p className="rounded-lg bg-red-500/10 px-4 py-3 text-sm text-red-400">{error}</p>
+      )}
+
+      <div className="flex justify-end">
+        <button
+          type="submit"
+          disabled={mutation.isPending}
+          className="rounded-lg bg-[var(--color-accent)] px-5 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
+        >
+          {mutation.isPending ? 'Создание…' : 'Создать и добавить'}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function TeamTab() {
+  const { data: me } = useQuery({ queryKey: ['me'], queryFn: settingsApi.getMe });
+  const { data: members = [], isLoading } = useQuery({
+    queryKey: ['members'],
+    queryFn: settingsApi.listMembers,
+  });
+
+  const [mode, setMode] = useState<AddMemberMode>('existing');
+  const [success, setSuccess] = useState('');
+
+  const handleDone = (email: string) => {
+    setSuccess(`Сотрудник ${email} добавлен`);
+    setTimeout(() => setSuccess(''), 3000);
   };
 
   return (
@@ -360,34 +517,41 @@ function TeamTab() {
         )}
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <div>
         <SectionTitle>Добавить сотрудника</SectionTitle>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Имя" name="memberName" value={form.name} onChange={set('name')} required />
-          <Field label="E-mail" name="memberEmail" type="email" value={form.email} onChange={set('email')} placeholder="employee@company.kg" required />
-          <Field label="Пароль" name="memberPassword" type="password" value={form.password} onChange={set('password')} placeholder="Минимум 8 символов" required />
-        </div>
-        <p className="text-xs text-[var(--color-text-muted)]">
-          Новый сотрудник войдёт с этим email и паролем и получит доступ к документам вашей организации.
-        </p>
 
-        {error && (
-          <p className="rounded-lg bg-red-500/10 px-4 py-3 text-sm text-red-400">{error}</p>
+        <div className="mb-4 flex rounded-lg border border-[var(--color-border)] p-1">
+          {(
+            [
+              ['existing', 'Существующий аккаунт'],
+              ['create', 'Создать аккаунт'],
+            ] as const
+          ).map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setMode(id)}
+              className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                mode === id
+                  ? 'bg-[var(--color-accent)]/10 text-[var(--color-accent)]'
+                  : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {mode === 'existing' ? (
+          <AddExistingMemberForm onDone={handleDone} />
+        ) : (
+          <CreateMemberForm onDone={handleDone} />
         )}
+
         {success && (
-          <p className="rounded-lg bg-green-500/10 px-4 py-3 text-sm text-green-400">{success}</p>
+          <p className="mt-4 rounded-lg bg-green-500/10 px-4 py-3 text-sm text-green-400">{success}</p>
         )}
-
-        <div className="flex justify-end">
-          <button
-            type="submit"
-            disabled={mutation.isPending}
-            className="rounded-lg bg-[var(--color-accent)] px-5 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
-          >
-            {mutation.isPending ? 'Добавление…' : 'Добавить сотрудника'}
-          </button>
-        </div>
-      </form>
+      </div>
     </div>
   );
 }
@@ -404,6 +568,28 @@ const TABS: { id: Tab; label: string }[] = [
 
 export function SettingsClient() {
   const [tab, setTab] = useState<Tab>('requisites');
+  const { data: me, isLoading: meLoading } = useQuery({ queryKey: ['me'], queryFn: settingsApi.getMe });
+
+  if (meLoading) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-[var(--color-accent)] border-t-transparent" />
+      </div>
+    );
+  }
+
+  if (me && !me.organizationId) {
+    return (
+      <div className="flex h-full flex-col">
+        <div className="border-b border-[var(--color-border)] px-6 py-5">
+          <h1 className="text-xl font-semibold text-[var(--color-text-primary)]">Настройки</h1>
+        </div>
+        <div className="flex-1 overflow-y-auto p-6">
+          <OrganizationSetupTab />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-full flex-col">

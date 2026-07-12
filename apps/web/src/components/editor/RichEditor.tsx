@@ -254,7 +254,7 @@ export function RichEditor({ initialContent, onChange, placeholder = "Начни
       {!readOnly && (
         <div className="flex flex-wrap items-center gap-0.5 px-3 py-2 border-b border-[var(--color-border)] bg-[var(--color-bg-surface)] shrink-0">
           <FontSizeSelect editor={editor} />
-          <InsertFieldSelect editor={editor} />
+          {!variablesEnabled && <InsertFieldSelect editor={editor} />}
           {variablesEnabled && <AddVariableButton editor={editor} />}
           <SEP />
           <ToolbarBtn active={editor.isActive("bold")} title="Жирный (Ctrl+B)" onClick={() => editor.chain().focus().toggleBold().run()}>

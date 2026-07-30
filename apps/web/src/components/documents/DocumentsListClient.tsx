@@ -285,26 +285,9 @@ function CreateDocumentModal({ onClose }: { onClose: () => void }) {
         </div>
 
         <div className="px-6 py-5 space-y-5">
-          {/* ── Step 1: type + mode ── */}
+          {/* ── Step 1: type ── */}
           {step === "type" && (
             <>
-              <div className="flex rounded-lg border border-[var(--color-border)] overflow-hidden">
-                {(["blank", "template"] as const).map((m) => (
-                  <button
-                    key={m}
-                    onClick={() => setMode(m)}
-                    className={[
-                      "flex-1 py-2 text-sm font-medium transition-colors",
-                      mode === m
-                        ? "bg-[var(--color-accent)]/15 text-[var(--color-accent)]"
-                        : "text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-elevated)]",
-                    ].join(" ")}
-                  >
-                    {m === "blank" ? "Пустой документ" : "Из шаблона"}
-                  </button>
-                ))}
-              </div>
-
               <div>
                 <p className="text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-wider mb-3">
                   Тип документа
@@ -465,10 +448,10 @@ function CreateDocumentModal({ onClose }: { onClose: () => void }) {
               {templates.length === 0 ? (
                 <div className="py-12 text-center">
                   <p className="text-sm text-[var(--color-text-muted)]">
-                    Нет шаблонов для этого типа
+                    Пока нет своих шаблонов
                   </p>
                   <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-                    Создайте шаблоны в разделе «Шаблоны»
+                    Создайте шаблон в разделе «Конструктор»
                   </p>
                 </div>
               ) : (

@@ -42,15 +42,6 @@ function UploadIcon(props: SVGProps<SVGSVGElement>) {
   );
 }
 
-function TemplateIcon(props: SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" {...props}>
-      <rect x="3" y="3" width="18" height="18" rx="2" />
-      <path d="M9 9h6M9 13h6M9 17h4" />
-    </svg>
-  );
-}
-
 function WandIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" {...props}>
@@ -71,7 +62,6 @@ function SettingsIcon(props: SVGProps<SVGSVGElement>) {
 const NAV_ITEMS: NavItem[] = [
   { href: "/documents", label: "Документы", icon: FileTextIcon },
   { href: "/companies", label: "Компании", icon: BuildingIcon },
-  { href: "/templates", label: "Шаблоны", icon: TemplateIcon },
   { href: "/builder", label: "Конструктор", icon: WandIcon },
   { href: "/import", label: "Импорт", icon: UploadIcon },
   { href: "/settings", label: "Настройки", icon: SettingsIcon },

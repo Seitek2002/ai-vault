@@ -589,17 +589,19 @@ export function DocumentEditor({ documentId }: DocumentEditorProps) {
               hasOriginalFile={hasOriginalFile}
             />
 
-            <button
-              onClick={() => setShowSaveTemplate(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elevated)] hover:bg-[var(--color-bg-subtle)] text-[var(--color-text-primary)] transition-colors"
-              title="Сохранить как шаблон"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                <rect x="3" y="3" width="18" height="18" rx="2" />
-                <path d="M12 8v8m-4-4h8" />
-              </svg>
-              Шаблон
-            </button>
+            {document.type === DocumentType.CUSTOM && (
+              <button
+                onClick={() => setShowSaveTemplate(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elevated)] hover:bg-[var(--color-bg-subtle)] text-[var(--color-text-primary)] transition-colors"
+                title="Сохранить как шаблон"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <rect x="3" y="3" width="18" height="18" rx="2" />
+                  <path d="M12 8v8m-4-4h8" />
+                </svg>
+                Шаблон
+              </button>
+            )}
 
             <button
               onClick={() => saveMutation.mutate()}

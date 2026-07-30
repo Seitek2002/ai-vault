@@ -13,9 +13,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "AI Vault — деловые документы",
+  title: "Vault — деловые документы",
   description:
-    "Система хранения, редактирования и экспорта деловых документов с поддержкой ИИ",
+    "Система хранения, редактирования и экспорта деловых документов",
 };
 
 export default function RootLayout({

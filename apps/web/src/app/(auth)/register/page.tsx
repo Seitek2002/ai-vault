@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { authApi } from '@/lib/api/auth';
 import { ApiError } from '@/lib/api/client';
+import { Vault } from 'lucide-react';
 import { Button, Input, Card } from '@/components/ui';
 
 export default function RegisterPage() {
@@ -44,9 +45,9 @@ export default function RegisterPage() {
       {/* Logo */}
       <div className="flex items-center justify-center gap-2.5 mb-8">
         <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[var(--color-accent)] to-[var(--color-accent-2)] flex items-center justify-center">
-          <span className="text-white font-bold text-sm">AI</span>
+          <Vault className="w-5 h-5 text-white" strokeWidth={2} />
         </div>
-        <span className="text-xl font-semibold bg-gradient-to-r from-[var(--color-text-primary)] to-[var(--color-accent-2)] bg-clip-text text-transparent">AI Vault</span>
+        <span className="text-xl font-semibold bg-gradient-to-r from-[var(--color-text-primary)] to-[var(--color-accent-2)] bg-clip-text text-transparent">Vault</span>
       </div>
 
       <Card className="p-8 shadow-xl">

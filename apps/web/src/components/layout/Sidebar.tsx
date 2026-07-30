@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import type { ComponentType, SVGProps } from "react";
-import { FileText, Building2, Wand2, Upload, Settings, LogOut } from "lucide-react";
+import { FileText, Building2, Wand2, Upload, Settings, LogOut, Vault } from "lucide-react";
 import { authApi } from "@/lib/api/auth";
 
 interface NavItem {
@@ -39,10 +39,10 @@ export function Sidebar({ onClose }: SidebarProps) {
       {/* Logo */}
       <div className="flex items-center gap-2.5 px-5 h-[var(--topbar-height)] shrink-0 border-b border-[var(--color-border)]">
         <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-[var(--color-accent)] to-[var(--color-accent-2)] flex items-center justify-center shrink-0">
-          <span className="text-white font-bold text-xs leading-none">AI</span>
+          <Vault className="w-4 h-4 text-white" strokeWidth={2} />
         </div>
         <span className="font-semibold bg-gradient-to-r from-[var(--color-text-primary)] to-[var(--color-accent-2)] bg-clip-text text-transparent tracking-tight">
-          AI Vault
+          Vault
         </span>
       </div>
 

@@ -1,7 +1,7 @@
 import { DocumentEditor } from "@/components/documents/DocumentEditor";
 import type { Metadata } from "next";
 
-export const metadata: Metadata = { title: "Редактор документа — AI Vault" };
+export const metadata: Metadata = { title: "Редактор документа — Vault" };
 
 export default async function DocumentPage({
   params,

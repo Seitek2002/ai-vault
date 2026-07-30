@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { DocumentsListClient } from "@/components/documents/DocumentsListClient";
 
 export const metadata: Metadata = {
-  title: "Документы — AI Vault",
+  title: "Документы — Vault",
 };
 
 export default function DocumentsPage() {

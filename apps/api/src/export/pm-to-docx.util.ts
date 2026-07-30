@@ -170,7 +170,7 @@ export async function pmToDocx(doc: unknown, title?: string): Promise<Buffer> {
   const blocks = nodeToBlocks(doc as PmNode);
 
   const document = new Document({
-    creator: 'AI Vault',
+    creator: 'Vault',
     title: title ?? 'Документ',
     sections: [
       {

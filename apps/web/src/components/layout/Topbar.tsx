@@ -1,6 +1,6 @@
 "use client";
 
-import { Menu } from "lucide-react";
+import { Menu, Vault } from "lucide-react";
 
 interface TopbarProps {
   title?: string;
@@ -20,7 +20,7 @@ export function Topbar({ title, onMenuClick }: TopbarProps) {
 
       <div className="flex items-center gap-2">
         <div className="w-6 h-6 rounded-md bg-gradient-to-br from-[var(--color-accent)] to-[var(--color-accent-2)] flex items-center justify-center shrink-0">
-          <span className="text-white font-bold text-[10px]">AI</span>
+          <Vault className="w-3.5 h-3.5 text-white" strokeWidth={2} />
         </div>
         <span
           className={
@@ -29,7 +29,7 @@ export function Topbar({ title, onMenuClick }: TopbarProps) {
               : "font-semibold text-sm bg-gradient-to-r from-[var(--color-text-primary)] to-[var(--color-accent-2)] bg-clip-text text-transparent"
           }
         >
-          {title ?? "AI Vault"}
+          {title ?? "Vault"}
         </span>
       </div>
     </header>

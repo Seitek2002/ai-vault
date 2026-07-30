@@ -760,7 +760,7 @@ function TeamTab() {
             ))}
           </div>
         ) : (
-          <Card className="divide-y divide-[var(--color-border)] overflow-hidden">
+          <Card className="divide-y divide-[var(--color-border)]">
             {members.map((m) => (
               <div key={m.id} className="flex items-center justify-between gap-3 px-4 py-3">
                 <div className="min-w-0">

@@ -1,5 +1,7 @@
-import { api } from './client';
+import { api, ApiError } from './client';
 import type { Position } from './positions';
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api';
 
 export interface CompanySettings {
   id: string;
@@ -94,4 +96,21 @@ export const settingsApi = {
   createMember: (dto: CreateMemberDto) => api.post<Member>('/auth/members/create', dto),
   updateMember: (id: string, dto: UpdateMemberDto) => api.patch<Member>(`/auth/members/${id}`, dto),
   createOrganization: (dto: CreateOrganizationDto) => api.post<AuthTokens>('/auth/organization', dto),
+  uploadAvatar: async (file: File): Promise<UserProfile> => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+    const form = new FormData();
+    form.append('file', file);
+
+    const res = await fetch(`${API_BASE}/auth/me/avatar`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: form,
+    });
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({ message: res.statusText }));
+      throw new ApiError(res.status, (body as { message?: string }).message ?? res.statusText);
+    }
+    return res.json() as Promise<UserProfile>;
+  },
 };

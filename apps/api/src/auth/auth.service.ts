@@ -3,12 +3,15 @@ import {
   UnauthorizedException,
   ConflictException,
   NotFoundException,
+  BadRequestException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as argon2 from 'argon2';
 import { createHash } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
+import { StorageService } from '../storage/storage.service';
+import { randomUUID } from 'crypto';
 import type {
   RegisterDto,
   LoginDto,
@@ -27,6 +30,7 @@ export class AuthService {
     private prisma: PrismaService,
     private jwt: JwtService,
     private config: ConfigService,
+    private storage: StorageService,
   ) {}
 
   async register(dto: RegisterDto) {
@@ -279,7 +283,32 @@ export class AuthService {
     return this.prisma.user.update({
       where: { id: userId },
       data,
-      select: { id: true, email: true, name: true, role: true, organizationId: true },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        organizationId: true,
+        avatarUrl: true,
+        backgroundId: true,
+        position: { select: { id: true, name: true, permissions: true } },
+      },
+    });
+  }
+
+  async updateAvatar(userId: string, file: { buffer: Buffer; mimeType: string }) {
+    const ALLOWED = new Set(['image/png', 'image/jpeg', 'image/webp']);
+    if (!ALLOWED.has(file.mimeType)) {
+      throw new BadRequestException(`Unsupported image type: ${file.mimeType}. Allowed: PNG, JPEG, WEBP.`);
+    }
+    const ext = file.mimeType.split('/')[1];
+    const key = `avatars/${userId}/${randomUUID()}.${ext}`;
+    const url = await this.storage.upload(key, file.buffer, file.mimeType);
+
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: { avatarUrl: url },
+      select: { id: true, email: true, name: true, role: true, organizationId: true, avatarUrl: true },
     });
   }
 }

@@ -3,8 +3,10 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import type { ComponentType, SVGProps } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { FileText, Building2, Wand2, Upload, Settings, LogOut, Vault } from "lucide-react";
 import { authApi } from "@/lib/api/auth";
+import { settingsApi } from "@/lib/api/settings";
 
 interface NavItem {
   href: string;
@@ -27,6 +29,12 @@ interface SidebarProps {
 export function Sidebar({ onClose }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
+  const { data: me } = useQuery({ queryKey: ["me"], queryFn: settingsApi.getMe });
+
+  const initials = me?.name
+    ? me.name.split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase()
+    : "U";
+  const roleLabel = me?.role === "ADMIN" ? "Администратор" : (me?.position?.name ?? "Сотрудник");
 
   async function handleLogout() {
     await authApi.logout();
@@ -76,12 +84,17 @@ export function Sidebar({ onClose }: SidebarProps) {
       {/* Bottom user area */}
       <div className="px-4 py-4 border-t border-[var(--color-border)]">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-[var(--color-bg-elevated)] border border-[var(--color-border)] flex items-center justify-center text-xs text-[var(--color-text-muted)] shrink-0">
-            U
+          <div className="w-8 h-8 rounded-full bg-[var(--color-bg-elevated)] border border-[var(--color-border)] flex items-center justify-center text-xs text-[var(--color-text-muted)] shrink-0 overflow-hidden">
+            {me?.avatarUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={me.avatarUrl} alt={me.name} className="w-full h-full object-cover" />
+            ) : (
+              initials
+            )}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-xs font-medium text-[var(--color-text-primary)] truncate">Пользователь</p>
-            <p className="text-[11px] text-[var(--color-text-muted)] truncate">Менеджер</p>
+            <p className="text-xs font-medium text-[var(--color-text-primary)] truncate">{me?.name ?? "Пользователь"}</p>
+            <p className="text-[11px] text-[var(--color-text-muted)] truncate">{roleLabel}</p>
           </div>
           <button
             onClick={() => void handleLogout()}

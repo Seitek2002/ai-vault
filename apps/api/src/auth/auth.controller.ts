@@ -1,4 +1,5 @@
-import { Controller, Post, Get, Patch, Body, Param, HttpCode, HttpStatus, SetMetadata } from '@nestjs/common';
+import { Controller, Post, Get, Patch, Body, Param, Req, BadRequestException, HttpCode, HttpStatus, SetMetadata } from '@nestjs/common';
+import type { FastifyRequest } from 'fastify';
 import { Permission } from '../common/permissions';
 import { AuthService } from './auth.service';
 import {
@@ -55,6 +56,17 @@ export class AuthController {
   @Patch('me')
   updateMe(@CurrentUser() user: JwtPayload, @Body() dto: UpdateMeDto) {
     return this.auth.updateMe(user.sub, dto);
+  }
+
+  @Post('me/avatar')
+  async uploadAvatar(@Req() req: FastifyRequest, @CurrentUser() user: JwtPayload) {
+    const file = await (
+      req as FastifyRequest & { file: () => Promise<{ mimetype: string; toBuffer: () => Promise<Buffer> } | undefined> }
+    ).file();
+    if (!file) throw new BadRequestException('No file provided');
+
+    const buffer = await file.toBuffer();
+    return this.auth.updateAvatar(user.sub, { buffer, mimeType: file.mimetype });
   }
 
   @Post('organization')

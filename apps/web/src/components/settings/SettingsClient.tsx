@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, FormEvent, useEffect } from 'react';
+import { useState, useRef, FormEvent, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, Trash2 } from 'lucide-react';
 import {
@@ -9,6 +9,7 @@ import {
   type UpdateMeDto,
   type AddMemberDto,
   type CreateMemberDto,
+  type UserProfile,
 } from '@/lib/api/settings';
 import { positionsApi, Permission, PERMISSION_LABELS, type Position } from '@/lib/api/positions';
 import { hasPermission } from '@/lib/permissions';
@@ -380,6 +381,76 @@ function PositionsTab() {
 
 // ── Profile tab ────────────────────────────────────────────────────────────────
 
+function AvatarUpload({ me }: { me: UserProfile | undefined }) {
+  const qc = useQueryClient();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [error, setError] = useState('');
+
+  const mutation = useMutation({
+    mutationFn: (file: File) => settingsApi.uploadAvatar(file),
+    onSuccess: () => {
+      setError('');
+      void qc.invalidateQueries({ queryKey: ['me'] });
+    },
+    onError: (err) => setError(err instanceof ApiError ? err.message : 'Ошибка загрузки'),
+  });
+
+  const initials = me?.name
+    ? me.name
+        .split(' ')
+        .map((p) => p[0])
+        .slice(0, 2)
+        .join('')
+        .toUpperCase()
+    : '?';
+
+  return (
+    <div className="flex items-center gap-4">
+      <button
+        type="button"
+        onClick={() => inputRef.current?.click()}
+        className="group relative h-16 w-16 shrink-0 overflow-hidden rounded-full border border-[var(--color-border)] bg-[var(--color-bg-elevated)]"
+        title="Изменить аватар"
+      >
+        {me?.avatarUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={me.avatarUrl} alt={me.name} className="h-full w-full object-cover" />
+        ) : (
+          <span className="flex h-full w-full items-center justify-center text-lg font-semibold text-[var(--color-text-secondary)]">
+            {initials}
+          </span>
+        )}
+        <span className="absolute inset-0 flex items-center justify-center bg-black/50 text-[10px] font-medium text-white opacity-0 transition-opacity group-hover:opacity-100">
+          Изменить
+        </span>
+      </button>
+      <div>
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          onClick={() => inputRef.current?.click()}
+          loading={mutation.isPending}
+          loadingText="Загрузка…"
+        >
+          Загрузить фото
+        </Button>
+        {error && <p className="mt-1 text-xs text-red-400">{error}</p>}
+      </div>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) mutation.mutate(file);
+        }}
+      />
+    </div>
+  );
+}
+
 function ProfileTab() {
   const { data: me } = useQuery({
     queryKey: ['me'],
@@ -430,6 +501,11 @@ function ProfileTab() {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-8">
+      <div>
+        <SectionTitle>Фото профиля</SectionTitle>
+        <AvatarUpload me={me} />
+      </div>
+
       <div>
         <SectionTitle>Личные данные</SectionTitle>
         <div className="grid gap-4 sm:grid-cols-2">

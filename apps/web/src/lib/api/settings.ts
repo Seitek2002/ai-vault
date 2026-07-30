@@ -1,4 +1,5 @@
 import { api } from './client';
+import type { Position } from './positions';
 
 export interface CompanySettings {
   id: string;
@@ -22,6 +23,9 @@ export interface UserProfile {
   name: string;
   role: string;
   organizationId: string | null;
+  avatarUrl?: string | null;
+  backgroundId?: string | null;
+  position?: Position | null;
 }
 
 export interface UpdateSettingsDto {
@@ -50,16 +54,25 @@ export interface Member {
   name: string;
   role: string;
   createdAt: string;
+  avatarUrl?: string | null;
+  position?: Position | null;
 }
 
 export interface AddMemberDto {
   email: string;
+  positionId?: string;
 }
 
 export interface CreateMemberDto {
   name: string;
   email: string;
   password: string;
+  positionId?: string;
+}
+
+export interface UpdateMemberDto {
+  positionId?: string | null;
+  role?: string;
 }
 
 export interface CreateOrganizationDto {
@@ -79,5 +92,6 @@ export const settingsApi = {
   listMembers: () => api.get<Member[]>('/auth/members'),
   addMember: (dto: AddMemberDto) => api.post<Member>('/auth/members', dto),
   createMember: (dto: CreateMemberDto) => api.post<Member>('/auth/members/create', dto),
+  updateMember: (id: string, dto: UpdateMemberDto) => api.patch<Member>(`/auth/members/${id}`, dto),
   createOrganization: (dto: CreateOrganizationDto) => api.post<AuthTokens>('/auth/organization', dto),
 };

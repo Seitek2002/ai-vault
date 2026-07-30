@@ -16,6 +16,7 @@ import type {
   UpdateMeDto,
   AddMemberDto,
   CreateMemberDto,
+  UpdateMemberDto,
   CreateOrganizationDto,
 } from './dto/auth.dto';
 import type { JwtPayload } from '../common/decorators/current-user.decorator';
@@ -147,7 +148,16 @@ export class AuthService {
   async getMe(userId: string) {
     return this.prisma.user.findUniqueOrThrow({
       where: { id: userId },
-      select: { id: true, email: true, name: true, role: true, organizationId: true },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        organizationId: true,
+        avatarUrl: true,
+        backgroundId: true,
+        position: { select: { id: true, name: true, permissions: true } },
+      },
     });
   }
 
@@ -155,8 +165,46 @@ export class AuthService {
   async listMembers(organizationId: string) {
     return this.prisma.user.findMany({
       where: { organizationId },
-      select: { id: true, email: true, name: true, role: true, createdAt: true },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        createdAt: true,
+        avatarUrl: true,
+        position: { select: { id: true, name: true, permissions: true } },
+      },
       orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  /** Assigns a position and/or role to an existing member of the caller's organization. */
+  async updateMember(organizationId: string, memberId: string, dto: UpdateMemberDto) {
+    const member = await this.prisma.user.findFirst({ where: { id: memberId, organizationId } });
+    if (!member) throw new NotFoundException('Member not found in your organization');
+
+    if (dto.positionId) {
+      const position = await this.prisma.position.findFirst({
+        where: { id: dto.positionId, organizationId },
+      });
+      if (!position) throw new NotFoundException('Position not found');
+    }
+
+    return this.prisma.user.update({
+      where: { id: memberId },
+      data: {
+        ...(dto.positionId !== undefined ? { positionId: dto.positionId } : {}),
+        ...(dto.role !== undefined ? { role: dto.role } : {}),
+      },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        createdAt: true,
+        avatarUrl: true,
+        position: { select: { id: true, name: true, permissions: true } },
+      },
     });
   }
 
@@ -175,8 +223,16 @@ export class AuthService {
 
     return this.prisma.user.update({
       where: { id: existing.id },
-      data: { organizationId, role: 'MANAGER' },
-      select: { id: true, email: true, name: true, role: true, createdAt: true },
+      data: { organizationId, role: 'MANAGER', ...(dto.positionId ? { positionId: dto.positionId } : {}) },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        createdAt: true,
+        avatarUrl: true,
+        position: { select: { id: true, name: true, permissions: true } },
+      },
     });
   }
 
@@ -193,8 +249,17 @@ export class AuthService {
         passwordHash,
         organizationId,
         role: 'MANAGER',
+        ...(dto.positionId ? { positionId: dto.positionId } : {}),
       },
-      select: { id: true, email: true, name: true, role: true, createdAt: true },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        createdAt: true,
+        avatarUrl: true,
+        position: { select: { id: true, name: true, permissions: true } },
+      },
     });
   }
 

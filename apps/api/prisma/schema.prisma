@@ -59,6 +59,8 @@ model Organization {
   documents      Document[]
   fileAssets     FileAsset[]
   templates      DocumentTemplate[]
+  categories     DocumentCategory[]
+  positions      Position[]
   settings       CompanySettings?
 }
 
@@ -69,13 +71,31 @@ model User {
   name           String
   role           UserRole @default(MANAGER)
   organizationId String?
+  positionId     String?
+  avatarUrl      String?
+  backgroundId   String?
   createdAt      DateTime @default(now())
 
   organization     Organization?     @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  position         Position?         @relation(fields: [positionId], references: [id], onDelete: SetNull)
   createdDocuments Document[]        @relation("DocumentCreatedBy")
   versions         DocumentVersion[]
   fileAssets       FileAsset[]
   refreshTokens    RefreshToken[]
+
+  @@index([organizationId])
+  @@index([positionId])
+}
+
+model Position {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  permissions    String[] @default([])
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  users        User[]
 
   @@index([organizationId])
 }
@@ -121,6 +141,7 @@ model Document {
   title          String
   number         String?
   counterpartyId String?
+  categoryId     String?
   meta           Json           @default("{}")
   bodyJson       Json           @default("{}")
   createdById    String
@@ -129,6 +150,7 @@ model Document {
 
   organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   counterparty Counterparty?     @relation(fields: [counterpartyId], references: [id], onDelete: SetNull)
+  category     DocumentCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   createdBy    User              @relation("DocumentCreatedBy", fields: [createdById], references: [id])
   versions     DocumentVersion[]
   changes      DocumentChange[]
@@ -138,6 +160,7 @@ model Document {
   @@index([organizationId, type])
   @@index([organizationId, status])
   @@index([organizationId, createdAt(sort: Desc)])
+  @@index([categoryId])
 }
 
 model DocumentVersion {
@@ -220,6 +243,7 @@ model DocumentTemplate {
   id             String       @id @default(cuid())
   organizationId String
   type           DocumentType
+  categoryId     String?
   name           String
   description    String?
   bodyJson       Json         @default("{}")
@@ -228,8 +252,25 @@ model DocumentTemplate {
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  category     DocumentCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
 
   @@index([organizationId])
   @@index([organizationId, type])
+  @@index([categoryId])
+}
+
+model DocumentCategory {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  shortLabel     String
+  color          String
+  createdAt      DateTime @default(now())
+
+  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  documents    Document[]
+  templates    DocumentTemplate[]
+
+  @@index([organizationId])
 }

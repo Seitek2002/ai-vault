@@ -1,4 +1,5 @@
-import { IsEmail, IsString, IsOptional, MinLength, MaxLength } from 'class-validator';
+import { IsEmail, IsString, IsOptional, IsEnum, MinLength, MaxLength } from 'class-validator';
+import { UserRole } from '@prisma/client';
 
 export class RegisterDto {
   @IsString()
@@ -36,6 +37,10 @@ export class RefreshDto {
 export class AddMemberDto {
   @IsEmail()
   declare email: string;
+
+  @IsOptional()
+  @IsString()
+  positionId?: string;
 }
 
 /** Mode 2: create a brand-new account and attach it to the caller's organization directly. */
@@ -51,6 +56,20 @@ export class CreateMemberDto {
   @IsString()
   @MinLength(8)
   declare password: string;
+
+  @IsOptional()
+  @IsString()
+  positionId?: string;
+}
+
+export class UpdateMemberDto {
+  @IsOptional()
+  @IsString()
+  positionId?: string | null;
+
+  @IsOptional()
+  @IsEnum(UserRole)
+  role?: UserRole;
 }
 
 export class CreateOrganizationDto {

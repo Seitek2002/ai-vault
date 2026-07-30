@@ -2,6 +2,7 @@
 
 import { useState, FormEvent, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Plus, Trash2 } from 'lucide-react';
 import {
   settingsApi,
   type UpdateSettingsDto,
@@ -9,9 +10,11 @@ import {
   type AddMemberDto,
   type CreateMemberDto,
 } from '@/lib/api/settings';
+import { positionsApi, Permission, PERMISSION_LABELS, type Position } from '@/lib/api/positions';
+import { hasPermission } from '@/lib/permissions';
 import { ApiError } from '@/lib/api/client';
 import { saveTokens } from '@/lib/tokens';
-import { Button, Input, Card, Badge, Spinner } from '@/components/ui';
+import { Button, Input, Select, Card, Badge, Spinner, Modal } from '@/components/ui';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -221,6 +224,160 @@ function RequisitesTab() {
   );
 }
 
+// ── Positions tab ──────────────────────────────────────────────────────────────
+
+function PositionModal({ position, onClose }: { position: Position | null; onClose: () => void }) {
+  const qc = useQueryClient();
+  const [name, setName] = useState(position?.name ?? '');
+  const [permissions, setPermissions] = useState<Permission[]>(position?.permissions ?? []);
+  const [error, setError] = useState('');
+
+  const mutation = useMutation({
+    mutationFn: () =>
+      position
+        ? positionsApi.update(position.id, { name, permissions })
+        : positionsApi.create({ name, permissions }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['positions'] });
+      onClose();
+    },
+    onError: (err) => setError(err instanceof ApiError ? err.message : 'Ошибка сохранения'),
+  });
+
+  const toggle = (p: Permission) =>
+    setPermissions((prev) => (prev.includes(p) ? prev.filter((x) => x !== p) : [...prev, p]));
+
+  const handleSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    if (!name.trim()) return;
+    mutation.mutate();
+  };
+
+  return (
+    <Modal onClose={onClose} size="md">
+      <form onSubmit={handleSubmit} className="space-y-5 p-6">
+        <h2 className="text-base font-semibold text-[var(--color-text-primary)]">
+          {position ? 'Редактировать должность' : 'Новая должность'}
+        </h2>
+        <Field
+          label="Название"
+          name="positionName"
+          value={name}
+          onChange={setName}
+          placeholder="Например, Менеджер по продажам"
+          required
+        />
+        <div>
+          <p className="mb-2 text-sm font-medium text-[var(--color-text-secondary)]">Права</p>
+          <div className="space-y-2">
+            {Object.values(Permission).map((p) => (
+              <label key={p} className="flex items-center gap-2 text-sm text-[var(--color-text-primary)]">
+                <input
+                  type="checkbox"
+                  checked={permissions.includes(p)}
+                  onChange={() => toggle(p)}
+                  className="h-4 w-4 rounded border-[var(--color-border)] accent-[var(--color-accent)]"
+                />
+                {PERMISSION_LABELS[p]}
+              </label>
+            ))}
+          </div>
+        </div>
+        {error && (
+          <p className="rounded-lg bg-red-500/10 px-4 py-3 text-sm text-red-400">{error}</p>
+        )}
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="secondary" onClick={onClose}>
+            Отмена
+          </Button>
+          <Button type="submit" loading={mutation.isPending} loadingText="Сохранение…">
+            Сохранить
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+function PositionsTab() {
+  const qc = useQueryClient();
+  const { data: me } = useQuery({ queryKey: ['me'], queryFn: settingsApi.getMe });
+  const { data: positions = [], isLoading } = useQuery({
+    queryKey: ['positions'],
+    queryFn: positionsApi.list,
+  });
+  const [editing, setEditing] = useState<Position | 'new' | null>(null);
+  const canManage = hasPermission(me, Permission.MANAGE_POSITIONS);
+
+  const removeMutation = useMutation({
+    mutationFn: (id: string) => positionsApi.remove(id),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['positions'] }),
+  });
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <SectionTitle>Должности</SectionTitle>
+        {canManage && (
+          <Button size="sm" onClick={() => setEditing('new')}>
+            <Plus className="h-4 w-4" />
+            Создать должность
+          </Button>
+        )}
+      </div>
+
+      {isLoading ? (
+        <div className="space-y-2">
+          {Array.from({ length: 2 }).map((_, i) => (
+            <div key={i} className="h-14 animate-pulse rounded-lg bg-[var(--color-bg-elevated)]" />
+          ))}
+        </div>
+      ) : positions.length === 0 ? (
+        <p className="text-sm text-[var(--color-text-muted)]">
+          Пока нет ни одной должности. Должности задают набор прав, которые можно назначить сотруднику.
+        </p>
+      ) : (
+        <Card className="divide-y divide-[var(--color-border)] overflow-hidden">
+          {positions.map((p) => (
+            <div key={p.id} className="flex items-center justify-between gap-3 px-4 py-3">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium text-[var(--color-text-primary)]">{p.name}</p>
+                <p className="truncate text-xs text-[var(--color-text-muted)]">
+                  {p.permissions.length === 0
+                    ? 'Без прав'
+                    : p.permissions.map((perm) => PERMISSION_LABELS[perm]).join(', ')}
+                </p>
+              </div>
+              {canManage && (
+                <div className="flex shrink-0 items-center gap-1">
+                  <Button size="sm" variant="ghost" onClick={() => setEditing(p)}>
+                    Изменить
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => removeMutation.mutate(p.id)}
+                    className="text-red-400 hover:text-red-300"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
+            </div>
+          ))}
+        </Card>
+      )}
+
+      {editing && (
+        <PositionModal
+          position={editing === 'new' ? null : editing}
+          onClose={() => setEditing(null)}
+        />
+      )}
+    </div>
+  );
+}
+
 // ── Profile tab ────────────────────────────────────────────────────────────────
 
 function ProfileTab() {
@@ -337,9 +494,34 @@ function ProfileTab() {
 
 type AddMemberMode = 'existing' | 'create';
 
+function PositionPicker({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const { data: positions = [] } = useQuery({ queryKey: ['positions'], queryFn: positionsApi.list });
+  return (
+    <div className="flex flex-col gap-1">
+      <label className="text-sm font-medium text-[var(--color-text-secondary)]">Должность</label>
+      <Select
+        value={value}
+        onChange={onChange}
+        placeholder="Без должности"
+        options={[
+          { value: '', label: 'Без должности' },
+          ...positions.map((p) => ({ value: p.id, label: p.name })),
+        ]}
+      />
+    </div>
+  );
+}
+
 function AddExistingMemberForm({ onDone }: { onDone: (email: string) => void }) {
   const qc = useQueryClient();
   const [email, setEmail] = useState('');
+  const [positionId, setPositionId] = useState('');
   const [error, setError] = useState('');
 
   const mutation = useMutation({
@@ -348,6 +530,7 @@ function AddExistingMemberForm({ onDone }: { onDone: (email: string) => void }) 
       void qc.invalidateQueries({ queryKey: ['members'] });
       setError('');
       setEmail('');
+      setPositionId('');
       onDone(created.email);
     },
     onError: (err) => {
@@ -365,13 +548,14 @@ function AddExistingMemberForm({ onDone }: { onDone: (email: string) => void }) 
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
-    mutation.mutate({ email });
+    mutation.mutate({ email, ...(positionId ? { positionId } : {}) });
   };
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="E-mail" name="memberEmail" type="email" value={email} onChange={setEmail} placeholder="employee@company.kg" required />
+        <PositionPicker value={positionId} onChange={setPositionId} />
       </div>
       <p className="text-xs text-[var(--color-text-muted)]">
         Сотрудник должен уже иметь аккаунт в системе (зарегистрированный на этот email). Он будет перенесён в вашу организацию и получит доступ к её документам.
@@ -393,6 +577,7 @@ function AddExistingMemberForm({ onDone }: { onDone: (email: string) => void }) 
 function CreateMemberForm({ onDone }: { onDone: (email: string) => void }) {
   const qc = useQueryClient();
   const [form, setForm] = useState<CreateMemberDto>({ name: '', email: '', password: '' });
+  const [positionId, setPositionId] = useState('');
   const [error, setError] = useState('');
 
   const mutation = useMutation({
@@ -401,6 +586,7 @@ function CreateMemberForm({ onDone }: { onDone: (email: string) => void }) {
       void qc.invalidateQueries({ queryKey: ['members'] });
       setError('');
       setForm({ name: '', email: '', password: '' });
+      setPositionId('');
       onDone(created.email);
     },
     onError: (err) => {
@@ -423,7 +609,7 @@ function CreateMemberForm({ onDone }: { onDone: (email: string) => void }) {
       setError('Пароль должен содержать минимум 8 символов');
       return;
     }
-    mutation.mutate(form);
+    mutation.mutate({ ...form, ...(positionId ? { positionId } : {}) });
   };
 
   return (
@@ -432,6 +618,7 @@ function CreateMemberForm({ onDone }: { onDone: (email: string) => void }) {
         <Field label="Имя" name="newMemberName" value={form.name} onChange={set('name')} required />
         <Field label="E-mail" name="newMemberEmail" type="email" value={form.email} onChange={set('email')} placeholder="employee@company.kg" required />
         <Field label="Пароль" name="newMemberPassword" type="password" value={form.password} onChange={set('password')} placeholder="Минимум 8 символов" required />
+        <PositionPicker value={positionId} onChange={setPositionId} />
       </div>
       <p className="text-xs text-[var(--color-text-muted)]">
         Создаст новый аккаунт сразу в вашей организации. Сообщите сотруднику email и пароль для входа.
@@ -451,14 +638,23 @@ function CreateMemberForm({ onDone }: { onDone: (email: string) => void }) {
 }
 
 function TeamTab() {
+  const qc = useQueryClient();
   const { data: me } = useQuery({ queryKey: ['me'], queryFn: settingsApi.getMe });
   const { data: members = [], isLoading } = useQuery({
     queryKey: ['members'],
     queryFn: settingsApi.listMembers,
   });
+  const { data: positions = [] } = useQuery({ queryKey: ['positions'], queryFn: positionsApi.list });
 
   const [mode, setMode] = useState<AddMemberMode>('existing');
   const [success, setSuccess] = useState('');
+  const canManage = hasPermission(me, Permission.MANAGE_EMPLOYEES);
+
+  const assignMutation = useMutation({
+    mutationFn: ({ id, positionId }: { id: string; positionId: string }) =>
+      settingsApi.updateMember(id, { positionId: positionId || null }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['members'] }),
+  });
 
   const handleDone = (email: string) => {
     setSuccess(`Сотрудник ${email} добавлен`);
@@ -478,7 +674,7 @@ function TeamTab() {
         ) : (
           <Card className="divide-y divide-[var(--color-border)] overflow-hidden">
             {members.map((m) => (
-              <div key={m.id} className="flex items-center justify-between px-4 py-3">
+              <div key={m.id} className="flex items-center justify-between gap-3 px-4 py-3">
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium text-[var(--color-text-primary)]">
                     {m.name}
@@ -488,61 +684,90 @@ function TeamTab() {
                   </p>
                   <p className="truncate text-xs text-[var(--color-text-muted)]">{m.email}</p>
                 </div>
-                <Badge className="shrink-0 rounded-full bg-[var(--color-bg-elevated)] text-[var(--color-text-secondary)] font-medium">
-                  {m.role === 'ADMIN' ? 'Администратор' : 'Сотрудник'}
-                </Badge>
+                <div className="flex shrink-0 items-center gap-2">
+                  {m.role === 'ADMIN' ? (
+                    <Badge className="rounded-full bg-[var(--color-bg-elevated)] text-[var(--color-text-secondary)] font-medium">
+                      Администратор
+                    </Badge>
+                  ) : canManage ? (
+                    <div className="w-40">
+                      <Select
+                        value={m.position?.id ?? ''}
+                        onChange={(positionId) => assignMutation.mutate({ id: m.id, positionId })}
+                        placeholder="Без должности"
+                        options={[
+                          { value: '', label: 'Без должности' },
+                          ...positions.map((p) => ({ value: p.id, label: p.name })),
+                        ]}
+                      />
+                    </div>
+                  ) : (
+                    <Badge className="rounded-full bg-[var(--color-bg-elevated)] text-[var(--color-text-secondary)] font-medium">
+                      {m.position?.name ?? 'Без должности'}
+                    </Badge>
+                  )}
+                </div>
               </div>
             ))}
           </Card>
         )}
       </div>
 
-      <div>
-        <SectionTitle>Добавить сотрудника</SectionTitle>
+      {!canManage && (
+        <p className="text-xs text-[var(--color-text-muted)]">
+          У вас нет прав на управление сотрудниками — обратитесь к администратору.
+        </p>
+      )}
 
-        <div className="mb-4 flex rounded-lg border border-[var(--color-border)] p-1">
-          {(
-            [
-              ['existing', 'Существующий аккаунт'],
-              ['create', 'Создать аккаунт'],
-            ] as const
-          ).map(([id, label]) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => setMode(id)}
-              className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-                mode === id
-                  ? 'bg-[var(--color-accent)]/10 text-[var(--color-accent)]'
-                  : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
+      {canManage && (
+        <div>
+          <SectionTitle>Добавить сотрудника</SectionTitle>
+
+          <div className="mb-4 flex rounded-lg border border-[var(--color-border)] p-1">
+            {(
+              [
+                ['existing', 'Существующий аккаунт'],
+                ['create', 'Создать аккаунт'],
+              ] as const
+            ).map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setMode(id)}
+                className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                  mode === id
+                    ? 'bg-[var(--color-accent)]/10 text-[var(--color-accent)]'
+                    : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {mode === 'existing' ? (
+            <AddExistingMemberForm onDone={handleDone} />
+          ) : (
+            <CreateMemberForm onDone={handleDone} />
+          )}
+
+          {success && (
+            <p className="mt-4 rounded-lg bg-green-500/10 px-4 py-3 text-sm text-green-400">{success}</p>
+          )}
         </div>
-
-        {mode === 'existing' ? (
-          <AddExistingMemberForm onDone={handleDone} />
-        ) : (
-          <CreateMemberForm onDone={handleDone} />
-        )}
-
-        {success && (
-          <p className="mt-4 rounded-lg bg-green-500/10 px-4 py-3 text-sm text-green-400">{success}</p>
-        )}
-      </div>
+      )}
     </div>
   );
 }
 
 // ── Main ───────────────────────────────────────────────────────────────────────
 
-type Tab = 'requisites' | 'team' | 'profile';
+type Tab = 'requisites' | 'team' | 'positions' | 'profile';
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'requisites', label: 'Реквизиты организации' },
   { id: 'team', label: 'Сотрудники' },
+  { id: 'positions', label: 'Должности' },
   { id: 'profile', label: 'Профиль' },
 ];
 
@@ -603,6 +828,7 @@ export function SettingsClient() {
           <div className="mx-auto max-w-2xl">
             {tab === 'requisites' && <RequisitesTab />}
             {tab === 'team' && <TeamTab />}
+            {tab === 'positions' && <PositionsTab />}
             {tab === 'profile' && <ProfileTab />}
           </div>
         </div>

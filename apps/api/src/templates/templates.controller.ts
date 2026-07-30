@@ -1,7 +1,9 @@
 import { Controller, Get, Post, Patch, Delete, Body, Param, Query } from '@nestjs/common';
+import { Permission } from '../common/permissions';
 import { TemplatesService } from './templates.service';
 import { CreateTemplateDto, UpdateTemplateDto, ListTemplatesDto } from './dto/template.dto';
 import { CurrentOrgId } from '../common/decorators/current-user.decorator';
+import { RequirePermission } from '../common/decorators/permissions.decorator';
 
 @Controller('templates')
 export class TemplatesController {
@@ -18,11 +20,13 @@ export class TemplatesController {
   }
 
   @Post()
+  @RequirePermission(Permission.MANAGE_TEMPLATES)
   create(@Body() dto: CreateTemplateDto, @CurrentOrgId() organizationId: string) {
     return this.service.create(organizationId, dto);
   }
 
   @Patch(':id')
+  @RequirePermission(Permission.MANAGE_TEMPLATES)
   update(
     @Param('id') id: string,
     @Body() dto: UpdateTemplateDto,
@@ -32,6 +36,7 @@ export class TemplatesController {
   }
 
   @Delete(':id')
+  @RequirePermission(Permission.MANAGE_TEMPLATES)
   remove(@Param('id') id: string, @CurrentOrgId() organizationId: string) {
     return this.service.remove(id, organizationId);
   }

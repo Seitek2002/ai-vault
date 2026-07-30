@@ -1,4 +1,5 @@
-import { Controller, Post, Get, Patch, Body, HttpCode, HttpStatus, SetMetadata } from '@nestjs/common';
+import { Controller, Post, Get, Patch, Body, Param, HttpCode, HttpStatus, SetMetadata } from '@nestjs/common';
+import { Permission } from '../common/permissions';
 import { AuthService } from './auth.service';
 import {
   RegisterDto,
@@ -7,9 +8,11 @@ import {
   UpdateMeDto,
   AddMemberDto,
   CreateMemberDto,
+  UpdateMemberDto,
   CreateOrganizationDto,
 } from './dto/auth.dto';
 import { CurrentUser, CurrentOrgId, type JwtPayload } from '../common/decorators/current-user.decorator';
+import { RequirePermission } from '../common/decorators/permissions.decorator';
 import { IS_PUBLIC_KEY } from './guards/jwt-auth.guard';
 
 const Public = () => SetMetadata(IS_PUBLIC_KEY, true);
@@ -65,12 +68,24 @@ export class AuthController {
   }
 
   @Post('members')
+  @RequirePermission(Permission.MANAGE_EMPLOYEES)
   addMember(@CurrentOrgId() organizationId: string, @Body() dto: AddMemberDto) {
     return this.auth.addMember(organizationId, dto);
   }
 
   @Post('members/create')
+  @RequirePermission(Permission.MANAGE_EMPLOYEES)
   createMember(@CurrentOrgId() organizationId: string, @Body() dto: CreateMemberDto) {
     return this.auth.createMember(organizationId, dto);
+  }
+
+  @Patch('members/:id')
+  @RequirePermission(Permission.MANAGE_EMPLOYEES)
+  updateMember(
+    @Param('id') id: string,
+    @CurrentOrgId() organizationId: string,
+    @Body() dto: UpdateMemberDto,
+  ) {
+    return this.auth.updateMember(organizationId, id, dto);
   }
 }

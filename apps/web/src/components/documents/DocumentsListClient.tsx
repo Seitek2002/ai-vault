@@ -13,6 +13,7 @@ import {
   Wand2,
   Building2,
   FileText,
+  Trash2,
 } from "lucide-react";
 import { Button, Input, Select, Modal, Card, EmptyState, PageHeader, Spinner, Badge } from "@/components/ui";
 import { documentsApi } from "@/lib/api/documents";
@@ -754,9 +755,10 @@ function DocCard({ doc }: { doc: DocumentDto }) {
         ) : (
           <button
             onClick={() => setConfirming(true)}
-            className="opacity-0 group-hover:opacity-100 text-xs px-2.5 py-1 rounded border border-[var(--color-border)] text-[var(--color-text-muted)] hover:text-red-400 hover:border-red-400/50 transition-all"
+            title="Удалить"
+            className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg border border-[var(--color-border)] text-[var(--color-text-muted)] hover:text-red-400 hover:border-red-400/50 transition-all"
           >
-            Удалить
+            <Trash2 className="w-3.5 h-3.5" />
           </button>
         )}
       </div>

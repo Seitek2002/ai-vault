@@ -19,8 +19,8 @@ export function Topbar({ title, onMenuClick }: TopbarProps) {
       </button>
 
       <div className="flex items-center gap-2">
-        <div className="w-6 h-6 rounded-md bg-[var(--color-accent)] flex items-center justify-center shrink-0">
-          <span className="text-[#0F172A] font-bold text-[10px]">AI</span>
+        <div className="w-6 h-6 rounded-md bg-gradient-to-br from-[var(--color-accent)] to-[var(--color-accent-2)] flex items-center justify-center shrink-0">
+          <span className="text-white font-bold text-[10px]">AI</span>
         </div>
         <span className="font-semibold text-[var(--color-text-primary)] text-sm">
           {title ?? "AI Vault"}

@@ -43,8 +43,8 @@ export default function RegisterPage() {
     <div className="w-full max-w-sm">
       {/* Logo */}
       <div className="flex items-center justify-center gap-2.5 mb-8">
-        <div className="w-9 h-9 rounded-xl bg-[var(--color-accent)] flex items-center justify-center">
-          <span className="text-[#0F172A] font-bold text-sm">AI</span>
+        <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[var(--color-accent)] to-[var(--color-accent-2)] flex items-center justify-center">
+          <span className="text-white font-bold text-sm">AI</span>
         </div>
         <span className="text-xl font-semibold text-[var(--color-text-primary)]">AI Vault</span>
       </div>

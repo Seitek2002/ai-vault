@@ -16,7 +16,7 @@ import { FontSize } from "./extensions/fontSize";
 import { VariableToken } from "./extensions/variableToken";
 import { PLACEHOLDER_MENU } from "@/lib/placeholders";
 import { extractVariables, slugifyVariableKey } from "@/lib/variableTokens";
-import { Select } from "@/components/ui";
+import { Select, Button } from "@/components/ui";
 import type { TemplateVariableType } from "@ai-vault/types";
 import "./editor.css";
 
@@ -183,13 +183,9 @@ function AddVariableButton({ editor }: { editor: Editor }) {
                 ]}
               />
             </label>
-            <button
-              onClick={insert}
-              disabled={!label.trim()}
-              className="mt-1 px-2 py-1.5 text-sm font-semibold rounded-md bg-[var(--color-accent)] text-[#0F172A] hover:bg-[var(--color-accent-hover)] disabled:opacity-40 transition-colors"
-            >
+            <Button size="sm" onClick={insert} disabled={!label.trim()} className="mt-1 rounded-md">
               Вставить
-            </button>
+            </Button>
           </div>
         </>
       )}

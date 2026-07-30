@@ -38,8 +38,8 @@ export function Sidebar({ onClose }: SidebarProps) {
     <nav className="flex flex-col h-full bg-[var(--color-bg-surface)] border-r border-[var(--color-border)]">
       {/* Logo */}
       <div className="flex items-center gap-2.5 px-5 h-[var(--topbar-height)] shrink-0 border-b border-[var(--color-border)]">
-        <div className="w-7 h-7 rounded-lg bg-[var(--color-accent)] flex items-center justify-center shrink-0">
-          <span className="text-[#0F172A] font-bold text-xs leading-none">AI</span>
+        <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-[var(--color-accent)] to-[var(--color-accent-2)] flex items-center justify-center shrink-0">
+          <span className="text-white font-bold text-xs leading-none">AI</span>
         </div>
         <span className="font-semibold text-[var(--color-text-primary)] tracking-tight">
           AI Vault

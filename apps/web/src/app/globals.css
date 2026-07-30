@@ -12,11 +12,12 @@
   --color-text-secondary: #94A3B8;
   --color-text-muted:     #64748B;
 
-  /* ── Accent (sky blue) ── */
-  --color-accent:        #87CEEB;
-  --color-accent-hover:  #A5DDEF;
-  --color-accent-dim:    rgba(135, 206, 235, 0.12);
-  --color-accent-border: rgba(135, 206, 235, 0.3);
+  /* ── Accent (blue → violet gradient) ── */
+  --color-accent:        #5B9DFF;
+  --color-accent-2:      #A78BFA;
+  --color-accent-hover:  #7BB0FF;
+  --color-accent-dim:    rgba(91, 157, 255, 0.14);
+  --color-accent-border: rgba(91, 157, 255, 0.32);
 
   /* ── Borders ── */
   --color-border:       #334155;
@@ -55,6 +56,10 @@ html {
 
 body {
   background-color: var(--color-bg-base);
+  background-image:
+    radial-gradient(ellipse 900px 600px at 10% -10%, rgba(91, 157, 255, 0.13), transparent 60%),
+    radial-gradient(ellipse 700px 500px at 100% 0%, rgba(167, 139, 250, 0.10), transparent 60%);
+  background-attachment: fixed;
   color: var(--color-text-primary);
   font-family: var(--font-sans);
   min-height: 100svh;

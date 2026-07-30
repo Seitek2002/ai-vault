@@ -109,7 +109,7 @@ function CompanyModal({ editing, onClose, onSaved }: ModalProps) {
                   onChange={(e) => set('name', e.target.value)}
                 />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className={lbl}>ИНН</label>
                   <Input
@@ -151,7 +151,7 @@ function CompanyModal({ editing, onClose, onSaved }: ModalProps) {
                   onChange={(e) => set('bankAccount', e.target.value)}
                 />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className={lbl}>Банк</label>
                   <Input
@@ -176,7 +176,7 @@ function CompanyModal({ editing, onClose, onSaved }: ModalProps) {
             <p className="text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-wider mb-3">
               Контакты
             </p>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className={lbl}>Телефон</label>
                 <Input

@@ -715,13 +715,13 @@ function DocCard({ doc }: { doc: DocumentDto }) {
         onClick={() => router.push(`/documents/${doc.id}`)}
         className="flex-1 min-w-0 text-left"
       >
-        <div className="flex items-center gap-2 mb-1">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-1">
           <Badge color={tpl.color} className="shrink-0">{tpl.shortLabel}</Badge>
           <Badge className={`rounded-full font-medium shrink-0 ${STATUS_COLORS[doc.status]}`}>
             {STATUS_LABELS[doc.status]}
           </Badge>
           {doc.counterparty && (
-            <span className="text-xs text-[var(--color-text-muted)] shrink-0 truncate max-w-[120px]">
+            <span className="text-xs text-[var(--color-text-muted)] truncate max-w-[160px] sm:max-w-[120px]">
               {doc.counterparty.name}
             </span>
           )}
@@ -804,14 +804,14 @@ export function DocumentsListClient() {
 
       {/* Filters */}
       <div className="flex flex-wrap gap-2 mb-5 shrink-0">
-        <div className="relative">
+        <div className="relative w-full sm:w-48">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[var(--color-text-muted)]" />
           <Input
             type="text"
             placeholder="Поиск…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="pl-8 py-1.5 w-48"
+            className="pl-8 py-1.5"
           />
         </div>
 

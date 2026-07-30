@@ -56,7 +56,7 @@ function FontSizeSelect({ editor }: { editor: Editor }) {
         else editor.chain().focus().setFontSize(`${v}pt`).run();
       }}
       placeholder="12 (по умолч.)"
-      className={TOOLBAR_SELECT_CLS}
+      className={`${TOOLBAR_SELECT_CLS} w-[110px]`}
       options={[
         { value: "", label: "12 (по умолч.)" },
         ...FONT_SIZES.map((s) => ({ value: s, label: s })),

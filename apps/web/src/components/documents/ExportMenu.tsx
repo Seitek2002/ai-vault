@@ -43,15 +43,15 @@ export function ExportMenu({ documentId, documentTitle, hasOriginalFile }: Expor
       <button
         onClick={() => setOpen((v) => !v)}
         disabled={loading !== null}
-        className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elevated)] hover:bg-[var(--color-bg-subtle)] text-[var(--color-text-primary)] transition-colors disabled:opacity-50"
+        className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elevated)] hover:bg-[var(--color-bg-subtle)] text-[var(--color-text-primary)] transition-colors disabled:opacity-50"
       >
         {loading ? <Spinner size="sm" /> : <Download className="w-4 h-4" />}
-        Экспорт
+        <span className="hidden sm:inline">Экспорт</span>
         <ChevronDown className="w-3.5 h-3.5 opacity-60" />
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-1.5 w-48 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-elevated)] shadow-lg z-50 py-1 overflow-hidden animate-scale-in">
+        <div className="absolute right-0 top-full mt-1.5 w-48 max-w-[calc(100vw-2rem)] rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-elevated)] shadow-lg z-50 py-1 overflow-hidden animate-scale-in">
           <button
             onClick={() => void handle('pdf')}
             className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-[var(--color-text-primary)] hover:bg-[var(--color-bg-subtle)] transition-colors"

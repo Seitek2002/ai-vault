@@ -577,15 +577,15 @@ export function SettingsClient() {
         <h1 className="text-xl font-semibold text-[var(--color-text-primary)]">Настройки</h1>
       </div>
 
-      <div className="flex flex-1 gap-0 overflow-hidden">
-        {/* Tab nav */}
-        <nav className="w-56 shrink-0 border-r border-[var(--color-border)] p-4">
-          <ul className="space-y-1">
+      <div className="flex flex-col md:flex-row flex-1 gap-0 overflow-hidden">
+        {/* Tab nav — horizontal scroll bar on mobile, vertical rail from md: up */}
+        <nav className="w-full md:w-56 shrink-0 border-b md:border-b-0 md:border-r border-[var(--color-border)] p-2 md:p-4 overflow-x-auto">
+          <ul className="flex md:flex-col gap-1">
             {TABS.map((t) => (
-              <li key={t.id}>
+              <li key={t.id} className="shrink-0 md:shrink">
                 <button
                   onClick={() => setTab(t.id)}
-                  className={`w-full rounded-lg px-3 py-2 text-left text-sm transition-colors ${
+                  className={`w-full whitespace-nowrap rounded-lg px-3 py-2 text-left text-sm transition-colors ${
                     tab === t.id
                       ? 'bg-[var(--color-accent)]/10 font-medium text-[var(--color-accent)]'
                       : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-elevated)] hover:text-[var(--color-text-primary)]'
@@ -599,7 +599,7 @@ export function SettingsClient() {
         </nav>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 overflow-y-auto p-4 md:p-6">
           <div className="mx-auto max-w-2xl">
             {tab === 'requisites' && <RequisitesTab />}
             {tab === 'team' && <TeamTab />}

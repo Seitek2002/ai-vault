@@ -280,7 +280,7 @@ export function CompanyDetailClient({ companyId }: { companyId: string }) {
       <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
         {/* Company info */}
         {(company.address ?? company.bankName ?? company.phone ?? company.email) && (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {company.address && (
               <Card className="p-3">
                 <p className="text-xs text-[var(--color-text-muted)] mb-1">Адрес</p>

@@ -5,6 +5,7 @@ export { Select } from "./Select";
 export type { SelectOption, SelectGroup } from "./Select";
 export { Card } from "./Card";
 export { Modal } from "./Modal";
+export { Sheet } from "./Sheet";
 export { EmptyState } from "./EmptyState";
 export { Spinner } from "./Spinner";
 export { Badge } from "./Badge";

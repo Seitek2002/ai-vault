@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, Upload, FilePlus2, Save } from "lucide-react";
-import { Button, Input, Modal, Badge, Spinner } from "@/components/ui";
+import { ChevronLeft, Upload, FilePlus2, Save, SlidersHorizontal } from "lucide-react";
+import { Button, Input, Modal, Sheet, Badge, Spinner } from "@/components/ui";
 import { RichEditor } from "@/components/editor/RichEditor";
 import { MetaFields } from "./MetaFields";
 import { VariableFields } from "./VariableFields";
@@ -130,8 +130,8 @@ function AutoSaveToggle({
   onChange: (v: boolean) => void;
 }) {
   return (
-    <label className="flex items-center gap-2 cursor-pointer select-none group">
-      <span className="text-xs text-[var(--color-text-muted)] group-hover:text-[var(--color-text-secondary)] transition-colors">
+    <label className="flex items-center gap-2 cursor-pointer select-none group" title="Автосохранение">
+      <span className="hidden sm:inline text-xs text-[var(--color-text-muted)] group-hover:text-[var(--color-text-secondary)] transition-colors">
         Автосохранение
       </span>
       <span
@@ -167,6 +167,7 @@ export function DocumentEditor({ documentId }: DocumentEditorProps) {
   const prevChatCountRef = useRef<string | null>(null);
   const [replaceError, setReplaceError] = useState<string | null>(null);
   const [showSaveTemplate, setShowSaveTemplate] = useState(false);
+  const [showRequisites, setShowRequisites] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
 
@@ -445,9 +446,64 @@ export function DocumentEditor({ documentId }: DocumentEditorProps) {
         : "• не сохранено"
       : null;
 
+  const requisitesFields = (
+    <div className="flex-1 px-4 py-4">
+      <p className="text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-wider mb-3">
+        Реквизиты
+      </p>
+      {document.type === DocumentType.CUSTOM ? (
+        <VariableFields
+          bodyJson={document.bodyJson}
+          onChangeValue={handleVariableValueChange}
+          onChangeLabel={handleVariableLabelChange}
+        />
+      ) : (
+        <MetaFields
+          type={document.type}
+          meta={effectiveMeta}
+          onChange={handleMetaChange}
+        />
+      )}
+    </div>
+  );
+
+  const replaceFileSection = (
+    <div className="px-4 py-4 border-t border-[var(--color-border)]">
+      <p className="text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-wider mb-2">
+        Файл документа
+      </p>
+      <p className="text-xs text-[var(--color-text-muted)] mb-3 leading-snug">
+        {hasOriginalFile
+          ? "Загрузите новый файл, чтобы заменить содержимое документа"
+          : "Загрузите файл Word или PDF, чтобы заменить содержимое"}
+      </p>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".pdf,.docx,.doc,.txt"
+        className="hidden"
+        onChange={handleReplaceFile}
+      />
+      <Button
+        variant="secondary"
+        size="sm"
+        fullWidth
+        onClick={() => fileInputRef.current?.click()}
+        loading={replaceFileMutation.isPending}
+        loadingText="Загружаю…"
+      >
+        <Upload className="w-3.5 h-3.5" />
+        Заменить файл
+      </Button>
+      {replaceError && (
+        <p className="mt-2 text-xs text-red-400">{replaceError}</p>
+      )}
+    </div>
+  );
+
   return (
     <div className="flex h-full overflow-hidden">
-      {/* ── Left: metadata panel ─────────────────────── */}
+      {/* ── Left: metadata panel (desktop/tablet ≥1024px) ── */}
       <aside className="hidden lg:flex flex-col w-72 shrink-0 border-r border-[var(--color-border)] bg-[var(--color-bg-surface)] overflow-y-auto">
         <div className="px-4 py-4 border-b border-[var(--color-border)]">
           <div className="flex items-center gap-2 mb-1">
@@ -458,58 +514,8 @@ export function DocumentEditor({ documentId }: DocumentEditorProps) {
             {document.title}
           </h2>
         </div>
-
-        <div className="flex-1 px-4 py-4">
-          <p className="text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-wider mb-3">
-            Реквизиты
-          </p>
-          {document.type === DocumentType.CUSTOM ? (
-            <VariableFields
-              bodyJson={document.bodyJson}
-              onChangeValue={handleVariableValueChange}
-              onChangeLabel={handleVariableLabelChange}
-            />
-          ) : (
-            <MetaFields
-              type={document.type}
-              meta={effectiveMeta}
-              onChange={handleMetaChange}
-            />
-          )}
-        </div>
-
-        {/* Replace file section */}
-        <div className="px-4 py-4 border-t border-[var(--color-border)]">
-          <p className="text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-wider mb-2">
-            Файл документа
-          </p>
-          <p className="text-xs text-[var(--color-text-muted)] mb-3 leading-snug">
-            {hasOriginalFile
-              ? "Загрузите новый файл, чтобы заменить содержимое документа"
-              : "Загрузите файл Word или PDF, чтобы заменить содержимое"}
-          </p>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".pdf,.docx,.doc,.txt"
-            className="hidden"
-            onChange={handleReplaceFile}
-          />
-          <Button
-            variant="secondary"
-            size="sm"
-            fullWidth
-            onClick={() => fileInputRef.current?.click()}
-            loading={replaceFileMutation.isPending}
-            loadingText="Загружаю…"
-          >
-            <Upload className="w-3.5 h-3.5" />
-            Заменить файл
-          </Button>
-          {replaceError && (
-            <p className="mt-2 text-xs text-red-400">{replaceError}</p>
-          )}
-        </div>
+        {requisitesFields}
+        {replaceFileSection}
       </aside>
 
       {/* ── Editor ───────────────────────────────────── */}
@@ -538,25 +544,33 @@ export function DocumentEditor({ documentId }: DocumentEditorProps) {
                   if (e.key === "Enter") (e.target as HTMLInputElement).blur();
                   if (e.key === "Escape") setEditingTitle(false);
                 }}
-                className="text-sm font-medium text-[var(--color-text-primary)] bg-transparent border-b border-[var(--color-accent)] focus:outline-none min-w-0 max-w-xs"
+                className="flex-1 min-w-0 max-w-xs text-sm font-medium text-[var(--color-text-primary)] bg-transparent border-b border-[var(--color-accent)] focus:outline-none"
               />
             ) : (
               <span
                 onClick={() => { setTitleDraft(document.title); setEditingTitle(true); }}
                 title="Нажмите, чтобы переименовать"
-                className="text-sm font-medium text-[var(--color-text-primary)] truncate cursor-text hover:bg-[var(--color-bg-elevated)] rounded px-1 -mx-1 transition-colors"
+                className="flex-1 min-w-0 text-sm font-medium text-[var(--color-text-primary)] truncate cursor-text hover:bg-[var(--color-bg-elevated)] rounded px-1 -mx-1 transition-colors"
               >
                 {document.title}
               </span>
             )}
             {statusLabel && (
-              <span className="text-xs text-[var(--color-text-muted)] shrink-0">
+              <span className="hidden sm:inline text-xs text-[var(--color-text-muted)] shrink-0">
                 {statusLabel}
               </span>
             )}
           </div>
 
-          <div className="flex items-center gap-3 shrink-0">
+          <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
+            <button
+              onClick={() => setShowRequisites(true)}
+              className="lg:hidden p-1.5 rounded-lg border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-elevated)] transition-colors"
+              title="Реквизиты"
+            >
+              <SlidersHorizontal className="w-4 h-4" />
+            </button>
+
             <AutoSaveToggle enabled={autoSave} onChange={handleAutoSaveToggle} />
 
             <ExportMenu
@@ -573,7 +587,7 @@ export function DocumentEditor({ documentId }: DocumentEditorProps) {
                 title="Сохранить как шаблон"
               >
                 <FilePlus2 className="w-4 h-4" />
-                Шаблон
+                <span className="hidden sm:inline">Шаблон</span>
               </Button>
             )}
 
@@ -584,7 +598,7 @@ export function DocumentEditor({ documentId }: DocumentEditorProps) {
               loading={isSaving}
             >
               <Save className="w-3.5 h-3.5" strokeWidth={2.5} />
-              Сохранить
+              <span className="hidden sm:inline">Сохранить</span>
             </Button>
           </div>
         </div>
@@ -606,6 +620,13 @@ export function DocumentEditor({ documentId }: DocumentEditorProps) {
           meta={(metaOverride ?? document.meta) as Record<string, unknown>}
           onClose={() => setShowSaveTemplate(false)}
         />
+      )}
+
+      {showRequisites && (
+        <Sheet onClose={() => setShowRequisites(false)} className="lg:hidden">
+          {requisitesFields}
+          {replaceFileSection}
+        </Sheet>
       )}
     </div>
   );

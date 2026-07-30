@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
+import { ChevronLeft, Upload, FilePlus2, Save } from "lucide-react";
+import { Button, Input, Modal, Badge, Spinner } from "@/components/ui";
 import { RichEditor } from "@/components/editor/RichEditor";
 import { MetaFields } from "./MetaFields";
 import { VariableFields } from "./VariableFields";
@@ -58,44 +60,38 @@ function SaveAsTemplateModal({
   });
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-    >
-      <div className="w-full max-w-sm rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-elevated)] shadow-xl p-5">
-        <h3 className="text-sm font-semibold text-[var(--color-text-primary)] mb-3">
-          Сохранить как шаблон
-        </h3>
-        <input
-          type="text"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Название шаблона"
-          autoFocus
-          className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-base)] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:border-[var(--color-accent)] mb-3"
-        />
-        {mutation.isError && (
-          <p className="text-xs text-red-400 mb-2">
-            {mutation.error instanceof Error ? mutation.error.message : "Ошибка сохранения"}
-          </p>
-        )}
-        <div className="flex justify-end gap-2">
-          <button
-            onClick={onClose}
-            className="px-3 py-1.5 text-sm rounded-lg border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors"
-          >
-            Отмена
-          </button>
-          <button
-            onClick={() => mutation.mutate()}
-            disabled={mutation.isPending || !name.trim()}
-            className="px-3 py-1.5 text-sm font-semibold rounded-lg bg-[var(--color-accent)] text-[#0F172A] hover:bg-[var(--color-accent-hover)] disabled:opacity-40 transition-colors"
-          >
-            {mutation.isPending ? "Сохраняю…" : "Сохранить"}
-          </button>
-        </div>
+    <Modal onClose={onClose} size="sm" className="p-5">
+      <h3 className="text-sm font-semibold text-[var(--color-text-primary)] mb-3">
+        Сохранить как шаблон
+      </h3>
+      <Input
+        type="text"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="Название шаблона"
+        autoFocus
+        className="mb-3"
+      />
+      {mutation.isError && (
+        <p className="text-xs text-red-400 mb-2">
+          {mutation.error instanceof Error ? mutation.error.message : "Ошибка сохранения"}
+        </p>
+      )}
+      <div className="flex justify-end gap-2">
+        <Button size="sm" variant="secondary" onClick={onClose}>
+          Отмена
+        </Button>
+        <Button
+          size="sm"
+          onClick={() => mutation.mutate()}
+          disabled={!name.trim()}
+          loading={mutation.isPending}
+          loadingText="Сохраняю…"
+        >
+          Сохранить
+        </Button>
       </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -118,12 +114,9 @@ interface DocumentEditorProps {
 function DocTypeBadge({ type }: { type: DocumentType }) {
   const tpl = DOCUMENT_TEMPLATES[type];
   return (
-    <span
-      className="text-xs font-semibold px-2 py-0.5 rounded-full"
-      style={{ background: tpl.color + "22", color: tpl.color }}
-    >
+    <Badge color={tpl.color} className="rounded-full">
       {tpl.shortLabel}
-    </span>
+    </Badge>
   );
 }
 
@@ -415,8 +408,8 @@ export function DocumentEditor({ documentId }: DocumentEditorProps) {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <div className="w-6 h-6 rounded-full border-2 border-[var(--color-accent)] border-t-transparent animate-spin" />
+      <div className="flex items-center justify-center h-full text-[var(--color-accent)]">
+        <Spinner size="lg" />
       </div>
     );
   }
@@ -500,28 +493,17 @@ export function DocumentEditor({ documentId }: DocumentEditorProps) {
             className="hidden"
             onChange={handleReplaceFile}
           />
-          <button
+          <Button
+            variant="secondary"
+            size="sm"
+            fullWidth
             onClick={() => fileInputRef.current?.click()}
-            disabled={replaceFileMutation.isPending}
-            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-[var(--color-border)] text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:border-[var(--color-border-hover)] transition-colors disabled:opacity-50"
+            loading={replaceFileMutation.isPending}
+            loadingText="Загружаю…"
           >
-            {replaceFileMutation.isPending ? (
-              <span className="w-3.5 h-3.5 rounded-full border-2 border-current border-t-transparent animate-spin" />
-            ) : (
-              <svg
-                className="w-3.5 h-3.5"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={2}
-              >
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                <polyline points="17 8 12 3 7 8" />
-                <line x1="12" y1="3" x2="12" y2="15" />
-              </svg>
-            )}
-            {replaceFileMutation.isPending ? "Загружаю…" : "Заменить файл"}
-          </button>
+            <Upload className="w-3.5 h-3.5" />
+            Заменить файл
+          </Button>
           {replaceError && (
             <p className="mt-2 text-xs text-red-400">{replaceError}</p>
           )}
@@ -538,15 +520,7 @@ export function DocumentEditor({ documentId }: DocumentEditorProps) {
               className="text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] transition-colors shrink-0"
               title="Назад"
             >
-              <svg
-                className="w-4 h-4"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={2}
-              >
-                <path d="M15 18l-6-6 6-6" />
-              </svg>
+              <ChevronLeft className="w-4 h-4" />
             </button>
             {editingTitle ? (
               <input
@@ -590,41 +564,26 @@ export function DocumentEditor({ documentId }: DocumentEditorProps) {
             />
 
             {document.type === DocumentType.CUSTOM && (
-              <button
+              <Button
+                variant="secondary"
+                size="sm"
                 onClick={() => setShowSaveTemplate(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elevated)] hover:bg-[var(--color-bg-subtle)] text-[var(--color-text-primary)] transition-colors"
                 title="Сохранить как шаблон"
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                  <rect x="3" y="3" width="18" height="18" rx="2" />
-                  <path d="M12 8v8m-4-4h8" />
-                </svg>
+                <FilePlus2 className="w-4 h-4" />
                 Шаблон
-              </button>
+              </Button>
             )}
 
-            <button
+            <Button
+              size="sm"
               onClick={() => saveMutation.mutate()}
               disabled={!isDirty || isSaving}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold rounded-lg bg-[var(--color-accent)] text-[#0F172A] hover:bg-[var(--color-accent-hover)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              loading={isSaving}
             >
-              {isSaving ? (
-                <span className="w-3.5 h-3.5 rounded-full border-2 border-[#0F172A] border-t-transparent animate-spin" />
-              ) : (
-                <svg
-                  className="w-3.5 h-3.5"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth={2.5}
-                >
-                  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
-                  <polyline points="17 21 17 13 7 13 7 21" />
-                  <polyline points="7 3 7 8 15 8" />
-                </svg>
-              )}
+              <Save className="w-3.5 h-3.5" strokeWidth={2.5} />
               Сохранить
-            </button>
+            </Button>
           </div>
         </div>
 

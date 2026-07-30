@@ -1,7 +1,16 @@
 "use client";
 
+import { Select } from "@/components/ui";
 import { DocumentType } from "@ai-vault/types";
 import type { DocumentMeta } from "@ai-vault/types";
+
+const CURRENCY_OPTIONS = [
+  { value: "KGS", label: "KGS — Кыргызский сом" },
+  { value: "USD", label: "USD — Доллар США" },
+  { value: "EUR", label: "EUR — Евро" },
+  { value: "RUB", label: "RUB — Российский рубль" },
+  { value: "KZT", label: "KZT — Казахстанский тенге" },
+];
 
 interface MetaFieldsProps {
   type: DocumentType;
@@ -92,17 +101,12 @@ export function MetaFields({ type, meta, onChange }: MetaFieldsProps) {
 
   const currencyField = () => (
     <Field label="Валюта">
-      <select
-        className={inputCls}
+      <Select
+        className="w-full py-1.5 rounded-md"
         value={(m["currency"] as string) ?? "KGS"}
-        onChange={(e) => set("currency", e.target.value)}
-      >
-        <option value="KGS">KGS — Кыргызский сом</option>
-        <option value="USD">USD — Доллар США</option>
-        <option value="EUR">EUR — Евро</option>
-        <option value="RUB">RUB — Российский рубль</option>
-        <option value="KZT">KZT — Казахстанский тенге</option>
-      </select>
+        onChange={(v) => set("currency", v)}
+        options={CURRENCY_OPTIONS}
+      />
     </Field>
   );
 

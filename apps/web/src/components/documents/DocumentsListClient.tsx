@@ -3,6 +3,18 @@
 import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
+import {
+  Plus,
+  Search,
+  X,
+  ChevronLeft,
+  ChevronDown,
+  Check,
+  Wand2,
+  Building2,
+  FileText,
+} from "lucide-react";
+import { Button, Input, Select, Modal, Card, EmptyState, PageHeader, Spinner, Badge } from "@/components/ui";
 import { documentsApi } from "@/lib/api/documents";
 import { templatesApi } from "@/lib/api/templates";
 import type { TemplateDto } from "@/lib/api/templates";
@@ -90,7 +102,7 @@ function CreateDocumentModal({ onClose }: { onClose: () => void }) {
       let bodyJson: unknown = tpl.bodyJson;
       let meta: Record<string, unknown> = tpl.metaDefaults as Record<string, unknown>;
 
-      // Fetch org settings once — used to auto-fill Поставщик section
+      // Fetch org settings once — используется для авто-заполнения раздела «Поставщик»
       const orgSettings = await settingsApi.getSettings().catch(() => null);
 
       if (selectedTemplate) {
@@ -251,384 +263,332 @@ function CreateDocumentModal({ onClose }: { onClose: () => void }) {
     !!selectedExistingCompanyId || companySearch.trim().length > 0;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-
-      <div className="relative z-10 w-full max-w-lg bg-[var(--color-bg-surface)] rounded-2xl border border-[var(--color-border)] shadow-2xl">
-        {/* Header */}
-        <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            {canGoBack && (
-              <button
-                onClick={goBack}
-                className="text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] transition-colors"
-              >
-                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-                  <path d="M15 18l-6-6 6-6" />
-                </svg>
-              </button>
-            )}
-            <h2 className="text-base font-semibold text-[var(--color-text-primary)]">
-              {step === "type" && "Новый документ"}
-              {step === "company" && "Выберите компанию"}
-              {step === "company-details" && "Реквизиты компании"}
-              {step === "template-pick" && "Выберите шаблон"}
-              {step === "variables" && "Заполните переменные"}
-              {step === "title" && "Название документа"}
-            </h2>
-          </div>
-          <button onClick={onClose} className="text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] transition-colors">
-            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-              <path d="M18 6 6 18M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-
-        <div className="px-6 py-5 space-y-5">
-          {/* ── Step 1: type ── */}
-          {step === "type" && (
-            <>
-              <div>
-                <p className="text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-wider mb-3">
-                  Тип документа
-                </p>
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                  {BUILTIN_DOCUMENT_TYPE_LIST.map((tpl) => (
-                    <button
-                      key={tpl.type}
-                      onClick={() => setSelectedType(tpl.type)}
-                      className={[
-                        "flex flex-col items-start gap-1 px-3 py-3 rounded-xl border text-left transition-all",
-                        selectedType === tpl.type
-                          ? "border-[var(--color-accent)] bg-[var(--color-accent)]/10"
-                          : "border-[var(--color-border)] bg-[var(--color-bg-elevated)] hover:border-[var(--color-border-hover)]",
-                      ].join(" ")}
-                    >
-                      <span
-                        className="text-xs font-bold px-1.5 py-0.5 rounded"
-                        style={{ background: tpl.color + "22", color: tpl.color }}
-                      >
-                        {tpl.shortLabel}
-                      </span>
-                      <span className="text-xs text-[var(--color-text-secondary)] leading-tight">
-                        {tpl.label}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <button
-                onClick={() => {
-                  setSelectedType(DocumentType.CUSTOM);
-                  setMode("template");
-                  setStep("company");
-                }}
-                className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl border border-dashed border-[var(--color-border)] text-left text-sm text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:border-[var(--color-border-hover)] transition-colors"
-              >
-                <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-                  <rect x="3" y="6" width="18" height="12" rx="2" />
-                  <path d="M12 9v6M9 12h6" />
-                </svg>
-                Использовать свой шаблон из конструктора
-              </button>
-            </>
+    <Modal onClose={onClose} size="lg">
+      {/* Header */}
+      <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          {canGoBack && (
+            <button
+              onClick={goBack}
+              className="text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] transition-colors"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
           )}
+          <h2 className="text-base font-semibold text-[var(--color-text-primary)]">
+            {step === "type" && "Новый документ"}
+            {step === "company" && "Выберите компанию"}
+            {step === "company-details" && "Реквизиты компании"}
+            {step === "template-pick" && "Выберите шаблон"}
+            {step === "variables" && "Заполните переменные"}
+            {step === "title" && "Название документа"}
+          </h2>
+        </div>
+        <button onClick={onClose} className="text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] transition-colors">
+          <X className="w-5 h-5" />
+        </button>
+      </div>
 
-          {/* ── Step 2: company ── */}
-          {step === "company" && (
-            <div className="space-y-3">
-              <input
-                type="text"
-                placeholder="Поиск или название новой компании…"
-                value={companySearch}
-                onChange={(e) => {
-                  setCompanySearch(e.target.value);
-                  setSelectedExistingCompanyId(null);
-                }}
-                autoFocus
-                className="w-full px-3 py-2 rounded-lg bg-[var(--color-bg-elevated)] border border-[var(--color-border)] text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:border-[var(--color-accent)] transition-colors"
-              />
-
-              <div className="space-y-1 max-h-52 overflow-y-auto">
-                {searchedCompanies.map((c) => (
+      <div className="px-6 py-5 space-y-5">
+        {/* ── Step 1: type ── */}
+        {step === "type" && (
+          <>
+            <div>
+              <p className="text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-wider mb-3">
+                Тип документа
+              </p>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                {BUILTIN_DOCUMENT_TYPE_LIST.map((tpl) => (
                   <button
-                    key={c.id}
-                    onClick={() => {
-                      setSelectedExistingCompanyId(c.id);
-                      setCompanySearch(c.name);
-                    }}
+                    key={tpl.type}
+                    onClick={() => setSelectedType(tpl.type)}
                     className={[
-                      "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border text-left transition-all",
-                      selectedExistingCompanyId === c.id
+                      "flex flex-col items-start gap-1 px-3 py-3 rounded-xl border text-left transition-all",
+                      selectedType === tpl.type
                         ? "border-[var(--color-accent)] bg-[var(--color-accent)]/10"
                         : "border-[var(--color-border)] bg-[var(--color-bg-elevated)] hover:border-[var(--color-border-hover)]",
                     ].join(" ")}
                   >
-                    <div className="w-7 h-7 rounded-lg bg-[var(--color-bg-surface)] border border-[var(--color-border)] flex items-center justify-center shrink-0">
-                      <span className="text-xs font-bold text-[var(--color-text-secondary)]">
-                        {c.name[0]?.toUpperCase()}
-                      </span>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm text-[var(--color-text-primary)] truncate">{c.name}</p>
-                      {c.inn && (
-                        <p className="text-xs text-[var(--color-text-muted)]">ИНН: {c.inn}</p>
-                      )}
-                    </div>
-                    {selectedExistingCompanyId === c.id && (
-                      <svg className="w-4 h-4 text-[var(--color-accent)] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
-                        <path d="M20 6 9 17l-5-5" />
-                      </svg>
-                    )}
+                    <Badge color={tpl.color}>{tpl.shortLabel}</Badge>
+                    <span className="text-xs text-[var(--color-text-secondary)] leading-tight">
+                      {tpl.label}
+                    </span>
                   </button>
                 ))}
-
-                {companySearch.trim() && !selectedExistingCompanyId && (
-                  <div className="px-3 py-2.5 rounded-xl border border-dashed border-[var(--color-border)] bg-[var(--color-bg-elevated)] flex items-center gap-2">
-                    <svg className="w-4 h-4 text-[var(--color-accent)] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
-                      <path d="M12 5v14M5 12h14" />
-                    </svg>
-                    <p className="text-sm text-[var(--color-text-secondary)]">
-                      Создать компанию{" "}
-                      <span className="text-[var(--color-text-primary)] font-medium">«{companySearch.trim()}»</span>
-                    </p>
-                  </div>
-                )}
-
-                {!companySearch.trim() && searchedCompanies.length === 0 && (
-                  <div className="py-8 text-center">
-                    <p className="text-sm text-[var(--color-text-muted)]">Компаний пока нет</p>
-                    <p className="mt-1 text-xs text-[var(--color-text-muted)]">Введите название, чтобы создать новую</p>
-                  </div>
-                )}
               </div>
             </div>
-          )}
 
-          {/* ── Step 2.5: company details (новая компания, Счёт на оплату) ── */}
-          {step === "company-details" && (
-            <div className="space-y-3 max-h-80 overflow-y-auto">
-              <p className="text-xs text-[var(--color-text-muted)]">
-                Реквизиты компании{" "}
-                <span className="text-[var(--color-text-primary)] font-medium">«{companyToCreate}»</span>{" "}
-                будут подставлены в счёт на оплату. Поля можно оставить пустыми — в документе останутся прочерки.
-              </p>
-              {(
-                [
-                  ["inn", "ИНН", "01234567891234"],
-                  ["bin", "ОКПО", "12345678"],
-                  ["address", "Юридический адрес", "г. Бишкек, ул. ______, д. __"],
-                  ["bankAccount", "Расчётный счёт (р/с)", "1234567890123456"],
-                  ["bankName", "Банк", "ОАО «Бакай Банк»"],
-                  ["bankBik", "БИК", "124012"],
-                ] as const
-              ).map(([field, label, placeholder]) => (
-                <div key={field}>
-                  <label className="text-xs font-medium text-[var(--color-text-secondary)] block mb-1">
-                    {label}
-                  </label>
-                  <input
-                    type="text"
-                    value={companyDetails[field] ?? ""}
-                    onChange={(e) =>
-                      setCompanyDetails((prev) => ({ ...prev, [field]: e.target.value }))
-                    }
-                    placeholder={placeholder}
-                    className="w-full px-3 py-2 rounded-lg bg-[var(--color-bg-elevated)] border border-[var(--color-border)] text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:border-[var(--color-accent)] transition-colors"
-                  />
-                </div>
-              ))}
-            </div>
-          )}
+            <button
+              onClick={() => {
+                setSelectedType(DocumentType.CUSTOM);
+                setMode("template");
+                setStep("company");
+              }}
+              className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl border border-dashed border-[var(--color-border)] text-left text-sm text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:border-[var(--color-border-hover)] transition-colors"
+            >
+              <Wand2 className="w-4 h-4 shrink-0" />
+              Использовать свой шаблон из конструктора
+            </button>
+          </>
+        )}
 
-          {/* ── Step 3: template pick ── */}
-          {step === "template-pick" && (
-            <div className="space-y-2 max-h-72 overflow-y-auto">
-              {templates.length === 0 ? (
-                <div className="py-12 text-center">
-                  <p className="text-sm text-[var(--color-text-muted)]">
-                    Пока нет своих шаблонов
-                  </p>
-                  <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-                    Создайте шаблон в разделе «Конструктор»
-                  </p>
-                </div>
-              ) : (
-                templates.map((tpl) => (
-                  <button
-                    key={tpl.id}
-                    onClick={() => setSelectedTemplate(tpl)}
-                    className={[
-                      "w-full flex items-start gap-3 px-4 py-3 rounded-xl border text-left transition-all",
-                      selectedTemplate?.id === tpl.id
-                        ? "border-[var(--color-accent)] bg-[var(--color-accent)]/10"
-                        : "border-[var(--color-border)] bg-[var(--color-bg-elevated)] hover:border-[var(--color-border-hover)]",
-                    ].join(" ")}
-                  >
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-[var(--color-text-primary)] truncate">
-                        {tpl.name}
-                      </p>
-                      {tpl.description && (
-                        <p className="mt-0.5 text-xs text-[var(--color-text-muted)] truncate">
-                          {tpl.description}
-                        </p>
-                      )}
-                      {extractManualVariables(tpl.bodyJson).length > 0 && (
-                        <p className="mt-1 text-xs text-[var(--color-accent)]">
-                          {extractManualVariables(tpl.bodyJson).length} переменных
-                        </p>
-                      )}
-                    </div>
-                    {tpl.isDefault && (
-                      <span className="shrink-0 text-xs px-2 py-0.5 rounded-full bg-emerald-900/30 text-emerald-400">
-                        По умолчанию
-                      </span>
+        {/* ── Step 2: company ── */}
+        {step === "company" && (
+          <div className="space-y-3">
+            <Input
+              type="text"
+              placeholder="Поиск или название новой компании…"
+              value={companySearch}
+              onChange={(e) => {
+                setCompanySearch(e.target.value);
+                setSelectedExistingCompanyId(null);
+              }}
+              autoFocus
+            />
+
+            <div className="space-y-1 max-h-52 overflow-y-auto">
+              {searchedCompanies.map((c) => (
+                <button
+                  key={c.id}
+                  onClick={() => {
+                    setSelectedExistingCompanyId(c.id);
+                    setCompanySearch(c.name);
+                  }}
+                  className={[
+                    "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border text-left transition-all",
+                    selectedExistingCompanyId === c.id
+                      ? "border-[var(--color-accent)] bg-[var(--color-accent)]/10"
+                      : "border-[var(--color-border)] bg-[var(--color-bg-elevated)] hover:border-[var(--color-border-hover)]",
+                  ].join(" ")}
+                >
+                  <div className="w-7 h-7 rounded-lg bg-[var(--color-bg-surface)] border border-[var(--color-border)] flex items-center justify-center shrink-0">
+                    <span className="text-xs font-bold text-[var(--color-text-secondary)]">
+                      {c.name[0]?.toUpperCase()}
+                    </span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-[var(--color-text-primary)] truncate">{c.name}</p>
+                    {c.inn && (
+                      <p className="text-xs text-[var(--color-text-muted)]">ИНН: {c.inn}</p>
                     )}
-                  </button>
-                ))
+                  </div>
+                  {selectedExistingCompanyId === c.id && (
+                    <Check className="w-4 h-4 text-[var(--color-accent)] shrink-0" strokeWidth={2.5} />
+                  )}
+                </button>
+              ))}
+
+              {companySearch.trim() && !selectedExistingCompanyId && (
+                <div className="px-3 py-2.5 rounded-xl border border-dashed border-[var(--color-border)] bg-[var(--color-bg-elevated)] flex items-center gap-2">
+                  <Plus className="w-4 h-4 text-[var(--color-accent)] shrink-0" strokeWidth={2.5} />
+                  <p className="text-sm text-[var(--color-text-secondary)]">
+                    Создать компанию{" "}
+                    <span className="text-[var(--color-text-primary)] font-medium">«{companySearch.trim()}»</span>
+                  </p>
+                </div>
+              )}
+
+              {!companySearch.trim() && searchedCompanies.length === 0 && (
+                <div className="py-8 text-center">
+                  <p className="text-sm text-[var(--color-text-muted)]">Компаний пока нет</p>
+                  <p className="mt-1 text-xs text-[var(--color-text-muted)]">Введите название, чтобы создать новую</p>
+                </div>
               )}
             </div>
-          )}
+          </div>
+        )}
 
-          {/* ── Step 4: variables ── */}
-          {step === "variables" && selectedTemplate && (
-            <div className="space-y-3 max-h-72 overflow-y-auto">
-              <p className="text-xs text-[var(--color-text-muted)]">
-                Заполните переменные для шаблона «{selectedTemplate.name}»
-              </p>
-              {extractManualVariables(selectedTemplate.bodyJson).map((v) => (
-                <div key={v}>
-                  <label className="text-xs font-medium text-[var(--color-text-secondary)] block mb-1">
-                    <code className="font-mono text-[var(--color-accent)]">{`{{${v}}}`}</code>
-                  </label>
-                  <input
-                    type="text"
-                    value={variableValues[v] ?? ""}
-                    onChange={(e) =>
-                      setVariableValues((prev) => ({ ...prev, [v]: e.target.value }))
-                    }
-                    placeholder={v}
-                    className="w-full px-3 py-2 rounded-lg bg-[var(--color-bg-elevated)] border border-[var(--color-border)] text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:border-[var(--color-accent)] transition-colors"
-                  />
-                </div>
-              ))}
-            </div>
-          )}
+        {/* ── Step 2.5: company details (новая компания, Счёт на оплату) ── */}
+        {step === "company-details" && (
+          <div className="space-y-3 max-h-80 overflow-y-auto">
+            <p className="text-xs text-[var(--color-text-muted)]">
+              Реквизиты компании{" "}
+              <span className="text-[var(--color-text-primary)] font-medium">«{companyToCreate}»</span>{" "}
+              будут подставлены в счёт на оплату. Поля можно оставить пустыми — в документе останутся прочерки.
+            </p>
+            {(
+              [
+                ["inn", "ИНН", "01234567891234"],
+                ["bin", "ОКПО", "12345678"],
+                ["address", "Юридический адрес", "г. Бишкек, ул. ______, д. __"],
+                ["bankAccount", "Расчётный счёт (р/с)", "1234567890123456"],
+                ["bankName", "Банк", "ОАО «Бакай Банк»"],
+                ["bankBik", "БИК", "124012"],
+              ] as const
+            ).map(([field, label, placeholder]) => (
+              <div key={field}>
+                <label className="text-xs font-medium text-[var(--color-text-secondary)] block mb-1">
+                  {label}
+                </label>
+                <Input
+                  type="text"
+                  value={companyDetails[field] ?? ""}
+                  onChange={(e) =>
+                    setCompanyDetails((prev) => ({ ...prev, [field]: e.target.value }))
+                  }
+                  placeholder={placeholder}
+                />
+              </div>
+            ))}
+          </div>
+        )}
 
-          {/* ── Step 5: title ── */}
-          {step === "title" && (
-            <div>
-              <label className="text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-wider block mb-1.5">
-                Название <span className="normal-case font-normal">(необязательно)</span>
-              </label>
-              <input
-                type="text"
-                className="w-full px-3 py-2 rounded-lg bg-[var(--color-bg-elevated)] border border-[var(--color-border)] text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:border-[var(--color-accent)] transition-colors"
-                placeholder={
-                  selectedTemplate
-                    ? selectedTemplate.name
-                    : selectedType
-                    ? DOCUMENT_TEMPLATES[selectedType].label
-                    : "Введите название…"
-                }
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                autoFocus
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") createMutation.mutate();
-                }}
-              />
-            </div>
+        {/* ── Step 3: template pick ── */}
+        {step === "template-pick" && (
+          <div className="space-y-2 max-h-72 overflow-y-auto">
+            {templates.length === 0 ? (
+              <div className="py-12 text-center">
+                <p className="text-sm text-[var(--color-text-muted)]">
+                  Пока нет своих шаблонов
+                </p>
+                <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+                  Создайте шаблон в разделе «Конструктор»
+                </p>
+              </div>
+            ) : (
+              templates.map((tpl) => (
+                <button
+                  key={tpl.id}
+                  onClick={() => setSelectedTemplate(tpl)}
+                  className={[
+                    "w-full flex items-start gap-3 px-4 py-3 rounded-xl border text-left transition-all",
+                    selectedTemplate?.id === tpl.id
+                      ? "border-[var(--color-accent)] bg-[var(--color-accent)]/10"
+                      : "border-[var(--color-border)] bg-[var(--color-bg-elevated)] hover:border-[var(--color-border-hover)]",
+                  ].join(" ")}
+                >
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-[var(--color-text-primary)] truncate">
+                      {tpl.name}
+                    </p>
+                    {tpl.description && (
+                      <p className="mt-0.5 text-xs text-[var(--color-text-muted)] truncate">
+                        {tpl.description}
+                      </p>
+                    )}
+                    {extractManualVariables(tpl.bodyJson).length > 0 && (
+                      <p className="mt-1 text-xs text-[var(--color-accent)]">
+                        {extractManualVariables(tpl.bodyJson).length} переменных
+                      </p>
+                    )}
+                  </div>
+                  {tpl.isDefault && (
+                    <Badge className="shrink-0 rounded-full bg-emerald-900/30 text-emerald-400">
+                      По умолчанию
+                    </Badge>
+                  )}
+                </button>
+              ))
+            )}
+          </div>
+        )}
+
+        {/* ── Step 4: variables ── */}
+        {step === "variables" && selectedTemplate && (
+          <div className="space-y-3 max-h-72 overflow-y-auto">
+            <p className="text-xs text-[var(--color-text-muted)]">
+              Заполните переменные для шаблона «{selectedTemplate.name}»
+            </p>
+            {extractManualVariables(selectedTemplate.bodyJson).map((v) => (
+              <div key={v}>
+                <label className="text-xs font-medium text-[var(--color-text-secondary)] block mb-1">
+                  <code className="font-mono text-[var(--color-accent)]">{`{{${v}}}`}</code>
+                </label>
+                <Input
+                  type="text"
+                  value={variableValues[v] ?? ""}
+                  onChange={(e) =>
+                    setVariableValues((prev) => ({ ...prev, [v]: e.target.value }))
+                  }
+                  placeholder={v}
+                />
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* ── Step 5: title ── */}
+        {step === "title" && (
+          <div>
+            <label className="text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-wider block mb-1.5">
+              Название <span className="normal-case font-normal">(необязательно)</span>
+            </label>
+            <Input
+              type="text"
+              placeholder={
+                selectedTemplate
+                  ? selectedTemplate.name
+                  : selectedType
+                  ? DOCUMENT_TEMPLATES[selectedType].label
+                  : "Введите название…"
+              }
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === "Enter") createMutation.mutate();
+              }}
+            />
+          </div>
+        )}
+      </div>
+
+      {/* Footer */}
+      <div className="px-6 py-4 border-t border-[var(--color-border)] flex justify-between gap-3">
+        <div>
+          {step === "company" && (
+            <Button variant="secondary" onClick={handleCompanySkip}>
+              Пропустить
+            </Button>
           )}
         </div>
 
-        {/* Footer */}
-        <div className="px-6 py-4 border-t border-[var(--color-border)] flex justify-between gap-3">
-          <div>
-            {step === "company" && (
-              <button
-                onClick={handleCompanySkip}
-                className="px-4 py-2 text-sm text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] border border-[var(--color-border)] rounded-lg transition-colors"
-              >
-                Пропустить
-              </button>
-            )}
-          </div>
+        <div className="flex gap-3">
+          <Button variant="ghost" onClick={onClose}>
+            Отмена
+          </Button>
 
-          <div className="flex gap-3">
-            <button
-              onClick={onClose}
-              className="px-4 py-2 text-sm text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors"
+          {step === "type" && (
+            <Button onClick={handleTypeNext} disabled={!selectedType}>
+              Далее
+            </Button>
+          )}
+
+          {step === "company" && (
+            <Button onClick={handleCompanyNext} disabled={!canAdvanceCompany}>
+              Далее
+            </Button>
+          )}
+
+          {step === "company-details" && (
+            <Button onClick={() => setStep(stepAfterCompany())}>
+              Далее
+            </Button>
+          )}
+
+          {step === "template-pick" && (
+            <Button onClick={handleTemplateNext} disabled={!selectedTemplate}>
+              Далее
+            </Button>
+          )}
+
+          {step === "variables" && (
+            <Button onClick={() => setStep("title")}>
+              Далее
+            </Button>
+          )}
+
+          {step === "title" && (
+            <Button
+              onClick={() => createMutation.mutate()}
+              loading={createMutation.isPending}
             >
-              Отмена
-            </button>
-
-            {step === "type" && (
-              <button
-                onClick={handleTypeNext}
-                disabled={!selectedType}
-                className="px-4 py-2 rounded-lg bg-[var(--color-accent)] text-[#0F172A] text-sm font-semibold hover:bg-[var(--color-accent-hover)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-              >
-                Далее
-              </button>
-            )}
-
-            {step === "company" && (
-              <button
-                onClick={handleCompanyNext}
-                disabled={!canAdvanceCompany}
-                className="px-4 py-2 rounded-lg bg-[var(--color-accent)] text-[#0F172A] text-sm font-semibold hover:bg-[var(--color-accent-hover)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-              >
-                Далее
-              </button>
-            )}
-
-            {step === "company-details" && (
-              <button
-                onClick={() => setStep(stepAfterCompany())}
-                className="px-4 py-2 rounded-lg bg-[var(--color-accent)] text-[#0F172A] text-sm font-semibold hover:bg-[var(--color-accent-hover)] transition-colors"
-              >
-                Далее
-              </button>
-            )}
-
-            {step === "template-pick" && (
-              <button
-                onClick={handleTemplateNext}
-                disabled={!selectedTemplate}
-                className="px-4 py-2 rounded-lg bg-[var(--color-accent)] text-[#0F172A] text-sm font-semibold hover:bg-[var(--color-accent-hover)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-              >
-                Далее
-              </button>
-            )}
-
-            {step === "variables" && (
-              <button
-                onClick={() => setStep("title")}
-                className="px-4 py-2 rounded-lg bg-[var(--color-accent)] text-[#0F172A] text-sm font-semibold hover:bg-[var(--color-accent-hover)] transition-colors"
-              >
-                Далее
-              </button>
-            )}
-
-            {step === "title" && (
-              <button
-                onClick={() => createMutation.mutate()}
-                disabled={createMutation.isPending}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--color-accent)] text-[#0F172A] text-sm font-semibold hover:bg-[var(--color-accent-hover)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-              >
-                {createMutation.isPending && (
-                  <span className="w-3.5 h-3.5 rounded-full border-2 border-[#0F172A] border-t-transparent animate-spin" />
-                )}
-                Создать
-              </button>
-            )}
-          </div>
+              Создать
+            </Button>
+          )}
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -680,29 +640,23 @@ function CompanyFilterDropdown({
             : "border-[var(--color-border)] text-[var(--color-text-primary)] bg-[var(--color-bg-surface)] hover:border-[var(--color-border-hover)]",
         ].join(" ")}
       >
-        <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-          <path d="M3 9h18M3 15h18M8 3v18M16 3v18" strokeWidth={0} />
-          <rect x="2" y="7" width="20" height="10" rx="2" />
-          <path d="M6 12h12" />
-        </svg>
+        <Building2 className="w-3.5 h-3.5 shrink-0" />
         <span className="max-w-[120px] truncate">
           {selectedName ?? "Компания"}
         </span>
-        <svg className={`w-3 h-3 shrink-0 transition-transform ${open ? "rotate-180" : ""}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-          <path d="m6 9 6 6 6-6" />
-        </svg>
+        <ChevronDown className={`w-3 h-3 shrink-0 transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
 
       {open && (
-        <div className="absolute top-full left-0 mt-1 z-20 w-56 bg-[var(--color-bg-surface)] border border-[var(--color-border)] rounded-xl shadow-xl overflow-hidden">
+        <div className="absolute top-full left-0 mt-1 z-20 w-56 bg-[var(--color-bg-surface)] border border-[var(--color-border)] rounded-xl shadow-xl overflow-hidden animate-scale-in">
           <div className="p-2 border-b border-[var(--color-border)]">
-            <input
+            <Input
               type="text"
               placeholder="Поиск компании…"
               value={filterSearch}
               onChange={(e) => setFilterSearch(e.target.value)}
               autoFocus
-              className="w-full px-2 py-1.5 rounded-lg bg-[var(--color-bg-elevated)] text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline-none border border-[var(--color-border)] focus:border-[var(--color-accent)] transition-colors"
+              className="py-1.5"
             />
           </div>
           <div className="max-h-48 overflow-y-auto py-1">
@@ -749,7 +703,7 @@ function DocCard({ doc }: { doc: DocumentDto }) {
   });
 
   return (
-    <div className="w-full flex items-start gap-3 px-4 py-4 rounded-xl bg-[var(--color-bg-surface)] border border-[var(--color-border)] hover:border-[var(--color-border-hover)] hover:bg-[var(--color-bg-elevated)] transition-all group">
+    <Card hoverable className="group w-full flex items-start gap-3 px-4 py-4">
       <div
         className="mt-0.5 w-1 self-stretch rounded-full shrink-0"
         style={{ background: tpl.color }}
@@ -761,15 +715,10 @@ function DocCard({ doc }: { doc: DocumentDto }) {
         className="flex-1 min-w-0 text-left"
       >
         <div className="flex items-center gap-2 mb-1">
-          <span
-            className="text-xs font-bold px-1.5 py-0.5 rounded shrink-0"
-            style={{ background: tpl.color + "22", color: tpl.color }}
-          >
-            {tpl.shortLabel}
-          </span>
-          <span className={`text-xs px-2 py-0.5 rounded-full shrink-0 font-medium ${STATUS_COLORS[doc.status]}`}>
+          <Badge color={tpl.color} className="shrink-0">{tpl.shortLabel}</Badge>
+          <Badge className={`rounded-full font-medium shrink-0 ${STATUS_COLORS[doc.status]}`}>
             {STATUS_LABELS[doc.status]}
-          </span>
+          </Badge>
           {doc.counterparty && (
             <span className="text-xs text-[var(--color-text-muted)] shrink-0 truncate max-w-[120px]">
               {doc.counterparty.name}
@@ -790,19 +739,17 @@ function DocCard({ doc }: { doc: DocumentDto }) {
         {confirming ? (
           <div className="flex items-center gap-1.5">
             <span className="text-xs text-[var(--color-text-muted)]">Удалить?</span>
-            <button
+            <Button
+              variant="danger"
+              size="sm"
               onClick={() => { deleteMutation.mutate(); setConfirming(false); }}
               disabled={deleteMutation.isPending}
-              className="text-xs px-2 py-1 rounded bg-red-600/80 hover:bg-red-600 text-white font-medium transition-colors disabled:opacity-50"
             >
               Да
-            </button>
-            <button
-              onClick={() => setConfirming(false)}
-              className="text-xs px-2 py-1 rounded bg-[var(--color-bg-elevated)] hover:bg-[var(--color-border)] text-[var(--color-text-secondary)] font-medium transition-colors border border-[var(--color-border)]"
-            >
+            </Button>
+            <Button variant="secondary" size="sm" onClick={() => setConfirming(false)}>
               Нет
-            </button>
+            </Button>
           </div>
         ) : (
           <button
@@ -813,7 +760,7 @@ function DocCard({ doc }: { doc: DocumentDto }) {
           </button>
         )}
       </div>
-    </div>
+    </Card>
   );
 }
 
@@ -842,110 +789,90 @@ export function DocumentsListClient() {
 
   return (
     <div className="p-6 lg:p-8 h-full flex flex-col">
-      {/* Header */}
-      <div className="mb-6 flex items-center justify-between gap-4 shrink-0">
-        <div>
-          <h1 className="text-xl font-semibold text-[var(--color-text-primary)]">Документы</h1>
-          <p className="mt-0.5 text-sm text-[var(--color-text-secondary)]">
-            КП, договоры, счета, акты выполненных работ
-          </p>
-        </div>
-        <button
-          onClick={() => setShowCreate(true)}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--color-accent)] text-[#0F172A] text-sm font-semibold hover:bg-[var(--color-accent-hover)] transition-colors shrink-0"
-        >
-          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
-            <path d="M12 5v14M5 12h14" />
-          </svg>
-          Создать
-        </button>
-      </div>
+      <PageHeader
+        title="Документы"
+        subtitle="КП, договоры, счета, акты выполненных работ"
+        actions={
+          <Button onClick={() => setShowCreate(true)}>
+            <Plus className="w-4 h-4" strokeWidth={2.5} />
+            Создать
+          </Button>
+        }
+      />
 
       {/* Filters */}
       <div className="flex flex-wrap gap-2 mb-5 shrink-0">
         <div className="relative">
-          <svg
-            className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[var(--color-text-muted)]"
-            viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}
-          >
-            <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
-          </svg>
-          <input
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[var(--color-text-muted)]" />
+          <Input
             type="text"
             placeholder="Поиск…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="pl-8 pr-3 py-1.5 rounded-lg bg-[var(--color-bg-surface)] border border-[var(--color-border)] text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:border-[var(--color-accent)] transition-colors w-48"
+            className="pl-8 py-1.5 w-48"
           />
         </div>
 
-        <select
+        <Select
           value={typeFilter}
-          onChange={(e) => setTypeFilter(e.target.value as DocumentType | "")}
-          className="px-3 py-1.5 rounded-lg bg-[var(--color-bg-surface)] border border-[var(--color-border)] text-sm text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-accent)] transition-colors"
-        >
-          <option value="">Все типы</option>
-          {DOCUMENT_TYPE_LIST.map((tpl) => (
-            <option key={tpl.type} value={tpl.type}>
-              {tpl.shortLabel} — {tpl.label}
-            </option>
-          ))}
-        </select>
+          onChange={(v) => setTypeFilter(v as DocumentType | "")}
+          className="w-auto py-1.5"
+          options={[
+            { value: "", label: "Все типы" },
+            ...DOCUMENT_TYPE_LIST.map((tpl) => ({
+              value: tpl.type,
+              label: `${tpl.shortLabel} — ${tpl.label}`,
+            })),
+          ]}
+        />
 
-        <select
+        <Select
           value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value as DocumentStatus | "")}
-          className="px-3 py-1.5 rounded-lg bg-[var(--color-bg-surface)] border border-[var(--color-border)] text-sm text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-accent)] transition-colors"
-        >
-          <option value="">Все статусы</option>
-          {Object.entries(STATUS_LABELS).map(([k, v]) => (
-            <option key={k} value={k}>{v}</option>
-          ))}
-        </select>
+          onChange={(v) => setStatusFilter(v as DocumentStatus | "")}
+          className="w-auto py-1.5"
+          options={[
+            { value: "", label: "Все статусы" },
+            ...Object.entries(STATUS_LABELS).map(([k, v]) => ({ value: k, label: v })),
+          ]}
+        />
 
         <CompanyFilterDropdown value={companyFilter} onChange={setCompanyFilter} />
 
         {hasFilters && (
-          <button
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={() => { setTypeFilter(""); setStatusFilter(""); setSearch(""); setCompanyFilter(""); }}
-            className="px-3 py-1.5 rounded-lg text-sm text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] border border-[var(--color-border)] hover:border-[var(--color-border-hover)] transition-colors"
           >
             Сбросить
-          </button>
+          </Button>
         )}
       </div>
 
       {/* List */}
       <div className="flex-1 overflow-y-auto -mx-6 px-6 lg:-mx-8 lg:px-8">
         {isLoading ? (
-          <div className="flex items-center justify-center py-24">
-            <div className="w-6 h-6 rounded-full border-2 border-[var(--color-accent)] border-t-transparent animate-spin" />
+          <div className="flex items-center justify-center py-24 text-[var(--color-accent)]">
+            <Spinner size="lg" />
           </div>
         ) : docs.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-24 text-center border border-dashed border-[var(--color-border)] rounded-xl">
-            <div className="w-12 h-12 rounded-xl bg-[var(--color-bg-surface)] flex items-center justify-center mb-4 border border-[var(--color-border)]">
-              <svg className="w-6 h-6 text-[var(--color-text-muted)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                <polyline points="14 2 14 8 20 8" />
-              </svg>
-            </div>
-            <p className="text-sm font-medium text-[var(--color-text-secondary)]">
-              {hasFilters ? "Ничего не найдено" : "Документов пока нет"}
-            </p>
-            <p className="mt-1 text-sm text-[var(--color-text-muted)]">
-              {hasFilters
+          <EmptyState
+            icon={<FileText className="w-6 h-6" strokeWidth={1.5} />}
+            title={hasFilters ? "Ничего не найдено" : "Документов пока нет"}
+            description={
+              hasFilters
                 ? "Попробуйте изменить фильтры"
-                : "Создайте первый документ или импортируйте файл"}
-            </p>
-            {!hasFilters && (
-              <button
-                onClick={() => setShowCreate(true)}
-                className="mt-4 px-4 py-2 rounded-lg bg-[var(--color-accent)] text-[#0F172A] text-sm font-semibold hover:bg-[var(--color-accent-hover)] transition-colors"
-              >
-                + Создать документ
-              </button>
-            )}
-          </div>
+                : "Создайте первый документ или импортируйте файл"
+            }
+            action={
+              !hasFilters && (
+                <Button onClick={() => setShowCreate(true)}>
+                  <Plus className="w-4 h-4" strokeWidth={2.5} />
+                  Создать документ
+                </Button>
+              )
+            }
+          />
         ) : (
           <div className="grid gap-2">
             {docs.map((doc) => (

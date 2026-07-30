@@ -16,31 +16,30 @@ import { FontSize } from "./extensions/fontSize";
 import { VariableToken } from "./extensions/variableToken";
 import { PLACEHOLDER_MENU } from "@/lib/placeholders";
 import { extractVariables, slugifyVariableKey } from "@/lib/variableTokens";
+import { Select } from "@/components/ui";
 import type { TemplateVariableType } from "@ai-vault/types";
 import "./editor.css";
 
 const FONT_SIZES = ["8", "9", "10", "10.5", "11", "12", "14", "16", "18", "20", "24", "28", "32", "36"];
 
+const TOOLBAR_SELECT_CLS =
+  "px-1.5 py-1 text-xs rounded-md border border-[var(--color-border)] bg-transparent text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-accent)] focus:ring-0 transition-colors";
+
 function InsertFieldSelect({ editor }: { editor: Editor }) {
   return (
-    <select
+    <Select
       title="Вставить поле — подставится автоматически при создании документа"
       value=""
-      onChange={(e) => {
-        const key = e.target.value;
+      onChange={(key) => {
         if (key) editor.chain().focus().insertContent(`{{${key}}}`).run();
       }}
-      className="px-1.5 py-1 text-xs rounded-md border border-[var(--color-border)] bg-transparent text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-accent)] transition-colors max-w-[130px]"
-    >
-      <option value="">Вставить поле…</option>
-      {PLACEHOLDER_MENU.map((group) => (
-        <optgroup key={group.group} label={group.group}>
-          {group.items.map((item) => (
-            <option key={item.key} value={item.key}>{item.label}</option>
-          ))}
-        </optgroup>
-      ))}
-    </select>
+      placeholder="Вставить поле…"
+      className={`${TOOLBAR_SELECT_CLS} max-w-[130px]`}
+      options={PLACEHOLDER_MENU.map((group) => ({
+        group: group.group,
+        items: group.items.map((item) => ({ value: item.key, label: item.label })),
+      }))}
+    />
   );
 }
 
@@ -49,21 +48,20 @@ function FontSizeSelect({ editor }: { editor: Editor }) {
   const value = current.replace("pt", "");
 
   return (
-    <select
+    <Select
       title="Размер шрифта"
       value={value}
-      onChange={(e) => {
-        const v = e.target.value;
+      onChange={(v) => {
         if (!v) editor.chain().focus().unsetFontSize().run();
         else editor.chain().focus().setFontSize(`${v}pt`).run();
       }}
-      className="px-1.5 py-1 text-xs rounded-md border border-[var(--color-border)] bg-transparent text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-accent)] transition-colors"
-    >
-      <option value="">12 (по умолч.)</option>
-      {FONT_SIZES.map((s) => (
-        <option key={s} value={s}>{s}</option>
-      ))}
-    </select>
+      placeholder="12 (по умолч.)"
+      className={TOOLBAR_SELECT_CLS}
+      options={[
+        { value: "", label: "12 (по умолч.)" },
+        ...FONT_SIZES.map((s) => ({ value: s, label: s })),
+      ]}
+    />
   );
 }
 
@@ -175,14 +173,15 @@ function AddVariableButton({ editor }: { editor: Editor }) {
             </label>
             <label className="text-xs font-medium text-[var(--color-text-secondary)]">
               Тип
-              <select
+              <Select
                 value={varType}
-                onChange={(e) => setVarType(e.target.value as TemplateVariableType)}
-                className="mt-1 w-full px-2 py-1.5 text-sm rounded-md border border-[var(--color-border)] bg-[var(--color-bg-elevated)] text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-accent)]"
-              >
-                <option value="text">Текст</option>
-                <option value="date">Дата</option>
-              </select>
+                onChange={(v) => setVarType(v as TemplateVariableType)}
+                className="mt-1 w-full px-2 py-1.5 text-sm rounded-md"
+                options={[
+                  { value: "text", label: "Текст" },
+                  { value: "date", label: "Дата" },
+                ]}
+              />
             </label>
             <button
               onClick={insert}

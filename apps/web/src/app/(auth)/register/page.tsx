@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { authApi } from '@/lib/api/auth';
 import { ApiError } from '@/lib/api/client';
+import { Button, Input, Card } from '@/components/ui';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -48,7 +49,7 @@ export default function RegisterPage() {
         <span className="text-xl font-semibold text-[var(--color-text-primary)]">AI Vault</span>
       </div>
 
-      <div className="bg-[var(--color-bg-surface)] rounded-2xl border border-[var(--color-border)] p-8 shadow-xl">
+      <Card className="p-8 shadow-xl">
         <h1 className="text-lg font-semibold text-[var(--color-text-primary)] mb-1">
           Создать аккаунт
         </h1>
@@ -61,14 +62,14 @@ export default function RegisterPage() {
             <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1.5">
               Ваше имя
             </label>
-            <input
+            <Input
               type="text"
               autoComplete="name"
               required
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Айбек Иванов"
-              className="w-full px-3.5 py-2.5 text-sm rounded-lg bg-[var(--color-bg-base)] border border-[var(--color-border)] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:border-[var(--color-accent)] focus:ring-1 focus:ring-[var(--color-accent)] transition-colors"
+              className="py-2.5"
             />
           </div>
 
@@ -76,14 +77,14 @@ export default function RegisterPage() {
             <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1.5">
               Email
             </label>
-            <input
+            <Input
               type="email"
               autoComplete="email"
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@company.kg"
-              className="w-full px-3.5 py-2.5 text-sm rounded-lg bg-[var(--color-bg-base)] border border-[var(--color-border)] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:border-[var(--color-accent)] focus:ring-1 focus:ring-[var(--color-accent)] transition-colors"
+              className="py-2.5"
             />
           </div>
 
@@ -91,7 +92,7 @@ export default function RegisterPage() {
             <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1.5">
               Пароль
             </label>
-            <input
+            <Input
               type="password"
               autoComplete="new-password"
               required
@@ -99,7 +100,7 @@ export default function RegisterPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Минимум 8 символов"
-              className="w-full px-3.5 py-2.5 text-sm rounded-lg bg-[var(--color-bg-base)] border border-[var(--color-border)] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:border-[var(--color-accent)] focus:ring-1 focus:ring-[var(--color-accent)] transition-colors"
+              className="py-2.5"
             />
           </div>
 
@@ -107,12 +108,12 @@ export default function RegisterPage() {
             <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1.5">
               Название организации <span className="font-normal text-[var(--color-text-muted)]">(необязательно)</span>
             </label>
-            <input
+            <Input
               type="text"
               value={organizationName}
               onChange={(e) => setOrganizationName(e.target.value)}
               placeholder="ООО «Моя компания»"
-              className="w-full px-3.5 py-2.5 text-sm rounded-lg bg-[var(--color-bg-base)] border border-[var(--color-border)] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:border-[var(--color-accent)] focus:ring-1 focus:ring-[var(--color-accent)] transition-colors"
+              className="py-2.5"
             />
             <p className="mt-1.5 text-xs text-[var(--color-text-muted)]">
               Можно оставить пустым и создать или присоединиться к организации позже в настройках.
@@ -125,25 +126,19 @@ export default function RegisterPage() {
             </div>
           )}
 
-          <button
+          <Button
             type="submit"
+            size="lg"
+            fullWidth
             disabled={loading}
-            className="w-full py-2.5 text-sm font-semibold rounded-lg bg-[var(--color-accent)] text-[#0F172A] hover:bg-[var(--color-accent-hover)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors mt-1"
+            loading={loading}
+            loadingText="Создание аккаунта…"
+            className="mt-1"
           >
-            {loading ? (
-              <span className="flex items-center justify-center gap-2">
-                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
-                </svg>
-                Создание аккаунта…
-              </span>
-            ) : (
-              'Зарегистрироваться'
-            )}
-          </button>
+            Зарегистрироваться
+          </Button>
         </form>
-      </div>
+      </Card>
 
       <p className="text-center text-sm text-[var(--color-text-muted)] mt-6">
         Уже есть аккаунт?{' '}

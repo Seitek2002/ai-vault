@@ -23,9 +23,12 @@
     "@tiptap/pm": "^2.14.0",
     "@tiptap/react": "^2.14.0",
     "@tiptap/starter-kit": "^2.14.0",
+    "clsx": "^2.1.1",
+    "lucide-react": "^1.28.0",
     "next": "16.2.9",
     "react": "19.2.4",
     "react-dom": "19.2.4",
+    "tailwind-merge": "^3.6.0",
     "zustand": "^5.0.5"
   },
   "devDependencies": {

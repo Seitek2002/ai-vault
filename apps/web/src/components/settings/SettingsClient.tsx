@@ -11,6 +11,7 @@ import {
 } from '@/lib/api/settings';
 import { ApiError } from '@/lib/api/client';
 import { saveTokens } from '@/lib/tokens';
+import { Button, Input, Card, Badge, Spinner } from '@/components/ui';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -37,13 +38,12 @@ function Field({
         {label}
         {required && <span className="ml-0.5 text-red-500">*</span>}
       </label>
-      <input
+      <Input
         id={name}
         type={type}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elevated)] px-3 py-2 text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
       />
     </div>
   );
@@ -83,7 +83,7 @@ function OrganizationSetupTab() {
 
   return (
     <div className="mx-auto max-w-lg">
-      <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-surface)] p-6">
+      <Card className="p-6">
         <h2 className="mb-1 text-base font-semibold text-[var(--color-text-primary)]">
           Ваш аккаунт пока не привязан к организации
         </h2>
@@ -104,16 +104,12 @@ function OrganizationSetupTab() {
             <p className="rounded-lg bg-red-500/10 px-4 py-3 text-sm text-red-400">{error}</p>
           )}
           <div className="flex justify-end">
-            <button
-              type="submit"
-              disabled={mutation.isPending || !name.trim()}
-              className="rounded-lg bg-[var(--color-accent)] px-5 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
-            >
-              {mutation.isPending ? 'Создание…' : 'Создать организацию'}
-            </button>
+            <Button type="submit" disabled={!name.trim()} loading={mutation.isPending} loadingText="Создание…">
+              Создать организацию
+            </Button>
           </div>
         </form>
-      </div>
+      </Card>
     </div>
   );
 }
@@ -217,13 +213,9 @@ function RequisitesTab() {
       )}
 
       <div className="flex justify-end">
-        <button
-          type="submit"
-          disabled={mutation.isPending}
-          className="rounded-lg bg-[var(--color-accent)] px-5 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
-        >
-          {mutation.isPending ? 'Сохранение…' : 'Сохранить'}
-        </button>
+        <Button type="submit" loading={mutation.isPending} loadingText="Сохранение…">
+          Сохранить
+        </Button>
       </div>
     </form>
   );
@@ -333,13 +325,9 @@ function ProfileTab() {
       )}
 
       <div className="flex justify-end">
-        <button
-          type="submit"
-          disabled={mutation.isPending}
-          className="rounded-lg bg-[var(--color-accent)] px-5 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
-        >
-          {mutation.isPending ? 'Сохранение…' : 'Сохранить'}
-        </button>
+        <Button type="submit" loading={mutation.isPending} loadingText="Сохранение…">
+          Сохранить
+        </Button>
       </div>
     </form>
   );
@@ -394,13 +382,9 @@ function AddExistingMemberForm({ onDone }: { onDone: (email: string) => void }) 
       )}
 
       <div className="flex justify-end">
-        <button
-          type="submit"
-          disabled={mutation.isPending}
-          className="rounded-lg bg-[var(--color-accent)] px-5 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
-        >
-          {mutation.isPending ? 'Добавление…' : 'Добавить сотрудника'}
-        </button>
+        <Button type="submit" loading={mutation.isPending} loadingText="Добавление…">
+          Добавить сотрудника
+        </Button>
       </div>
     </form>
   );
@@ -458,13 +442,9 @@ function CreateMemberForm({ onDone }: { onDone: (email: string) => void }) {
       )}
 
       <div className="flex justify-end">
-        <button
-          type="submit"
-          disabled={mutation.isPending}
-          className="rounded-lg bg-[var(--color-accent)] px-5 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
-        >
-          {mutation.isPending ? 'Создание…' : 'Создать и добавить'}
-        </button>
+        <Button type="submit" loading={mutation.isPending} loadingText="Создание…">
+          Создать и добавить
+        </Button>
       </div>
     </form>
   );
@@ -496,9 +476,9 @@ function TeamTab() {
             ))}
           </div>
         ) : (
-          <ul className="divide-y divide-[var(--color-border)] rounded-lg border border-[var(--color-border)]">
+          <Card className="divide-y divide-[var(--color-border)] overflow-hidden">
             {members.map((m) => (
-              <li key={m.id} className="flex items-center justify-between px-4 py-3">
+              <div key={m.id} className="flex items-center justify-between px-4 py-3">
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium text-[var(--color-text-primary)]">
                     {m.name}
@@ -508,12 +488,12 @@ function TeamTab() {
                   </p>
                   <p className="truncate text-xs text-[var(--color-text-muted)]">{m.email}</p>
                 </div>
-                <span className="shrink-0 rounded-full bg-[var(--color-bg-elevated)] px-2.5 py-1 text-xs font-medium text-[var(--color-text-secondary)]">
+                <Badge className="shrink-0 rounded-full bg-[var(--color-bg-elevated)] text-[var(--color-text-secondary)] font-medium">
                   {m.role === 'ADMIN' ? 'Администратор' : 'Сотрудник'}
-                </span>
-              </li>
+                </Badge>
+              </div>
             ))}
-          </ul>
+          </Card>
         )}
       </div>
 
@@ -572,8 +552,8 @@ export function SettingsClient() {
 
   if (meLoading) {
     return (
-      <div className="flex h-full items-center justify-center">
-        <div className="h-6 w-6 animate-spin rounded-full border-2 border-[var(--color-accent)] border-t-transparent" />
+      <div className="flex h-full items-center justify-center text-[var(--color-accent)]">
+        <Spinner size="lg" />
       </div>
     );
   }

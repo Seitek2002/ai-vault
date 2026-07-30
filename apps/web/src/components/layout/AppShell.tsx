@@ -31,11 +31,11 @@ export function AppShell({ children }: AppShellProps) {
           aria-hidden="true"
         >
           <div
-            className="absolute inset-0 bg-black/60"
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in"
             onClick={closeDrawer}
           />
           <aside
-            className="absolute top-0 left-0 bottom-0 flex flex-col z-50 shadow-2xl"
+            className="absolute top-0 left-0 bottom-0 flex flex-col z-50 shadow-2xl animate-slide-in-left"
             style={{ width: "var(--sidebar-width)" }}
           >
             <Sidebar onClose={closeDrawer} />

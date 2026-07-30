@@ -2,6 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { ChevronLeft, Plus } from "lucide-react";
+import { Button, Card, Badge, Spinner } from "@/components/ui";
 import { counterpartiesApi } from "@/lib/api/counterparties";
 import { documentsApi } from "@/lib/api/documents";
 import { DOCUMENT_TEMPLATES } from "@/lib/templates";
@@ -129,14 +131,9 @@ function MonthlyDocCard({
   });
 
   return (
-    <div className="flex flex-col gap-3 p-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-surface)]">
+    <Card className="flex flex-col gap-3 p-4">
       <div className="flex items-center gap-2">
-        <span
-          className="text-xs font-bold px-2 py-0.5 rounded"
-          style={{ background: tpl.color + "22", color: tpl.color }}
-        >
-          {tpl.shortLabel}
-        </span>
+        <Badge color={tpl.color} className="px-2">{tpl.shortLabel}</Badge>
         <p className="text-sm font-medium text-[var(--color-text-primary)]">{tpl.label}</p>
       </div>
 
@@ -150,41 +147,32 @@ function MonthlyDocCard({
               </p>
             )}
           </div>
-          <button
+          <Button
+            size="sm"
             onClick={() => createMutation.mutate()}
-            disabled={createMutation.isPending}
-            className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--color-accent)] text-[#0F172A] text-xs font-semibold hover:bg-[var(--color-accent-hover)] disabled:opacity-50 transition-colors"
+            loading={createMutation.isPending}
+            className="shrink-0"
           >
-            {createMutation.isPending ? (
-              <span className="w-3 h-3 rounded-full border-2 border-[#0F172A] border-t-transparent animate-spin" />
-            ) : (
-              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
-                <path d="M12 5v14M5 12h14" />
-              </svg>
-            )}
+            <Plus className="w-3.5 h-3.5" strokeWidth={2.5} />
             {nextDate ? `Создать для ${formatButtonDate(nextDate)}` : "Создать копию"}
-          </button>
+          </Button>
         </div>
       ) : (
         <div className="flex items-center justify-between gap-3">
           <p className="text-xs text-[var(--color-text-muted)]">Нет документов этого типа</p>
-          <button
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={() => createMutation.mutate()}
-            disabled={createMutation.isPending}
-            className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[var(--color-border)] text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:border-[var(--color-border-hover)] disabled:opacity-50 transition-colors"
+            loading={createMutation.isPending}
+            className="shrink-0"
           >
-            {createMutation.isPending ? (
-              <span className="w-3 h-3 rounded-full border-2 border-current border-t-transparent animate-spin" />
-            ) : (
-              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
-                <path d="M12 5v14M5 12h14" />
-              </svg>
-            )}
+            <Plus className="w-3.5 h-3.5" strokeWidth={2.5} />
             Создать первый
-          </button>
+          </Button>
         </div>
       )}
-    </div>
+    </Card>
   );
 }
 
@@ -200,27 +188,24 @@ function DocRow({ doc }: { doc: DocumentDto }) {
   });
 
   return (
-    <button
-      onClick={() => router.push(`/documents/${doc.id}`)}
-      className="w-full text-left flex items-center gap-3 px-4 py-3 rounded-xl bg-[var(--color-bg-surface)] border border-[var(--color-border)] hover:border-[var(--color-border-hover)] hover:bg-[var(--color-bg-elevated)] transition-all"
-    >
-      <div className="w-1 self-stretch rounded-full shrink-0" style={{ background: tpl.color }} />
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 mb-0.5">
-          <span
-            className="text-xs font-bold px-1.5 py-0.5 rounded shrink-0"
-            style={{ background: tpl.color + "22", color: tpl.color }}
-          >
-            {tpl.shortLabel}
-          </span>
-          <span className={`text-xs px-2 py-0.5 rounded-full shrink-0 font-medium ${STATUS_COLORS[doc.status]}`}>
-            {STATUS_LABELS[doc.status]}
-          </span>
+    <Card hoverable className="p-0 overflow-hidden">
+      <button
+        onClick={() => router.push(`/documents/${doc.id}`)}
+        className="w-full text-left flex items-center gap-3 px-4 py-3"
+      >
+        <div className="w-1 self-stretch rounded-full shrink-0" style={{ background: tpl.color }} />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-0.5">
+            <Badge color={tpl.color} className="shrink-0">{tpl.shortLabel}</Badge>
+            <Badge className={`rounded-full font-medium shrink-0 ${STATUS_COLORS[doc.status]}`}>
+              {STATUS_LABELS[doc.status]}
+            </Badge>
+          </div>
+          <p className="text-sm text-[var(--color-text-primary)] truncate">{doc.title}</p>
         </div>
-        <p className="text-sm text-[var(--color-text-primary)] truncate">{doc.title}</p>
-      </div>
-      <time className="text-xs text-[var(--color-text-muted)] shrink-0">{date}</time>
-    </button>
+        <time className="text-xs text-[var(--color-text-muted)] shrink-0">{date}</time>
+      </button>
+    </Card>
   );
 }
 
@@ -252,8 +237,8 @@ export function CompanyDetailClient({ companyId }: { companyId: string }) {
 
   if (loadingCompany) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <div className="w-6 h-6 rounded-full border-2 border-[var(--color-accent)] border-t-transparent animate-spin" />
+      <div className="flex items-center justify-center h-full text-[var(--color-accent)]">
+        <Spinner size="lg" />
       </div>
     );
   }
@@ -280,9 +265,7 @@ export function CompanyDetailClient({ companyId }: { companyId: string }) {
           onClick={() => router.push("/companies")}
           className="text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] transition-colors shrink-0"
         >
-          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-            <path d="M15 18l-6-6 6-6" />
-          </svg>
+          <ChevronLeft className="w-4 h-4" />
         </button>
         <div className="flex-1 min-w-0">
           <h1 className="text-base font-semibold text-[var(--color-text-primary)] truncate">
@@ -299,26 +282,26 @@ export function CompanyDetailClient({ companyId }: { companyId: string }) {
         {(company.address ?? company.bankName ?? company.phone ?? company.email) && (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             {company.address && (
-              <div className="p-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-surface)]">
+              <Card className="p-3">
                 <p className="text-xs text-[var(--color-text-muted)] mb-1">Адрес</p>
                 <p className="text-sm text-[var(--color-text-primary)]">{company.address}</p>
-              </div>
+              </Card>
             )}
             {company.bankName && (
-              <div className="p-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-surface)]">
+              <Card className="p-3">
                 <p className="text-xs text-[var(--color-text-muted)] mb-1">Банк</p>
                 <p className="text-sm text-[var(--color-text-primary)]">{company.bankName}</p>
                 {company.bankAccount && (
                   <p className="text-xs text-[var(--color-text-muted)] mt-0.5">р/с {company.bankAccount}</p>
                 )}
-              </div>
+              </Card>
             )}
             {(company.phone ?? company.email) && (
-              <div className="p-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-surface)]">
+              <Card className="p-3">
                 <p className="text-xs text-[var(--color-text-muted)] mb-1">Контакты</p>
                 {company.phone && <p className="text-sm text-[var(--color-text-primary)]">{company.phone}</p>}
                 {company.email && <p className="text-sm text-[var(--color-text-primary)]">{company.email}</p>}
-              </div>
+              </Card>
             )}
           </div>
         )}

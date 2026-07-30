@@ -25,6 +25,24 @@ import type {
 } from './dto/auth.dto';
 import type { JwtPayload } from '../common/decorators/current-user.decorator';
 
+/** Full "me" projection — reused across getMe/updateMe/avatar+background+sidebar uploads. */
+const ME_SELECT = {
+  id: true,
+  email: true,
+  name: true,
+  role: true,
+  organizationId: true,
+  avatarUrl: true,
+  backgroundId: true,
+  backgroundImageUrl: true,
+  backgroundFilter: true,
+  backgroundImageScope: true,
+  sidebarBackgroundId: true,
+  sidebarImageUrl: true,
+  sidebarImageFilter: true,
+  position: { select: { id: true, name: true, permissions: true } },
+} as const;
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -153,18 +171,7 @@ export class AuthService {
   async getMe(userId: string) {
     return this.prisma.user.findUniqueOrThrow({
       where: { id: userId },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        role: true,
-        organizationId: true,
-        avatarUrl: true,
-        backgroundId: true,
-        backgroundImageUrl: true,
-        backgroundFilter: true,
-        position: { select: { id: true, name: true, permissions: true } },
-      },
+      select: ME_SELECT,
     });
   }
 
@@ -285,6 +292,10 @@ export class AuthService {
       backgroundId?: string | null;
       backgroundFilter?: Prisma.InputJsonValue;
       backgroundImageUrl?: string | null;
+      backgroundImageScope?: string | null;
+      sidebarBackgroundId?: string | null;
+      sidebarImageFilter?: Prisma.InputJsonValue;
+      sidebarImageUrl?: string | null;
     } = {};
     if (dto.name) data.name = dto.name;
     if (dto.newPassword) data.passwordHash = await argon2.hash(dto.newPassword);
@@ -293,22 +304,17 @@ export class AuthService {
       data.backgroundFilter = dto.backgroundFilter as unknown as Prisma.InputJsonValue;
     }
     if (dto.removeBackgroundImage) data.backgroundImageUrl = null;
+    if (dto.backgroundImageScope !== undefined) data.backgroundImageScope = dto.backgroundImageScope;
+    if (dto.sidebarBackgroundId !== undefined) data.sidebarBackgroundId = dto.sidebarBackgroundId;
+    if (dto.sidebarImageFilter !== undefined) {
+      data.sidebarImageFilter = dto.sidebarImageFilter as unknown as Prisma.InputJsonValue;
+    }
+    if (dto.removeSidebarImage) data.sidebarImageUrl = null;
 
     return this.prisma.user.update({
       where: { id: userId },
       data,
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        role: true,
-        organizationId: true,
-        avatarUrl: true,
-        backgroundId: true,
-        backgroundImageUrl: true,
-        backgroundFilter: true,
-        position: { select: { id: true, name: true, permissions: true } },
-      },
+      select: ME_SELECT,
     });
   }
 
@@ -329,32 +335,40 @@ export class AuthService {
   }
 
   /**
-   * Uploads a personal background photo — stored on the User row itself, so
-   * it's only ever returned from /auth/me for the owning account (never from
-   * /auth/members or any other org-facing endpoint).
+   * Uploads a personal background photo (main/right area) — stored on the
+   * User row itself, so it's only ever returned from /auth/me for the owning
+   * account (never from /auth/members or any other org-facing endpoint).
    */
   async updateBackgroundImage(userId: string, file: { buffer: Buffer; mimeType: string }) {
+    const url = await this.uploadUserImage(userId, 'backgrounds', file);
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: { backgroundImageUrl: url },
+      select: ME_SELECT,
+    });
+  }
+
+  /** Same as updateBackgroundImage but for the sidebar's own (left-side) photo. */
+  async updateSidebarImage(userId: string, file: { buffer: Buffer; mimeType: string }) {
+    const url = await this.uploadUserImage(userId, 'sidebars', file);
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: { sidebarImageUrl: url },
+      select: ME_SELECT,
+    });
+  }
+
+  private async uploadUserImage(
+    userId: string,
+    folder: string,
+    file: { buffer: Buffer; mimeType: string },
+  ): Promise<string> {
     const ALLOWED = new Set(['image/png', 'image/jpeg', 'image/webp']);
     if (!ALLOWED.has(file.mimeType)) {
       throw new BadRequestException(`Unsupported image type: ${file.mimeType}. Allowed: PNG, JPEG, WEBP.`);
     }
     const ext = file.mimeType.split('/')[1];
-    const key = `backgrounds/${userId}/${randomUUID()}.${ext}`;
-    const url = await this.storage.upload(key, file.buffer, file.mimeType);
-
-    return this.prisma.user.update({
-      where: { id: userId },
-      data: { backgroundImageUrl: url },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        role: true,
-        organizationId: true,
-        backgroundId: true,
-        backgroundImageUrl: true,
-        backgroundFilter: true,
-      },
-    });
+    const key = `${folder}/${userId}/${randomUUID()}.${ext}`;
+    return this.storage.upload(key, file.buffer, file.mimeType);
   }
 }

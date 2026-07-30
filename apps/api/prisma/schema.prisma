@@ -76,6 +76,10 @@ model User {
   backgroundId   String?
   backgroundImageUrl String?
   backgroundFilter   Json?
+  backgroundImageScope String? // 'right' | 'left' | 'all' | 'split' — where backgroundImageUrl (+ sidebarImageUrl for 'split') renders
+  sidebarBackgroundId  String?
+  sidebarImageUrl      String?
+  sidebarImageFilter   Json?
   createdAt      DateTime @default(now())
 
   organization     Organization?     @relation(fields: [organizationId], references: [id], onDelete: SetNull)

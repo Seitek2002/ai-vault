@@ -1,5 +1,6 @@
 import { api, ApiError } from './client';
 import type { Position } from './positions';
+import type { BackgroundImageScope } from '../backgrounds';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api';
 
@@ -36,6 +37,10 @@ export interface UserProfile {
   backgroundId?: string | null;
   backgroundImageUrl?: string | null;
   backgroundFilter?: BackgroundFilter | null;
+  backgroundImageScope?: BackgroundImageScope | null;
+  sidebarBackgroundId?: string | null;
+  sidebarImageUrl?: string | null;
+  sidebarImageFilter?: BackgroundFilter | null;
   position?: Position | null;
 }
 
@@ -60,6 +65,10 @@ export interface UpdateMeDto {
   backgroundId?: string | null;
   backgroundFilter?: BackgroundFilter | null;
   removeBackgroundImage?: boolean;
+  backgroundImageScope?: BackgroundImageScope | null;
+  sidebarBackgroundId?: string | null;
+  sidebarImageFilter?: BackgroundFilter | null;
+  removeSidebarImage?: boolean;
 }
 
 export interface Member {
@@ -128,4 +137,5 @@ export const settingsApi = {
   createOrganization: (dto: CreateOrganizationDto) => api.post<AuthTokens>('/auth/organization', dto),
   uploadAvatar: (file: File) => uploadUserFile('/auth/me/avatar', file),
   uploadBackgroundImage: (file: File) => uploadUserFile('/auth/me/background-image', file),
+  uploadSidebarImage: (file: File) => uploadUserFile('/auth/me/sidebar-image', file),
 };

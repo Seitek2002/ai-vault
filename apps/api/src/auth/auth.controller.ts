@@ -80,6 +80,13 @@ export class AuthController {
     return this.auth.updateBackgroundImage(user.sub, file);
   }
 
+  @Post('me/sidebar-image')
+  async uploadSidebarImage(@Req() req: FastifyRequest, @CurrentUser() user: JwtPayload) {
+    const file = await readMultipartFile(req);
+    if (!file) throw new BadRequestException('No file provided');
+    return this.auth.updateSidebarImage(user.sub, file);
+  }
+
   @Post('organization')
   createOrganization(@CurrentUser() user: JwtPayload, @Body() dto: CreateOrganizationDto) {
     return this.auth.createOrganization(user.sub, dto);

@@ -3,6 +3,7 @@ import {
   IsString,
   IsOptional,
   IsEnum,
+  IsIn,
   IsNumber,
   IsBoolean,
   Min,
@@ -13,6 +14,9 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { UserRole } from '@prisma/client';
+
+export const BACKGROUND_IMAGE_SCOPES = ['right', 'left', 'all', 'split'] as const;
+export type BackgroundImageScope = (typeof BACKGROUND_IMAGE_SCOPES)[number];
 
 export class BackgroundFilterDto {
   @IsNumber()
@@ -143,4 +147,23 @@ export class UpdateMeDto {
   @IsOptional()
   @IsBoolean()
   removeBackgroundImage?: boolean;
+
+  /** Where the uploaded photo(s) render: whole app, main area only, sidebar only, or independently on each. */
+  @IsOptional()
+  @IsIn(BACKGROUND_IMAGE_SCOPES)
+  backgroundImageScope?: BackgroundImageScope | null;
+
+  @IsOptional()
+  @IsString()
+  sidebarBackgroundId?: string | null;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => BackgroundFilterDto)
+  sidebarImageFilter?: BackgroundFilterDto | null;
+
+  /** Clears the sidebar's uploaded photo (set via /auth/me/sidebar-image). */
+  @IsOptional()
+  @IsBoolean()
+  removeSidebarImage?: boolean;
 }

@@ -9,7 +9,14 @@ import { Check, ImageOff, FileText, Building2, Wand2, Upload, Settings, LogOut, 
 import { authApi } from "@/lib/api/auth";
 import { settingsApi } from "@/lib/api/settings";
 import { useBackgroundEditStore } from "@/stores/backgroundEdit.store";
-import { BACKGROUND_PRESETS, backgroundFilterCss, type BackgroundPreset } from "@/lib/backgrounds";
+import {
+  BACKGROUND_PRESETS,
+  BACKGROUND_IMAGE_SCOPE_OPTIONS,
+  backgroundFilterCss,
+  getBackgroundPreset,
+  DEFAULT_BACKGROUND_FILTER,
+  type BackgroundPreset,
+} from "@/lib/backgrounds";
 import { Button } from "@/components/ui";
 
 interface NavItem {
@@ -39,29 +46,159 @@ const FILTER_SLIDERS: Array<{ key: "opacity" | "blur" | "brightness" | "saturate
   { key: "saturate", label: "Насыщенность", min: 0, max: 200, unit: "%" },
 ];
 
+function PresetPicker({
+  label,
+  selected,
+  onSelect,
+}: {
+  label: string;
+  selected: string;
+  onSelect: (id: string) => void;
+}) {
+  const [filter, setFilter] = useState<BackgroundPreset["category"] | "Все">("Все");
+  const shown = filter === "Все" ? BACKGROUND_PRESETS : BACKGROUND_PRESETS.filter((b) => b.category === filter);
+
+  return (
+    <div>
+      <p className="text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-wider mb-2">{label}</p>
+      <div className="flex gap-1 -mx-1 px-1 pb-2 overflow-x-auto">
+        {CATEGORIES.map((c) => (
+          <button
+            key={c}
+            onClick={() => setFilter(c)}
+            className={[
+              "shrink-0 px-2.5 py-1 rounded-lg text-xs font-medium transition-colors",
+              filter === c
+                ? "bg-[var(--color-accent)]/10 text-[var(--color-accent)]"
+                : "text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-elevated)] hover:text-[var(--color-text-primary)]",
+            ].join(" ")}
+          >
+            {c}
+          </button>
+        ))}
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        {shown.map((b) => (
+          <button
+            key={b.id}
+            onClick={() => onSelect(b.id)}
+            className={[
+              "flex flex-col gap-1.5 p-1.5 rounded-lg border transition-all",
+              selected === b.id
+                ? "border-[var(--color-accent)]"
+                : "border-[var(--color-border)] hover:border-[var(--color-border-light)]",
+            ].join(" ")}
+          >
+            <div
+              className="h-10 rounded-md border border-[var(--color-border)] relative"
+              style={{ background: b.css || "var(--color-bg-base)" }}
+            >
+              {selected === b.id && (
+                <Check className="absolute top-1 right-1 w-3.5 h-3.5 text-[var(--color-accent)]" strokeWidth={2.5} />
+              )}
+            </div>
+            <span className="text-[11px] text-[var(--color-text-secondary)] truncate">{b.label}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function PhotoSlotEditor({ side, label }: { side: "left" | "right"; label: string }) {
+  const slot = useBackgroundEditStore((s) => s[side]);
+  const setSlotImage = useBackgroundEditStore((s) => s.setSlotImage);
+  const setSlotFilter = useBackgroundEditStore((s) => s.setSlotFilter);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  return (
+    <div>
+      <p className="text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-wider mb-2">{label}</p>
+      {slot.imageUrl ? (
+        <div className="space-y-2">
+          <div
+            className="h-20 rounded-lg border border-[var(--color-border)] bg-cover bg-center"
+            style={{
+              backgroundImage: `url(${slot.imageUrl})`,
+              opacity: slot.filter.opacity / 100,
+              filter: backgroundFilterCss(slot.filter),
+            }}
+          />
+          <div className="flex gap-2">
+            <Button variant="secondary" size="sm" onClick={() => fileInputRef.current?.click()} fullWidth>
+              Заменить
+            </Button>
+            <Button variant="secondary" size="sm" onClick={() => setSlotImage(side, null)}>
+              <ImageOff className="w-3.5 h-3.5" />
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <Button variant="secondary" size="sm" onClick={() => fileInputRef.current?.click()} fullWidth>
+          <Upload className="w-3.5 h-3.5" />
+          Загрузить фото
+        </Button>
+      )}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) setSlotImage(side, file);
+        }}
+      />
+
+      {slot.imageUrl && (
+        <div className="mt-3 space-y-2.5">
+          {FILTER_SLIDERS.map((s) => (
+            <div key={s.key}>
+              <div className="flex items-center justify-between text-[11px] text-[var(--color-text-muted)] mb-1">
+                <span>{s.label}</span>
+                <span>{slot.filter[s.key]}{s.unit}</span>
+              </div>
+              <input
+                type="range"
+                min={s.min}
+                max={s.max}
+                value={slot.filter[s.key]}
+                onChange={(e) => setSlotFilter(side, { [s.key]: Number(e.target.value) })}
+                className="w-full accent-[var(--color-accent)]"
+              />
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function BackgroundPicker() {
   const qc = useQueryClient();
   const previewId = useBackgroundEditStore((s) => s.previewId);
-  const previewImageUrl = useBackgroundEditStore((s) => s.previewImageUrl);
-  const previewFile = useBackgroundEditStore((s) => s.previewFile);
-  const previewFilter = useBackgroundEditStore((s) => s.previewFilter);
+  const previewSidebarId = useBackgroundEditStore((s) => s.previewSidebarId);
+  const previewScope = useBackgroundEditStore((s) => s.previewScope);
   const setPreviewPreset = useBackgroundEditStore((s) => s.setPreviewPreset);
-  const setPreviewImage = useBackgroundEditStore((s) => s.setPreviewImage);
-  const setPreviewFilter = useBackgroundEditStore((s) => s.setPreviewFilter);
+  const setPreviewSidebarPreset = useBackgroundEditStore((s) => s.setPreviewSidebarPreset);
+  const setPreviewScope = useBackgroundEditStore((s) => s.setPreviewScope);
+  const right = useBackgroundEditStore((s) => s.right);
+  const left = useBackgroundEditStore((s) => s.left);
   const exit = useBackgroundEditStore((s) => s.exit);
-  const selected = previewId ?? "default";
-  const [filter, setFilter] = useState<BackgroundPreset["category"] | "Все">("Все");
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const mutation = useMutation({
     mutationFn: async () => {
-      if (previewFile) {
-        await settingsApi.uploadBackgroundImage(previewFile);
-      }
+      if (right.file) await settingsApi.uploadBackgroundImage(right.file);
+      if (left.file) await settingsApi.uploadSidebarImage(left.file);
+
       return settingsApi.updateMe({
-        backgroundId: selected === "default" ? null : selected,
-        backgroundFilter: previewFilter,
-        ...(previewFile === null && previewImageUrl === null ? { removeBackgroundImage: true } : {}),
+        backgroundId: previewId === "default" ? null : previewId,
+        sidebarBackgroundId: previewSidebarId === "default" ? null : previewSidebarId,
+        backgroundImageScope: previewScope,
+        backgroundFilter: right.filter,
+        sidebarImageFilter: left.filter,
+        ...(right.file === null && right.imageUrl === null ? { removeBackgroundImage: true } : {}),
+        ...(left.file === null && left.imageUrl === null ? { removeSidebarImage: true } : {}),
       });
     },
     onSuccess: () => {
@@ -70,125 +207,51 @@ function BackgroundPicker() {
     },
   });
 
-  const shown = filter === "Все" ? BACKGROUND_PRESETS : BACKGROUND_PRESETS.filter((b) => b.category === filter);
-
   return (
     <div className="flex flex-col h-full">
       <div className="px-4 py-4 border-b border-[var(--color-border)] shrink-0">
         <p className="text-sm font-semibold text-[var(--color-text-primary)]">Фон интерфейса</p>
-        <p className="text-xs text-[var(--color-text-muted)] mt-0.5">Применяется к рабочей области</p>
+        <p className="text-xs text-[var(--color-text-muted)] mt-0.5">Применяется к рабочей области и сайдбару</p>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-3 py-3 space-y-4">
-        {/* Custom photo */}
+      <div className="flex-1 overflow-y-auto px-3 py-3 space-y-5">
+        {/* Photo scope */}
         <div>
           <p className="text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-wider mb-2">
-            Своё фото
+            Где показывать фото
           </p>
-          {previewImageUrl ? (
-            <div className="space-y-2">
-              <div
-                className="h-20 rounded-lg border border-[var(--color-border)] bg-cover bg-center"
-                style={{
-                  backgroundImage: `url(${previewImageUrl})`,
-                  opacity: previewFilter.opacity / 100,
-                  filter: backgroundFilterCss(previewFilter),
-                }}
-              />
-              <div className="flex gap-2">
-                <Button variant="secondary" size="sm" onClick={() => fileInputRef.current?.click()} fullWidth>
-                  Заменить
-                </Button>
-                <Button variant="secondary" size="sm" onClick={() => setPreviewImage(null)}>
-                  <ImageOff className="w-3.5 h-3.5" />
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <Button variant="secondary" size="sm" onClick={() => fileInputRef.current?.click()} fullWidth>
-              <Upload className="w-3.5 h-3.5" />
-              Загрузить фото
-            </Button>
-          )}
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/png,image/jpeg,image/webp"
-            className="hidden"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) setPreviewImage(file);
-            }}
-          />
-
-          {previewImageUrl && (
-            <div className="mt-3 space-y-2.5">
-              {FILTER_SLIDERS.map((s) => (
-                <div key={s.key}>
-                  <div className="flex items-center justify-between text-[11px] text-[var(--color-text-muted)] mb-1">
-                    <span>{s.label}</span>
-                    <span>{previewFilter[s.key]}{s.unit}</span>
-                  </div>
-                  <input
-                    type="range"
-                    min={s.min}
-                    max={s.max}
-                    value={previewFilter[s.key]}
-                    onChange={(e) => setPreviewFilter({ [s.key]: Number(e.target.value) })}
-                    className="w-full accent-[var(--color-accent)]"
-                  />
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Presets */}
-        <div>
-          <p className="text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-wider mb-2">
-            Цвет / градиент
-          </p>
-          <div className="flex gap-1 -mx-1 px-1 pb-2 overflow-x-auto">
-            {CATEGORIES.map((c) => (
+          <div className="grid grid-cols-2 gap-1.5">
+            {BACKGROUND_IMAGE_SCOPE_OPTIONS.map((opt) => (
               <button
-                key={c}
-                onClick={() => setFilter(c)}
+                key={opt.value}
+                onClick={() => setPreviewScope(opt.value)}
                 className={[
-                  "shrink-0 px-2.5 py-1 rounded-lg text-xs font-medium transition-colors",
-                  filter === c
-                    ? "bg-[var(--color-accent)]/10 text-[var(--color-accent)]"
-                    : "text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-elevated)] hover:text-[var(--color-text-primary)]",
+                  "px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors border",
+                  previewScope === opt.value
+                    ? "border-[var(--color-accent)] bg-[var(--color-accent)]/10 text-[var(--color-accent)]"
+                    : "border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-elevated)]",
                 ].join(" ")}
               >
-                {c}
-              </button>
-            ))}
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            {shown.map((b) => (
-              <button
-                key={b.id}
-                onClick={() => setPreviewPreset(b.id)}
-                className={[
-                  "flex flex-col gap-1.5 p-1.5 rounded-lg border transition-all",
-                  selected === b.id
-                    ? "border-[var(--color-accent)]"
-                    : "border-[var(--color-border)] hover:border-[var(--color-border-light)]",
-                ].join(" ")}
-              >
-                <div
-                  className="h-10 rounded-md border border-[var(--color-border)] relative"
-                  style={{ background: b.css || "var(--color-bg-base)" }}
-                >
-                  {selected === b.id && (
-                    <Check className="absolute top-1 right-1 w-3.5 h-3.5 text-[var(--color-accent)]" strokeWidth={2.5} />
-                  )}
-                </div>
-                <span className="text-[11px] text-[var(--color-text-secondary)] truncate">{b.label}</span>
+                {opt.label}
               </button>
             ))}
           </div>
         </div>
+
+        {/* Photo slot(s) — which one(s) depend on scope */}
+        {previewScope === "split" ? (
+          <>
+            <PhotoSlotEditor side="left" label="Фото слева (сайдбар)" />
+            <PhotoSlotEditor side="right" label="Фото справа" />
+          </>
+        ) : previewScope === "left" ? (
+          <PhotoSlotEditor side="left" label="Своё фото" />
+        ) : (
+          <PhotoSlotEditor side="right" label="Своё фото" />
+        )}
+
+        <PresetPicker label="Цвет / градиент (рабочая область)" selected={previewId ?? "default"} onSelect={setPreviewPreset} />
+        <PresetPicker label="Цвет сайдбара" selected={previewSidebarId ?? "default"} onSelect={setPreviewSidebarPreset} />
       </div>
 
       <div className="px-4 py-4 border-t border-[var(--color-border)] shrink-0 flex gap-2">
@@ -208,6 +271,10 @@ export function Sidebar({ onClose }: SidebarProps) {
   const router = useRouter();
   const { data: me } = useQuery({ queryKey: ["me"], queryFn: settingsApi.getMe });
   const backgroundEditActive = useBackgroundEditStore((s) => s.active);
+  const previewSidebarId = useBackgroundEditStore((s) => s.previewSidebarId);
+  const previewScope = useBackgroundEditStore((s) => s.previewScope);
+  const previewLeft = useBackgroundEditStore((s) => s.left);
+  const previewRight = useBackgroundEditStore((s) => s.right);
 
   const initials = me?.name
     ? me.name.split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase()
@@ -220,8 +287,46 @@ export function Sidebar({ onClose }: SidebarProps) {
     router.refresh();
   }
 
+  const sidebarPreset = getBackgroundPreset(backgroundEditActive ? previewSidebarId : me?.sidebarBackgroundId);
+  const scope = backgroundEditActive ? previewScope : (me?.backgroundImageScope ?? "right");
+  // 'all' spans one photo across sidebar+main via matching fixed-position layers;
+  // 'left'/'split' show the sidebar's own photo scoped to just this box.
+  const spanningImage = scope === "all" ? (backgroundEditActive ? previewRight : { imageUrl: me?.backgroundImageUrl ?? null, filter: me?.backgroundFilter ?? DEFAULT_BACKGROUND_FILTER }) : null;
+  const ownImage =
+    scope === "left" || scope === "split"
+      ? (backgroundEditActive ? previewLeft : { imageUrl: me?.sidebarImageUrl ?? null, filter: me?.sidebarImageFilter ?? DEFAULT_BACKGROUND_FILTER })
+      : null;
+
   return (
-    <nav className="flex flex-col h-full bg-[var(--color-bg-surface)] border-r border-[var(--color-border)]">
+    <nav
+      className="relative flex flex-col h-full overflow-hidden bg-[var(--color-bg-surface)] border-r border-[var(--color-border)]"
+      style={sidebarPreset?.css ? { backgroundImage: sidebarPreset.css } : undefined}
+    >
+      {spanningImage?.imageUrl && (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none fixed inset-0"
+          style={{
+            backgroundImage: `url(${spanningImage.imageUrl})`,
+            backgroundSize: "cover",
+            backgroundPosition: "center",
+            opacity: spanningImage.filter.opacity / 100,
+            filter: backgroundFilterCss(spanningImage.filter),
+          }}
+        />
+      )}
+      {ownImage?.imageUrl && (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -inset-16 bg-cover bg-center"
+          style={{
+            backgroundImage: `url(${ownImage.imageUrl})`,
+            opacity: ownImage.filter.opacity / 100,
+            filter: backgroundFilterCss(ownImage.filter),
+          }}
+        />
+      )}
+      <div className="relative flex flex-col h-full">
       {/* Logo */}
       <div className="flex items-center gap-2.5 px-5 h-[var(--topbar-height)] shrink-0 border-b border-[var(--color-border)]">
         <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-[var(--color-accent)] to-[var(--color-accent-2)] flex items-center justify-center shrink-0">
@@ -288,6 +393,7 @@ export function Sidebar({ onClose }: SidebarProps) {
             <LogOut className="w-4 h-4" strokeWidth={1.75} />
           </button>
         </div>
+      </div>
       </div>
     </nav>
   );

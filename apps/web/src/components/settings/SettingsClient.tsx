@@ -565,6 +565,10 @@ function ProfileTab() {
               backgroundId: me?.backgroundId ?? null,
               backgroundImageUrl: me?.backgroundImageUrl,
               backgroundFilter: me?.backgroundFilter,
+              backgroundImageScope: me?.backgroundImageScope,
+              sidebarBackgroundId: me?.sidebarBackgroundId,
+              sidebarImageUrl: me?.sidebarImageUrl,
+              sidebarImageFilter: me?.sidebarImageFilter,
             })
           }
         >

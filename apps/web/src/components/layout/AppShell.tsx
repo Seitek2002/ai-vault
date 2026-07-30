@@ -17,13 +17,17 @@ export function AppShell({ children }: AppShellProps) {
   const { data: me } = useQuery({ queryKey: ["me"], queryFn: settingsApi.getMe });
   const editActive = useBackgroundEditStore((s) => s.active);
   const previewId = useBackgroundEditStore((s) => s.previewId);
-  const previewImageUrl = useBackgroundEditStore((s) => s.previewImageUrl);
-  const previewFilter = useBackgroundEditStore((s) => s.previewFilter);
+  const previewScope = useBackgroundEditStore((s) => s.previewScope);
+  const previewRight = useBackgroundEditStore((s) => s.right);
 
   // While the picker is open, the live (unsaved) choice wins over the persisted value.
   const backgroundPreset = getBackgroundPreset(editActive ? previewId : me?.backgroundId);
-  const imageUrl = editActive ? previewImageUrl : me?.backgroundImageUrl;
-  const imageFilter = editActive ? previewFilter : (me?.backgroundFilter ?? DEFAULT_BACKGROUND_FILTER);
+  const scope = editActive ? previewScope : (me?.backgroundImageScope ?? "right");
+  const imageUrl = editActive ? previewRight.imageUrl : me?.backgroundImageUrl;
+  const imageFilter = editActive ? previewRight.filter : (me?.backgroundFilter ?? DEFAULT_BACKGROUND_FILTER);
+  // 'left' scope means the photo belongs to the sidebar only — main shows none.
+  const showImage = scope !== "left" && !!imageUrl;
+  const spanning = scope === "all";
 
   const openDrawer = useCallback(() => setDrawerOpen(true), []);
   const closeDrawer = useCallback(() => setDrawerOpen(false), []);
@@ -64,12 +68,13 @@ export function AppShell({ children }: AppShellProps) {
           className="relative flex-1 overflow-hidden"
           style={backgroundPreset?.css ? { backgroundImage: backgroundPreset.css } : undefined}
         >
-          {imageUrl && (
+          {showImage && (
             <div
               aria-hidden="true"
-              className="pointer-events-none absolute -inset-16 bg-cover bg-center"
+              className={spanning ? "pointer-events-none fixed inset-0" : "pointer-events-none absolute -inset-16 bg-cover bg-center"}
               style={{
                 backgroundImage: `url(${imageUrl})`,
+                ...(spanning ? { backgroundSize: "cover", backgroundPosition: "center" } : {}),
                 opacity: imageFilter.opacity / 100,
                 filter: backgroundFilterCss(imageFilter),
               }}

@@ -77,3 +77,13 @@ export const DEFAULT_BACKGROUND_FILTER: BackgroundFilter = {
 export function backgroundFilterCss(f: BackgroundFilter): string {
   return `blur(${f.blur}px) brightness(${f.brightness}%) saturate(${f.saturate}%)`;
 }
+
+/** Where the uploaded photo(s) render: whole app, main area only, sidebar only, or independently on each. */
+export type BackgroundImageScope = "right" | "left" | "all" | "split";
+
+export const BACKGROUND_IMAGE_SCOPE_OPTIONS: Array<{ value: BackgroundImageScope; label: string }> = [
+  { value: "right", label: "Только справа" },
+  { value: "left", label: "Только слева" },
+  { value: "all", label: "Везде" },
+  { value: "split", label: "Разные фото" },
+];

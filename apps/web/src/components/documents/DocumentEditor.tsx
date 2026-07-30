@@ -60,36 +60,38 @@ function SaveAsTemplateModal({
   });
 
   return (
-    <Modal onClose={onClose} size="sm" className="p-5">
-      <h3 className="text-sm font-semibold text-[var(--color-text-primary)] mb-3">
-        Сохранить как шаблон
-      </h3>
-      <Input
-        type="text"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        placeholder="Название шаблона"
-        autoFocus
-        className="mb-3"
-      />
-      {mutation.isError && (
-        <p className="text-xs text-red-400 mb-2">
-          {mutation.error instanceof Error ? mutation.error.message : "Ошибка сохранения"}
-        </p>
-      )}
-      <div className="flex justify-end gap-2">
-        <Button size="sm" variant="secondary" onClick={onClose}>
-          Отмена
-        </Button>
-        <Button
-          size="sm"
-          onClick={() => mutation.mutate()}
-          disabled={!name.trim()}
-          loading={mutation.isPending}
-          loadingText="Сохраняю…"
-        >
-          Сохранить
-        </Button>
+    <Modal onClose={onClose} size="sm">
+      <div className="p-5">
+        <h3 className="text-sm font-semibold text-[var(--color-text-primary)] mb-3">
+          Сохранить как шаблон
+        </h3>
+        <Input
+          type="text"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Название шаблона"
+          autoFocus
+          className="mb-3"
+        />
+        {mutation.isError && (
+          <p className="text-xs text-red-400 mb-2">
+            {mutation.error instanceof Error ? mutation.error.message : "Ошибка сохранения"}
+          </p>
+        )}
+        <div className="flex justify-end gap-2">
+          <Button size="sm" variant="secondary" onClick={onClose}>
+            Отмена
+          </Button>
+          <Button
+            size="sm"
+            onClick={() => mutation.mutate()}
+            disabled={!name.trim()}
+            loading={mutation.isPending}
+            loadingText="Сохраняю…"
+          >
+            Сохранить
+          </Button>
+        </div>
       </div>
     </Modal>
   );

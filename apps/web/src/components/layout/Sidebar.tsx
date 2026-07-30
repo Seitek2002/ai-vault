@@ -41,7 +41,7 @@ export function Sidebar({ onClose }: SidebarProps) {
         <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-[var(--color-accent)] to-[var(--color-accent-2)] flex items-center justify-center shrink-0">
           <span className="text-white font-bold text-xs leading-none">AI</span>
         </div>
-        <span className="font-semibold text-[var(--color-text-primary)] tracking-tight">
+        <span className="font-semibold bg-gradient-to-r from-[var(--color-text-primary)] to-[var(--color-accent-2)] bg-clip-text text-transparent tracking-tight">
           AI Vault
         </span>
       </div>
@@ -56,12 +56,15 @@ export function Sidebar({ onClose }: SidebarProps) {
                 href={href}
                 {...(onClose ? { onClick: onClose } : {})}
                 className={[
-                  "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
+                  "relative overflow-hidden flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
                   active
                     ? "bg-[var(--color-accent-dim)] text-[var(--color-accent)] border border-[var(--color-accent-border)]"
                     : "text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-elevated)] hover:text-[var(--color-text-primary)]",
                 ].join(" ")}
               >
+                {active && (
+                  <span className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-[var(--color-accent)] to-[var(--color-accent-2)]" />
+                )}
                 <Icon className="w-4.5 h-4.5 shrink-0" strokeWidth={1.75} />
                 {label}
               </Link>

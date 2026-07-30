@@ -37,11 +37,12 @@ export function Modal({
       />
       <div
         className={cn(
-          "relative z-10 w-full bg-[var(--color-bg-surface)] rounded-2xl border border-[var(--color-border)] shadow-2xl animate-scale-in",
+          "relative z-10 w-full overflow-hidden bg-[var(--color-bg-surface)] rounded-2xl border border-[var(--color-border)] shadow-2xl animate-scale-in",
           SIZES[size],
           className,
         )}
       >
+        <div className="h-0.5 bg-gradient-to-r from-[var(--color-accent)] to-[var(--color-accent-2)]" />
         {children}
       </div>
     </div>

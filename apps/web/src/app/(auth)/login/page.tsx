@@ -54,7 +54,7 @@ function LoginForm() {
         <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[var(--color-accent)] to-[var(--color-accent-2)] flex items-center justify-center">
           <span className="text-white font-bold text-sm">AI</span>
         </div>
-        <span className="text-xl font-semibold text-[var(--color-text-primary)]">AI Vault</span>
+        <span className="text-xl font-semibold bg-gradient-to-r from-[var(--color-text-primary)] to-[var(--color-accent-2)] bg-clip-text text-transparent">AI Vault</span>
       </div>
 
       <Card className="p-8 shadow-xl">

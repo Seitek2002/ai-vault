@@ -22,7 +22,13 @@ export function Topbar({ title, onMenuClick }: TopbarProps) {
         <div className="w-6 h-6 rounded-md bg-gradient-to-br from-[var(--color-accent)] to-[var(--color-accent-2)] flex items-center justify-center shrink-0">
           <span className="text-white font-bold text-[10px]">AI</span>
         </div>
-        <span className="font-semibold text-[var(--color-text-primary)] text-sm">
+        <span
+          className={
+            title
+              ? "font-semibold text-[var(--color-text-primary)] text-sm"
+              : "font-semibold text-sm bg-gradient-to-r from-[var(--color-text-primary)] to-[var(--color-accent-2)] bg-clip-text text-transparent"
+          }
+        >
           {title ?? "AI Vault"}
         </span>
       </div>

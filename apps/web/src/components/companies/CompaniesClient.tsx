@@ -296,20 +296,22 @@ function DeleteModal({
   });
 
   return (
-    <Modal onClose={onClose} size="sm" className="p-6">
-      <h2 className="text-base font-semibold text-[var(--color-text-primary)] mb-2">
-        Удалить компанию?
-      </h2>
-      <p className="text-sm text-[var(--color-text-secondary)] mb-5">
-        <span className="font-medium text-[var(--color-text-primary)]">{cp.name}</span> будет удалена. Это действие нельзя отменить.
-      </p>
-      <div className="flex gap-2 justify-end">
-        <Button variant="secondary" onClick={onClose}>
-          Отмена
-        </Button>
-        <Button variant="danger" onClick={() => mutation.mutate()} loading={mutation.isPending} loadingText="Удаление…">
-          Удалить
-        </Button>
+    <Modal onClose={onClose} size="sm">
+      <div className="p-6">
+        <h2 className="text-base font-semibold text-[var(--color-text-primary)] mb-2">
+          Удалить компанию?
+        </h2>
+        <p className="text-sm text-[var(--color-text-secondary)] mb-5">
+          <span className="font-medium text-[var(--color-text-primary)]">{cp.name}</span> будет удалена. Это действие нельзя отменить.
+        </p>
+        <div className="flex gap-2 justify-end">
+          <Button variant="secondary" onClick={onClose}>
+            Отмена
+          </Button>
+          <Button variant="danger" onClick={() => mutation.mutate()} loading={mutation.isPending} loadingText="Удаление…">
+            Удалить
+          </Button>
+        </div>
       </div>
     </Modal>
   );

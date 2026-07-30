@@ -22,7 +22,7 @@ export function EmptyState({
       )}
     >
       {icon && (
-        <div className="w-12 h-12 rounded-xl bg-[var(--color-bg-surface)] flex items-center justify-center mb-4 border border-[var(--color-border)] text-[var(--color-text-muted)]">
+        <div className="w-14 h-14 rounded-full bg-gradient-to-br from-[var(--color-accent-dim)] to-[var(--color-accent-border)] flex items-center justify-center mb-4 text-[var(--color-accent)]">
           {icon}
         </div>
       )}

@@ -11,7 +11,7 @@ export default function ImportPage() {
     <div className="h-full overflow-y-auto p-6 lg:p-8">
       <PageHeader
         title="Импорт документа"
-        subtitle="Загрузите PDF или DOCX — содержимое структурируется автоматически"
+        subtitle="Загрузите PDF — файл сохранится как есть и привяжется к компании"
       />
       <ImportDropzone />
     </div>

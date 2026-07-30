@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { FilesService } from '../files/files.service';
@@ -165,20 +165,29 @@ export class DocumentsService {
     });
   }
 
+  /**
+   * Import no longer parses the uploaded file into an editable body — it just
+   * stores the original file, attaches it to a company, and tags it with a
+   * type/category. The document's body stays an empty placeholder; the
+   * original file remains available via the existing "original file" export.
+   */
   async importFromFile(organizationId: string, userId: string, dto: ImportDocumentDto) {
-    const [bodyJson, fileAsset] = await Promise.all([
-      this.files.extractAsPm(dto.fileId, organizationId),
-      this.files.findOne(dto.fileId, organizationId),
-    ]);
-
+    const fileAsset = await this.files.findOne(dto.fileId, organizationId);
+    if (fileAsset.mimeType !== 'application/pdf') {
+      throw new BadRequestException('Import accepts PDF files only');
+    }
+    const emptyBody: Prisma.InputJsonValue = { type: 'doc', content: [{ type: 'paragraph' }] };
     const title = fileAsset.originalName.replace(/\.[^.]+$/, '');
+
     const doc = await this.prisma.document.create({
       data: {
         organizationId,
         type: dto.type,
         title,
+        counterpartyId: dto.counterpartyId,
+        ...(dto.categoryId ? { categoryId: dto.categoryId } : {}),
         meta: {} as Prisma.InputJsonValue,
-        bodyJson: bodyJson as unknown as Prisma.InputJsonValue,
+        bodyJson: emptyBody,
         createdById: userId,
         fileAssets: { connect: { id: dto.fileId } },
       },
@@ -188,7 +197,7 @@ export class DocumentsService {
       data: {
         documentId: doc.id,
         version: 1,
-        bodyJson: bodyJson as unknown as Prisma.InputJsonValue,
+        bodyJson: emptyBody,
         createdById: userId,
       },
     });

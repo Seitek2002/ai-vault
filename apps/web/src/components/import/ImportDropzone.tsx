@@ -1,30 +1,50 @@
 "use client";
 
 import { useState, useRef, useCallback } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, FileText } from "lucide-react";
-import { Badge, Spinner } from "@/components/ui";
+import { ChevronLeft, FileText, Check, Plus } from "lucide-react";
+import { Badge, Input, Spinner } from "@/components/ui";
 import { uploadFile } from "@/lib/api/files";
 import { api } from "@/lib/api/client";
+import { counterpartiesApi } from "@/lib/api/counterparties";
+import { documentCategoriesApi } from "@/lib/api/documentCategories";
 import { BUILTIN_DOCUMENT_TYPE_LIST } from "@/lib/templates";
 import { DocumentType } from "@ai-vault/types";
 import type { DocumentDto } from "@ai-vault/types";
 
-const ACCEPTED = ".pdf,.docx,.doc,.txt";
-const ACCEPT_LABEL = "PDF, DOCX, TXT";
 const MAX_MB = 20;
 
-type Step = "pick-type" | "drop-file" | "processing";
+type Step = "type" | "company" | "drop-file" | "processing";
 
 export function ImportDropzone() {
   const router = useRouter();
+  const qc = useQueryClient();
   const inputRef = useRef<HTMLInputElement>(null);
-  const [step, setStep] = useState<Step>("pick-type");
+  const [step, setStep] = useState<Step>("type");
   const [docType, setDocType] = useState<DocumentType | null>(null);
+  const [categoryId, setCategoryId] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Company step state
+  const [companySearch, setCompanySearch] = useState("");
+  const [selectedExistingCompanyId, setSelectedExistingCompanyId] = useState<string | null>(null);
+  const [resolvedCompanyId, setResolvedCompanyId] = useState<string | null>(null);
+  const [companyToCreate, setCompanyToCreate] = useState<string | null>(null);
+
+  const { data: categories = [] } = useQuery({
+    queryKey: ["document-categories"],
+    queryFn: documentCategoriesApi.list,
+  });
+
+  const { data: searchedCompanies = [] } = useQuery({
+    queryKey: ["companies-search", companySearch],
+    queryFn: () => counterpartiesApi.list(companySearch || undefined),
+    enabled: step === "company",
+    staleTime: 30_000,
+  });
 
   const importMutation = useMutation({
     mutationFn: async (f: File) => {
@@ -32,14 +52,27 @@ export function ImportDropzone() {
       setStep("processing");
       setError(null);
 
+      let counterpartyId = resolvedCompanyId;
+      if (companyToCreate) {
+        const cp = await counterpartiesApi.quickCreate(companyToCreate);
+        counterpartyId = cp.id;
+        void qc.invalidateQueries({ queryKey: ["companies"] });
+        void qc.invalidateQueries({ queryKey: ["companies-search"] });
+        void qc.invalidateQueries({ queryKey: ["counterparties"] });
+      }
+      if (!counterpartyId) throw new Error("No company selected");
+
       const uploaded = await uploadFile(f);
       const doc = await api.post<DocumentDto>("/documents/import", {
         fileId: uploaded.id,
         type: docType,
+        counterpartyId,
+        ...(categoryId ? { categoryId } : {}),
       });
       return doc;
     },
     onSuccess: (doc) => {
+      void qc.invalidateQueries({ queryKey: ["documents"] });
       router.push(`/documents/${doc.id}`);
     },
     onError: (err) => {
@@ -50,6 +83,10 @@ export function ImportDropzone() {
 
   const handleFile = useCallback(
     (f: File) => {
+      if (f.type !== "application/pdf") {
+        setError("Принимаются только PDF-файлы.");
+        return;
+      }
       if (f.size > MAX_MB * 1024 * 1024) {
         setError(`Файл слишком большой. Максимум ${MAX_MB} МБ.`);
         return;
@@ -78,8 +115,36 @@ export function ImportDropzone() {
     [handleFile],
   );
 
-  /* ── Step 1: type selector ── */
-  if (step === "pick-type") {
+  function chooseBuiltin(type: DocumentType) {
+    setDocType(type);
+    setCategoryId(null);
+    setStep("company");
+  }
+
+  function chooseCategory(id: string) {
+    setDocType(DocumentType.CUSTOM);
+    setCategoryId(id);
+    setStep("company");
+  }
+
+  function handleCompanyNext() {
+    if (selectedExistingCompanyId) {
+      setResolvedCompanyId(selectedExistingCompanyId);
+      setCompanyToCreate(null);
+      setStep("drop-file");
+    } else if (companySearch.trim()) {
+      setResolvedCompanyId(null);
+      setCompanyToCreate(companySearch.trim());
+      setStep("drop-file");
+    }
+  }
+
+  const activeCategory = categoryId ? categories.find((c) => c.id === categoryId) : null;
+  const activeBuiltin = docType ? BUILTIN_DOCUMENT_TYPE_LIST.find((t) => t.type === docType) : null;
+  const activeCompanyName = companyToCreate ?? searchedCompanies.find((c) => c.id === resolvedCompanyId)?.name;
+
+  /* ── Step 1: type/category selector ── */
+  if (step === "type") {
     return (
       <div className="max-w-lg mx-auto">
         <h2 className="text-base font-semibold text-[var(--color-text-primary)] mb-4">
@@ -89,16 +154,8 @@ export function ImportDropzone() {
           {BUILTIN_DOCUMENT_TYPE_LIST.map((tpl) => (
             <button
               key={tpl.type}
-              onClick={() => {
-                setDocType(tpl.type);
-                setStep("drop-file");
-              }}
-              className={[
-                "flex flex-col items-start gap-1.5 px-4 py-4 rounded-xl border text-left transition-all",
-                docType === tpl.type
-                  ? "border-[var(--color-accent)] bg-[var(--color-accent)]/10"
-                  : "border-[var(--color-border)] bg-[var(--color-bg-surface)] hover:border-[var(--color-border-light)]",
-              ].join(" ")}
+              onClick={() => chooseBuiltin(tpl.type)}
+              className="flex flex-col items-start gap-1.5 px-4 py-4 rounded-xl border text-left transition-all border-[var(--color-border)] bg-[var(--color-bg-surface)] hover:border-[var(--color-border-light)]"
             >
               <Badge color={tpl.color}>{tpl.shortLabel}</Badge>
               <span className="text-xs text-[var(--color-text-secondary)] leading-tight">
@@ -107,27 +164,161 @@ export function ImportDropzone() {
             </button>
           ))}
         </div>
+
+        {categories.length > 0 && (
+          <>
+            <h3 className="text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-wider mt-6 mb-3">
+              Мои категории
+            </h3>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {categories.map((c) => (
+                <button
+                  key={c.id}
+                  onClick={() => chooseCategory(c.id)}
+                  className="flex flex-col items-start gap-1.5 px-4 py-4 rounded-xl border text-left transition-all border-[var(--color-border)] bg-[var(--color-bg-surface)] hover:border-[var(--color-border-light)]"
+                >
+                  <span
+                    className="rounded-full px-2 py-0.5 text-xs font-medium"
+                    style={{ background: `${c.color}26`, color: c.color }}
+                  >
+                    {c.shortLabel}
+                  </span>
+                  <span className="text-xs text-[var(--color-text-secondary)] leading-tight">
+                    {c.name}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </>
+        )}
       </div>
     );
   }
 
-  /* ── Step 2: drop zone ── */
-  if (step === "drop-file") {
-    const tpl = docType ? BUILTIN_DOCUMENT_TYPE_LIST.find((t) => t.type === docType) : null;
+  /* ── Step 2: company (mandatory) ── */
+  if (step === "company") {
+    const canAdvance = !!selectedExistingCompanyId || companySearch.trim().length > 0;
     return (
       <div className="max-w-lg mx-auto space-y-4">
-        {/* Back + type badge */}
         <div className="flex items-center gap-3">
           <button
-            onClick={() => { setStep("pick-type"); setFile(null); setError(null); }}
+            onClick={() => setStep("type")}
             className="text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] transition-colors"
           >
             <ChevronLeft className="w-4 h-4" />
           </button>
-          {tpl && <Badge color={tpl.color}>{tpl.label}</Badge>}
+          {activeBuiltin && <Badge color={activeBuiltin.color}>{activeBuiltin.label}</Badge>}
+          {activeCategory && (
+            <span
+              className="rounded-full px-2 py-0.5 text-xs font-medium"
+              style={{ background: `${activeCategory.color}26`, color: activeCategory.color }}
+            >
+              {activeCategory.name}
+            </span>
+          )}
         </div>
 
-        {/* Drop zone */}
+        <h2 className="text-base font-semibold text-[var(--color-text-primary)]">
+          Выберите компанию
+        </h2>
+
+        <Input
+          type="text"
+          placeholder="Поиск или название новой компании…"
+          value={companySearch}
+          onChange={(e) => {
+            setCompanySearch(e.target.value);
+            setSelectedExistingCompanyId(null);
+          }}
+          autoFocus
+        />
+
+        <div className="space-y-1 max-h-52 overflow-y-auto">
+          {searchedCompanies.map((c) => (
+            <button
+              key={c.id}
+              onClick={() => {
+                setSelectedExistingCompanyId(c.id);
+                setCompanySearch(c.name);
+              }}
+              className={[
+                "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border text-left transition-all",
+                selectedExistingCompanyId === c.id
+                  ? "border-[var(--color-accent)] bg-[var(--color-accent)]/10"
+                  : "border-[var(--color-border)] bg-[var(--color-bg-elevated)] hover:border-[var(--color-border-hover)]",
+              ].join(" ")}
+            >
+              <div className="w-7 h-7 rounded-lg bg-[var(--color-bg-surface)] border border-[var(--color-border)] flex items-center justify-center shrink-0">
+                <span className="text-xs font-bold text-[var(--color-text-secondary)]">
+                  {c.name[0]?.toUpperCase()}
+                </span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm text-[var(--color-text-primary)] truncate">{c.name}</p>
+                {c.inn && <p className="text-xs text-[var(--color-text-muted)]">ИНН: {c.inn}</p>}
+              </div>
+              {selectedExistingCompanyId === c.id && (
+                <Check className="w-4 h-4 text-[var(--color-accent)] shrink-0" strokeWidth={2.5} />
+              )}
+            </button>
+          ))}
+
+          {companySearch.trim() && !selectedExistingCompanyId && (
+            <div className="px-3 py-2.5 rounded-xl border border-dashed border-[var(--color-border)] bg-[var(--color-bg-elevated)] flex items-center gap-2">
+              <Plus className="w-4 h-4 text-[var(--color-accent)] shrink-0" strokeWidth={2.5} />
+              <p className="text-sm text-[var(--color-text-secondary)]">
+                Создать компанию{" "}
+                <span className="text-[var(--color-text-primary)] font-medium">«{companySearch.trim()}»</span>
+              </p>
+            </div>
+          )}
+
+          {!companySearch.trim() && searchedCompanies.length === 0 && (
+            <div className="py-8 text-center">
+              <p className="text-sm text-[var(--color-text-muted)]">Компаний пока нет</p>
+              <p className="mt-1 text-xs text-[var(--color-text-muted)]">Введите название, чтобы создать новую</p>
+            </div>
+          )}
+        </div>
+
+        <div className="flex justify-end">
+          <button
+            onClick={handleCompanyNext}
+            disabled={!canAdvance}
+            className="px-4 py-2 rounded-lg text-sm font-semibold bg-gradient-to-r from-[var(--color-accent)] to-[var(--color-accent-2)] text-white disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+          >
+            Далее
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  /* ── Step 3: drop zone ── */
+  if (step === "drop-file") {
+    return (
+      <div className="max-w-lg mx-auto space-y-4">
+        <div className="flex items-center gap-3 flex-wrap">
+          <button
+            onClick={() => setStep("company")}
+            className="text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] transition-colors"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+          {activeBuiltin && <Badge color={activeBuiltin.color}>{activeBuiltin.label}</Badge>}
+          {activeCategory && (
+            <span
+              className="rounded-full px-2 py-0.5 text-xs font-medium"
+              style={{ background: `${activeCategory.color}26`, color: activeCategory.color }}
+            >
+              {activeCategory.name}
+            </span>
+          )}
+          {activeCompanyName && (
+            <span className="text-xs text-[var(--color-text-muted)]">{activeCompanyName}</span>
+          )}
+        </div>
+
         <div
           onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
           onDragLeave={() => setDragging(false)}
@@ -146,13 +337,13 @@ export function ImportDropzone() {
               Перетащите файл сюда
             </p>
             <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-              или нажмите для выбора · {ACCEPT_LABEL} · до {MAX_MB} МБ
+              или нажмите для выбора · PDF · до {MAX_MB} МБ
             </p>
           </div>
           <input
             ref={inputRef}
             type="file"
-            accept={ACCEPTED}
+            accept=".pdf"
             className="hidden"
             onChange={onInputChange}
           />
@@ -167,19 +358,16 @@ export function ImportDropzone() {
     );
   }
 
-  /* ── Step 3: processing ── */
+  /* ── Step 4: processing ── */
   return (
     <div className="max-w-lg mx-auto flex flex-col items-center justify-center gap-6 py-16 text-[var(--color-accent)]">
       <Spinner size="lg" className="w-12 h-12" />
       <div className="text-center text-[var(--color-text-primary)]">
         <p className="text-sm font-medium">
-          Обрабатываю файл…
+          Сохраняю файл…
         </p>
         <p className="mt-1 text-xs text-[var(--color-text-muted)]">
           {file?.name ?? ""}
-        </p>
-        <p className="mt-2 text-xs text-[var(--color-text-muted)]">
-          Это может занять несколько секунд.
         </p>
       </div>
     </div>

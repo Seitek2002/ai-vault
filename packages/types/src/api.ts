@@ -80,6 +80,8 @@ export interface FileUploadResponse {
 export interface ImportDocumentRequest {
   fileId: string;
   type: DocumentType;
+  counterpartyId: string;
+  categoryId?: string;
 }
 
 export interface ImportDocumentResponse {

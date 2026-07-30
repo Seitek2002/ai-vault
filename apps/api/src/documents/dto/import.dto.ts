@@ -1,4 +1,4 @@
-import { IsString, IsEnum } from 'class-validator';
+import { IsString, IsEnum, IsOptional } from 'class-validator';
 import { DocumentType } from '@prisma/client';
 
 export class ImportDocumentDto {
@@ -7,4 +7,11 @@ export class ImportDocumentDto {
 
   @IsEnum(DocumentType)
   declare type: DocumentType;
+
+  @IsString()
+  declare counterpartyId: string;
+
+  @IsOptional()
+  @IsString()
+  categoryId?: string;
 }

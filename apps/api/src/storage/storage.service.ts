@@ -6,6 +6,7 @@ import {
   GetObjectCommand,
   CreateBucketCommand,
   HeadBucketCommand,
+  PutBucketPolicyCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { Readable } from 'stream';
@@ -43,6 +44,31 @@ export class StorageService implements OnModuleInit {
       } catch (err) {
         this.logger.warn(`Could not create bucket "${this.bucket}": ${(err as Error).message}`);
       }
+    }
+
+    // Every uploaded object (avatars, background photos, exported/imported files) is
+    // referenced directly via its public s3Url, so the bucket needs a public-read
+    // policy — without it, GETs 403 even though uploads succeed. Idempotent, safe to
+    // re-apply on every boot.
+    try {
+      await this.s3.send(
+        new PutBucketPolicyCommand({
+          Bucket: this.bucket,
+          Policy: JSON.stringify({
+            Version: '2012-10-17',
+            Statement: [
+              {
+                Effect: 'Allow',
+                Principal: '*',
+                Action: ['s3:GetObject'],
+                Resource: [`arn:aws:s3:::${this.bucket}/*`],
+              },
+            ],
+          }),
+        }),
+      );
+    } catch (err) {
+      this.logger.warn(`Could not set public-read policy on bucket "${this.bucket}": ${(err as Error).message}`);
     }
   }
 

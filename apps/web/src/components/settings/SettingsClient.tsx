@@ -457,7 +457,7 @@ function ProfileTab() {
     queryKey: ['me'],
     queryFn: settingsApi.getMe,
   });
-  const setBackgroundEditActive = useBackgroundEditStore((s) => s.setActive);
+  const enterBackgroundEdit = useBackgroundEditStore((s) => s.enter);
 
   const [name, setName] = useState('');
   const [currentPassword, setCurrentPassword] = useState('');
@@ -557,7 +557,7 @@ function ProfileTab() {
         <p className="mb-3 text-sm text-[var(--color-text-muted)]">
           Настройте фон, который отображается в рабочей области справа.
         </p>
-        <Button type="button" variant="secondary" onClick={() => setBackgroundEditActive(true)}>
+        <Button type="button" variant="secondary" onClick={() => enterBackgroundEdit(me?.backgroundId ?? null)}>
           Настроить фон
         </Button>
       </div>

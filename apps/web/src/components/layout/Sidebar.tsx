@@ -7,7 +7,7 @@ import type { ComponentType, SVGProps } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Check, FileText, Building2, Wand2, Upload, Settings, LogOut, Vault } from "lucide-react";
 import { authApi } from "@/lib/api/auth";
-import { settingsApi, type UserProfile } from "@/lib/api/settings";
+import { settingsApi } from "@/lib/api/settings";
 import { useBackgroundEditStore } from "@/stores/backgroundEdit.store";
 import { BACKGROUND_PRESETS, type BackgroundPreset } from "@/lib/backgrounds";
 import { Button } from "@/components/ui";
@@ -32,17 +32,19 @@ interface SidebarProps {
 
 const CATEGORIES: Array<BackgroundPreset["category"] | "Все"> = ["Все", "Градиенты", "Однотонные", "Тёмные"];
 
-function BackgroundPicker({ me }: { me: UserProfile | undefined }) {
+function BackgroundPicker() {
   const qc = useQueryClient();
-  const setActive = useBackgroundEditStore((s) => s.setActive);
-  const [selected, setSelected] = useState(me?.backgroundId ?? "default");
+  const previewId = useBackgroundEditStore((s) => s.previewId);
+  const setPreview = useBackgroundEditStore((s) => s.setPreview);
+  const exit = useBackgroundEditStore((s) => s.exit);
+  const selected = previewId ?? "default";
   const [filter, setFilter] = useState<BackgroundPreset["category"] | "Все">("Все");
 
   const mutation = useMutation({
     mutationFn: () => settingsApi.updateMe({ backgroundId: selected === "default" ? null : selected }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["me"] });
-      setActive(false);
+      exit();
     },
   });
 
@@ -77,7 +79,7 @@ function BackgroundPicker({ me }: { me: UserProfile | undefined }) {
           {shown.map((b) => (
             <button
               key={b.id}
-              onClick={() => setSelected(b.id)}
+              onClick={() => setPreview(b.id)}
               className={[
                 "flex flex-col gap-1.5 p-1.5 rounded-lg border transition-all",
                 selected === b.id
@@ -100,7 +102,7 @@ function BackgroundPicker({ me }: { me: UserProfile | undefined }) {
       </div>
 
       <div className="px-4 py-4 border-t border-[var(--color-border)] shrink-0 flex gap-2">
-        <Button variant="secondary" size="sm" onClick={() => setActive(false)} fullWidth>
+        <Button variant="secondary" size="sm" onClick={exit} fullWidth>
           Отмена
         </Button>
         <Button size="sm" onClick={() => mutation.mutate()} loading={mutation.isPending} fullWidth>
@@ -143,7 +145,7 @@ export function Sidebar({ onClose }: SidebarProps) {
       {/* Nav links — swapped for the background picker while customizing */}
       {backgroundEditActive ? (
         <div className="flex-1 min-h-0">
-          <BackgroundPicker me={me} />
+          <BackgroundPicker />
         </div>
       ) : (
         <ul className="flex flex-col gap-0.5 px-3 py-4 flex-1">

@@ -6,6 +6,7 @@ import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
 import { settingsApi } from "@/lib/api/settings";
 import { getBackgroundPreset } from "@/lib/backgrounds";
+import { useBackgroundEditStore } from "@/stores/backgroundEdit.store";
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -14,7 +15,9 @@ interface AppShellProps {
 export function AppShell({ children }: AppShellProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const { data: me } = useQuery({ queryKey: ["me"], queryFn: settingsApi.getMe });
-  const backgroundPreset = getBackgroundPreset(me?.backgroundId);
+  const previewId = useBackgroundEditStore((s) => s.previewId);
+  // While the picker is open, the live (unsaved) choice wins over the persisted value.
+  const backgroundPreset = getBackgroundPreset(previewId ?? me?.backgroundId);
 
   const openDrawer = useCallback(() => setDrawerOpen(true), []);
   const closeDrawer = useCallback(() => setDrawerOpen(false), []);

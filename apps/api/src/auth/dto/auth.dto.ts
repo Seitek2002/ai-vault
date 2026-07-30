@@ -1,5 +1,40 @@
-import { IsEmail, IsString, IsOptional, IsEnum, MinLength, MaxLength } from 'class-validator';
+import {
+  IsEmail,
+  IsString,
+  IsOptional,
+  IsEnum,
+  IsNumber,
+  IsBoolean,
+  Min,
+  Max,
+  MinLength,
+  MaxLength,
+  ValidateNested,
+} from 'class-validator';
+import { Type } from 'class-transformer';
 import { UserRole } from '@prisma/client';
+
+export class BackgroundFilterDto {
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  declare opacity: number;
+
+  @IsNumber()
+  @Min(0)
+  @Max(20)
+  declare blur: number;
+
+  @IsNumber()
+  @Min(50)
+  @Max(150)
+  declare brightness: number;
+
+  @IsNumber()
+  @Min(0)
+  @Max(200)
+  declare saturate: number;
+}
 
 export class RegisterDto {
   @IsString()
@@ -98,4 +133,14 @@ export class UpdateMeDto {
   @IsString()
   @IsOptional()
   backgroundId?: string | null;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => BackgroundFilterDto)
+  backgroundFilter?: BackgroundFilterDto | null;
+
+  /** Clears the user's uploaded background photo (set via /auth/me/background-image). */
+  @IsOptional()
+  @IsBoolean()
+  removeBackgroundImage?: boolean;
 }

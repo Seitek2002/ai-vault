@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
 import { settingsApi } from "@/lib/api/settings";
-import { getBackgroundPreset } from "@/lib/backgrounds";
+import { getBackgroundPreset, backgroundFilterCss, DEFAULT_BACKGROUND_FILTER } from "@/lib/backgrounds";
 import { useBackgroundEditStore } from "@/stores/backgroundEdit.store";
 
 interface AppShellProps {
@@ -15,9 +15,15 @@ interface AppShellProps {
 export function AppShell({ children }: AppShellProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const { data: me } = useQuery({ queryKey: ["me"], queryFn: settingsApi.getMe });
+  const editActive = useBackgroundEditStore((s) => s.active);
   const previewId = useBackgroundEditStore((s) => s.previewId);
+  const previewImageUrl = useBackgroundEditStore((s) => s.previewImageUrl);
+  const previewFilter = useBackgroundEditStore((s) => s.previewFilter);
+
   // While the picker is open, the live (unsaved) choice wins over the persisted value.
-  const backgroundPreset = getBackgroundPreset(previewId ?? me?.backgroundId);
+  const backgroundPreset = getBackgroundPreset(editActive ? previewId : me?.backgroundId);
+  const imageUrl = editActive ? previewImageUrl : me?.backgroundImageUrl;
+  const imageFilter = editActive ? previewFilter : (me?.backgroundFilter ?? DEFAULT_BACKGROUND_FILTER);
 
   const openDrawer = useCallback(() => setDrawerOpen(true), []);
   const closeDrawer = useCallback(() => setDrawerOpen(false), []);
@@ -55,10 +61,21 @@ export function AppShell({ children }: AppShellProps) {
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
         <Topbar onMenuClick={openDrawer} />
         <main
-          className="flex-1 overflow-hidden"
+          className="relative flex-1 overflow-hidden"
           style={backgroundPreset?.css ? { backgroundImage: backgroundPreset.css } : undefined}
         >
-          {children}
+          {imageUrl && (
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute -inset-16 bg-cover bg-center"
+              style={{
+                backgroundImage: `url(${imageUrl})`,
+                opacity: imageFilter.opacity / 100,
+                filter: backgroundFilterCss(imageFilter),
+              }}
+            />
+          )}
+          <div className="relative h-full">{children}</div>
         </main>
       </div>
     </div>

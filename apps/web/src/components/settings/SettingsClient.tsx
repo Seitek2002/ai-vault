@@ -557,7 +557,17 @@ function ProfileTab() {
         <p className="mb-3 text-sm text-[var(--color-text-muted)]">
           Настройте фон, который отображается в рабочей области справа.
         </p>
-        <Button type="button" variant="secondary" onClick={() => enterBackgroundEdit(me?.backgroundId ?? null)}>
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={() =>
+            enterBackgroundEdit({
+              backgroundId: me?.backgroundId ?? null,
+              backgroundImageUrl: me?.backgroundImageUrl,
+              backgroundFilter: me?.backgroundFilter,
+            })
+          }
+        >
           Настроить фон
         </Button>
       </div>

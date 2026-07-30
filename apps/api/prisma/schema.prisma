@@ -74,6 +74,8 @@ model User {
   positionId     String?
   avatarUrl      String?
   backgroundId   String?
+  backgroundImageUrl String?
+  backgroundFilter   Json?
   createdAt      DateTime @default(now())
 
   organization     Organization?     @relation(fields: [organizationId], references: [id], onDelete: SetNull)

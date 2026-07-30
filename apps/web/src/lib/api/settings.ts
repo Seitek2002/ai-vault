@@ -19,6 +19,13 @@ export interface CompanySettings {
   currency?: string | null;
 }
 
+export interface BackgroundFilter {
+  opacity: number;
+  blur: number;
+  brightness: number;
+  saturate: number;
+}
+
 export interface UserProfile {
   id: string;
   email: string;
@@ -27,6 +34,8 @@ export interface UserProfile {
   organizationId: string | null;
   avatarUrl?: string | null;
   backgroundId?: string | null;
+  backgroundImageUrl?: string | null;
+  backgroundFilter?: BackgroundFilter | null;
   position?: Position | null;
 }
 
@@ -49,6 +58,8 @@ export interface UpdateMeDto {
   newPassword?: string;
   currentPassword?: string;
   backgroundId?: string | null;
+  backgroundFilter?: BackgroundFilter | null;
+  removeBackgroundImage?: boolean;
 }
 
 export interface Member {
@@ -87,6 +98,24 @@ export interface AuthTokens {
   refreshToken: string;
 }
 
+async function uploadUserFile(path: string, file: File): Promise<UserProfile> {
+  const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+  const form = new FormData();
+  form.append('file', file);
+
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: form,
+  });
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ message: res.statusText }));
+    throw new ApiError(res.status, (body as { message?: string }).message ?? res.statusText);
+  }
+  return res.json() as Promise<UserProfile>;
+}
+
 export const settingsApi = {
   getSettings: () => api.get<CompanySettings>('/settings'),
   updateSettings: (dto: UpdateSettingsDto) => api.patch<CompanySettings>('/settings', dto),
@@ -97,21 +126,6 @@ export const settingsApi = {
   createMember: (dto: CreateMemberDto) => api.post<Member>('/auth/members/create', dto),
   updateMember: (id: string, dto: UpdateMemberDto) => api.patch<Member>(`/auth/members/${id}`, dto),
   createOrganization: (dto: CreateOrganizationDto) => api.post<AuthTokens>('/auth/organization', dto),
-  uploadAvatar: async (file: File): Promise<UserProfile> => {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
-    const form = new FormData();
-    form.append('file', file);
-
-    const res = await fetch(`${API_BASE}/auth/me/avatar`, {
-      method: 'POST',
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-      body: form,
-    });
-
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({ message: res.statusText }));
-      throw new ApiError(res.status, (body as { message?: string }).message ?? res.statusText);
-    }
-    return res.json() as Promise<UserProfile>;
-  },
+  uploadAvatar: (file: File) => uploadUserFile('/auth/me/avatar', file),
+  uploadBackgroundImage: (file: File) => uploadUserFile('/auth/me/background-image', file),
 };

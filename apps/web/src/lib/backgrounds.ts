@@ -55,3 +55,25 @@ export function getBackgroundPreset(id: string | null | undefined): BackgroundPr
   if (!id) return undefined;
   return BACKGROUND_PRESETS.find((b) => b.id === id);
 }
+
+export interface BackgroundFilter {
+  /** 0–100, how visible the photo is over the color layer beneath it. */
+  opacity: number;
+  /** 0–20 (px). */
+  blur: number;
+  /** 50–150 (%). */
+  brightness: number;
+  /** 0–200 (%). */
+  saturate: number;
+}
+
+export const DEFAULT_BACKGROUND_FILTER: BackgroundFilter = {
+  opacity: 100,
+  blur: 0,
+  brightness: 100,
+  saturate: 100,
+};
+
+export function backgroundFilterCss(f: BackgroundFilter): string {
+  return `blur(${f.blur}px) brightness(${f.brightness}%) saturate(${f.saturate}%)`;
+}

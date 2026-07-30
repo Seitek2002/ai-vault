@@ -18,6 +18,14 @@ import { IS_PUBLIC_KEY } from './guards/jwt-auth.guard';
 
 const Public = () => SetMetadata(IS_PUBLIC_KEY, true);
 
+async function readMultipartFile(req: FastifyRequest): Promise<{ buffer: Buffer; mimeType: string } | null> {
+  const file = await (
+    req as FastifyRequest & { file: () => Promise<{ mimetype: string; toBuffer: () => Promise<Buffer> } | undefined> }
+  ).file();
+  if (!file) return null;
+  return { buffer: await file.toBuffer(), mimeType: file.mimetype };
+}
+
 @Controller('auth')
 export class AuthController {
   constructor(private auth: AuthService) {}
@@ -60,13 +68,16 @@ export class AuthController {
 
   @Post('me/avatar')
   async uploadAvatar(@Req() req: FastifyRequest, @CurrentUser() user: JwtPayload) {
-    const file = await (
-      req as FastifyRequest & { file: () => Promise<{ mimetype: string; toBuffer: () => Promise<Buffer> } | undefined> }
-    ).file();
+    const file = await readMultipartFile(req);
     if (!file) throw new BadRequestException('No file provided');
+    return this.auth.updateAvatar(user.sub, file);
+  }
 
-    const buffer = await file.toBuffer();
-    return this.auth.updateAvatar(user.sub, { buffer, mimeType: file.mimetype });
+  @Post('me/background-image')
+  async uploadBackgroundImage(@Req() req: FastifyRequest, @CurrentUser() user: JwtPayload) {
+    const file = await readMultipartFile(req);
+    if (!file) throw new BadRequestException('No file provided');
+    return this.auth.updateBackgroundImage(user.sub, file);
   }
 
   @Post('organization')

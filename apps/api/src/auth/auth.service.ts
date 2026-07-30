@@ -5,6 +5,7 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
+import type { Prisma } from '@prisma/client';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as argon2 from 'argon2';
@@ -160,6 +161,8 @@ export class AuthService {
         organizationId: true,
         avatarUrl: true,
         backgroundId: true,
+        backgroundImageUrl: true,
+        backgroundFilter: true,
         position: { select: { id: true, name: true, permissions: true } },
       },
     });
@@ -276,10 +279,20 @@ export class AuthService {
       if (!valid) throw new UnauthorizedException('Incorrect current password');
     }
 
-    const data: { name?: string; passwordHash?: string; backgroundId?: string | null } = {};
+    const data: {
+      name?: string;
+      passwordHash?: string;
+      backgroundId?: string | null;
+      backgroundFilter?: Prisma.InputJsonValue;
+      backgroundImageUrl?: string | null;
+    } = {};
     if (dto.name) data.name = dto.name;
     if (dto.newPassword) data.passwordHash = await argon2.hash(dto.newPassword);
     if (dto.backgroundId !== undefined) data.backgroundId = dto.backgroundId;
+    if (dto.backgroundFilter !== undefined) {
+      data.backgroundFilter = dto.backgroundFilter as unknown as Prisma.InputJsonValue;
+    }
+    if (dto.removeBackgroundImage) data.backgroundImageUrl = null;
 
     return this.prisma.user.update({
       where: { id: userId },
@@ -292,6 +305,8 @@ export class AuthService {
         organizationId: true,
         avatarUrl: true,
         backgroundId: true,
+        backgroundImageUrl: true,
+        backgroundFilter: true,
         position: { select: { id: true, name: true, permissions: true } },
       },
     });
@@ -310,6 +325,36 @@ export class AuthService {
       where: { id: userId },
       data: { avatarUrl: url },
       select: { id: true, email: true, name: true, role: true, organizationId: true, avatarUrl: true },
+    });
+  }
+
+  /**
+   * Uploads a personal background photo — stored on the User row itself, so
+   * it's only ever returned from /auth/me for the owning account (never from
+   * /auth/members or any other org-facing endpoint).
+   */
+  async updateBackgroundImage(userId: string, file: { buffer: Buffer; mimeType: string }) {
+    const ALLOWED = new Set(['image/png', 'image/jpeg', 'image/webp']);
+    if (!ALLOWED.has(file.mimeType)) {
+      throw new BadRequestException(`Unsupported image type: ${file.mimeType}. Allowed: PNG, JPEG, WEBP.`);
+    }
+    const ext = file.mimeType.split('/')[1];
+    const key = `backgrounds/${userId}/${randomUUID()}.${ext}`;
+    const url = await this.storage.upload(key, file.buffer, file.mimeType);
+
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: { backgroundImageUrl: url },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        organizationId: true,
+        backgroundId: true,
+        backgroundImageUrl: true,
+        backgroundFilter: true,
+      },
     });
   }
 }

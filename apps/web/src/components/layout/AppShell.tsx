@@ -1,8 +1,11 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
+import { settingsApi } from "@/lib/api/settings";
+import { getBackgroundPreset } from "@/lib/backgrounds";
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -10,6 +13,8 @@ interface AppShellProps {
 
 export function AppShell({ children }: AppShellProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const { data: me } = useQuery({ queryKey: ["me"], queryFn: settingsApi.getMe });
+  const backgroundPreset = getBackgroundPreset(me?.backgroundId);
 
   const openDrawer = useCallback(() => setDrawerOpen(true), []);
   const closeDrawer = useCallback(() => setDrawerOpen(false), []);
@@ -46,7 +51,10 @@ export function AppShell({ children }: AppShellProps) {
       {/* Main content area */}
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
         <Topbar onMenuClick={openDrawer} />
-        <main className="flex-1 overflow-hidden">
+        <main
+          className="flex-1 overflow-hidden"
+          style={backgroundPreset?.css ? { backgroundImage: backgroundPreset.css } : undefined}
+        >
           {children}
         </main>
       </div>

@@ -276,9 +276,10 @@ export class AuthService {
       if (!valid) throw new UnauthorizedException('Incorrect current password');
     }
 
-    const data: { name?: string; passwordHash?: string } = {};
+    const data: { name?: string; passwordHash?: string; backgroundId?: string | null } = {};
     if (dto.name) data.name = dto.name;
     if (dto.newPassword) data.passwordHash = await argon2.hash(dto.newPassword);
+    if (dto.backgroundId !== undefined) data.backgroundId = dto.backgroundId;
 
     return this.prisma.user.update({
       where: { id: userId },

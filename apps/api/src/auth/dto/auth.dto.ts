@@ -94,4 +94,8 @@ export class UpdateMeDto {
   @IsString()
   @IsOptional()
   currentPassword?: string;
+
+  @IsString()
+  @IsOptional()
+  backgroundId?: string | null;
 }

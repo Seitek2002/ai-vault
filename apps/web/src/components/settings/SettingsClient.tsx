@@ -13,6 +13,7 @@ import {
 } from '@/lib/api/settings';
 import { positionsApi, Permission, PERMISSION_LABELS, type Position } from '@/lib/api/positions';
 import { hasPermission } from '@/lib/permissions';
+import { useBackgroundEditStore } from '@/stores/backgroundEdit.store';
 import { ApiError } from '@/lib/api/client';
 import { saveTokens } from '@/lib/tokens';
 import { Button, Input, Select, Card, Badge, Spinner, Modal } from '@/components/ui';
@@ -456,6 +457,7 @@ function ProfileTab() {
     queryKey: ['me'],
     queryFn: settingsApi.getMe,
   });
+  const setBackgroundEditActive = useBackgroundEditStore((s) => s.setActive);
 
   const [name, setName] = useState('');
   const [currentPassword, setCurrentPassword] = useState('');
@@ -548,6 +550,16 @@ function ProfileTab() {
             placeholder="Повторите пароль"
           />
         </div>
+      </div>
+
+      <div>
+        <SectionTitle>Фон рабочей области</SectionTitle>
+        <p className="mb-3 text-sm text-[var(--color-text-muted)]">
+          Настройте фон, который отображается в рабочей области справа.
+        </p>
+        <Button type="button" variant="secondary" onClick={() => setBackgroundEditActive(true)}>
+          Настроить фон
+        </Button>
       </div>
 
       {error && (

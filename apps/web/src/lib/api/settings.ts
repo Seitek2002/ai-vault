@@ -48,6 +48,7 @@ export interface UpdateMeDto {
   name?: string;
   newPassword?: string;
   currentPassword?: string;
+  backgroundId?: string | null;
 }
 
 export interface Member {

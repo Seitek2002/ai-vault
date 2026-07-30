@@ -12,6 +12,10 @@ export class CreateTemplateDto {
   @IsEnum(DocumentType)
   declare type: DocumentType;
 
+  @IsOptional()
+  @IsString()
+  categoryId?: string;
+
   @IsString()
   @MinLength(1)
   @MaxLength(200)
@@ -34,6 +38,10 @@ export class CreateTemplateDto {
 }
 
 export class UpdateTemplateDto {
+  @IsOptional()
+  @IsString()
+  categoryId?: string;
+
   @IsOptional()
   @IsString()
   @MaxLength(200)

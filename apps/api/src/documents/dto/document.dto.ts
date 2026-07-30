@@ -30,6 +30,10 @@ export class CreateDocumentDto {
   templateId?: string;
 
   @IsOptional()
+  @IsString()
+  categoryId?: string;
+
+  @IsOptional()
   @IsObject()
   meta?: Record<string, unknown>;
 
@@ -50,6 +54,10 @@ export class UpdateDocumentDto {
   @IsOptional()
   @IsString()
   counterpartyId?: string;
+
+  @IsOptional()
+  @IsString()
+  categoryId?: string;
 
   @IsOptional()
   @IsObject()
@@ -76,6 +84,10 @@ export class ListDocumentsDto {
   @IsOptional()
   @IsString()
   counterpartyId?: string;
+
+  @IsOptional()
+  @IsString()
+  categoryId?: string;
 
   @IsOptional()
   @IsString()

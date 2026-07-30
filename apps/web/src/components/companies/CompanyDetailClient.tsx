@@ -181,6 +181,8 @@ function MonthlyDocCard({
 function DocRow({ doc }: { doc: DocumentDto }) {
   const router = useRouter();
   const tpl = DOCUMENT_TEMPLATES[doc.type];
+  const badgeColor = doc.category?.color ?? tpl.color;
+  const badgeLabel = doc.category?.shortLabel ?? tpl.shortLabel;
   const date = new Date(doc.updatedAt).toLocaleDateString("ru-RU", {
     day: "2-digit",
     month: "short",
@@ -193,10 +195,10 @@ function DocRow({ doc }: { doc: DocumentDto }) {
         onClick={() => router.push(`/documents/${doc.id}`)}
         className="w-full text-left flex items-center gap-3 px-4 py-3"
       >
-        <div className="w-1 self-stretch rounded-full shrink-0" style={{ background: tpl.color }} />
+        <div className="w-1 self-stretch rounded-full shrink-0" style={{ background: badgeColor }} />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-0.5">
-            <Badge color={tpl.color} className="shrink-0">{tpl.shortLabel}</Badge>
+            <Badge color={badgeColor} className="shrink-0">{badgeLabel}</Badge>
             <Badge className={`rounded-full font-medium shrink-0 ${STATUS_COLORS[doc.status]}`}>
               {STATUS_LABELS[doc.status]}
             </Badge>

@@ -29,6 +29,7 @@ export interface ListDocumentsParams {
   type?: DocumentType;
   status?: DocumentStatus;
   counterpartyId?: string;
+  categoryId?: string;
   search?: string;
   dateFrom?: string;
   dateTo?: string;
@@ -39,6 +40,7 @@ export interface CreateDocumentRequest {
   title: string;
   counterpartyId?: string;
   templateId?: string;
+  categoryId?: string;
   bodyJson?: unknown;
   meta?: Record<string, unknown>;
 }
@@ -47,6 +49,7 @@ export interface UpdateDocumentRequest {
   title?: string;
   status?: DocumentStatus;
   counterpartyId?: string;
+  categoryId?: string;
   meta?: Record<string, unknown>;
   bodyJson?: unknown;
 }

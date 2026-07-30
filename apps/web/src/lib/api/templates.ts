@@ -1,10 +1,12 @@
 import { api } from './client';
-import type { DocumentType } from '@ai-vault/types';
+import type { DocumentType, DocumentCategoryDto } from '@ai-vault/types';
 
 export interface TemplateDto {
   id: string;
   organizationId: string;
   type: DocumentType;
+  categoryId: string | null;
+  category?: DocumentCategoryDto | null;
   name: string;
   description: string | null;
   bodyJson: unknown;
@@ -16,6 +18,7 @@ export interface TemplateDto {
 
 export interface CreateTemplateRequest {
   type: DocumentType;
+  categoryId?: string;
   name: string;
   description?: string;
   bodyJson?: unknown;
@@ -24,6 +27,7 @@ export interface CreateTemplateRequest {
 }
 
 export interface UpdateTemplateRequest {
+  categoryId?: string;
   name?: string;
   description?: string;
   bodyJson?: unknown;

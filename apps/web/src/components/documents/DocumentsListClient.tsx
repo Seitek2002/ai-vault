@@ -32,6 +32,7 @@ import {
 } from "@/lib/placeholders";
 import { computeInvoiceAutoFields, type InvoiceAutoFields } from "@/lib/invoiceAuto";
 import { settingsApi } from "@/lib/api/settings";
+import { documentCategoriesApi } from "@/lib/api/documentCategories";
 import { DocumentType, DocumentStatus } from "@ai-vault/types";
 import type { DocumentDto, CounterpartyDto } from "@ai-vault/types";
 
@@ -186,6 +187,7 @@ function CreateDocumentModal({ onClose }: { onClose: () => void }) {
         bodyJson,
         meta,
         ...(cpId ? { counterpartyId: cpId } : {}),
+        ...(selectedTemplate?.categoryId ? { categoryId: selectedTemplate.categoryId } : {}),
       });
     },
     onSuccess: (doc) => {
@@ -692,6 +694,8 @@ function DocCard({ doc }: { doc: DocumentDto }) {
   const qc = useQueryClient();
   const [confirming, setConfirming] = useState(false);
   const tpl = DOCUMENT_TEMPLATES[doc.type];
+  const badgeColor = doc.category?.color ?? tpl.color;
+  const badgeLabel = doc.category?.shortLabel ?? tpl.shortLabel;
   const date = new Date(doc.updatedAt).toLocaleDateString("ru-RU", {
     day: "2-digit",
     month: "short",
@@ -707,7 +711,7 @@ function DocCard({ doc }: { doc: DocumentDto }) {
     <Card hoverable className="group w-full flex items-start gap-3 px-4 py-4">
       <div
         className="mt-0.5 w-1 self-stretch rounded-full shrink-0"
-        style={{ background: tpl.color }}
+        style={{ background: badgeColor }}
       />
 
       {/* Clickable content area */}
@@ -716,7 +720,7 @@ function DocCard({ doc }: { doc: DocumentDto }) {
         className="flex-1 min-w-0 text-left"
       >
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-1">
-          <Badge color={tpl.color} className="shrink-0">{tpl.shortLabel}</Badge>
+          <Badge color={badgeColor} className="shrink-0">{badgeLabel}</Badge>
           <Badge className={`rounded-full font-medium shrink-0 ${STATUS_COLORS[doc.status]}`}>
             {STATUS_LABELS[doc.status]}
           </Badge>
@@ -770,15 +774,22 @@ function DocCard({ doc }: { doc: DocumentDto }) {
 export function DocumentsListClient() {
   const [showCreate, setShowCreate] = useState(false);
   const [typeFilter, setTypeFilter] = useState<DocumentType | "">("");
+  const [categoryFilter, setCategoryFilter] = useState<string>("");
   const [statusFilter, setStatusFilter] = useState<DocumentStatus | "">("");
   const [companyFilter, setCompanyFilter] = useState<string>("");
   const [search, setSearch] = useState("");
 
+  const { data: categories = [] } = useQuery({
+    queryKey: ["document-categories"],
+    queryFn: documentCategoriesApi.list,
+  });
+
   const { data, isLoading } = useQuery({
-    queryKey: ["documents", typeFilter, statusFilter, search, companyFilter],
+    queryKey: ["documents", typeFilter, categoryFilter, statusFilter, search, companyFilter],
     queryFn: () =>
       documentsApi.list({
         ...(typeFilter ? { type: typeFilter } : {}),
+        ...(categoryFilter ? { categoryId: categoryFilter } : {}),
         ...(statusFilter ? { status: statusFilter } : {}),
         ...(search ? { search } : {}),
         ...(companyFilter ? { counterpartyId: companyFilter } : {}),
@@ -787,7 +798,7 @@ export function DocumentsListClient() {
   });
 
   const docs = data?.data ?? [];
-  const hasFilters = !!(typeFilter || statusFilter || search || companyFilter);
+  const hasFilters = !!(typeFilter || categoryFilter || statusFilter || search || companyFilter);
 
   return (
     <div className="p-6 lg:p-8 h-full flex flex-col">
@@ -816,8 +827,16 @@ export function DocumentsListClient() {
         </div>
 
         <Select
-          value={typeFilter}
-          onChange={(v) => setTypeFilter(v as DocumentType | "")}
+          value={categoryFilter ? `cat:${categoryFilter}` : typeFilter}
+          onChange={(v) => {
+            if (v.startsWith("cat:")) {
+              setTypeFilter(DocumentType.CUSTOM);
+              setCategoryFilter(v.slice(4));
+            } else {
+              setTypeFilter(v as DocumentType | "");
+              setCategoryFilter("");
+            }
+          }}
           className="w-auto py-1.5"
           options={[
             { value: "", label: "Все типы" },
@@ -825,6 +844,14 @@ export function DocumentsListClient() {
               value: tpl.type,
               label: `${tpl.shortLabel} — ${tpl.label}`,
             })),
+            ...(categories.length > 0
+              ? [
+                  {
+                    group: "Мои категории",
+                    items: categories.map((c) => ({ value: `cat:${c.id}`, label: c.name })),
+                  },
+                ]
+              : []),
           ]}
         />
 
@@ -844,7 +871,7 @@ export function DocumentsListClient() {
           <Button
             variant="secondary"
             size="sm"
-            onClick={() => { setTypeFilter(""); setStatusFilter(""); setSearch(""); setCompanyFilter(""); }}
+            onClick={() => { setTypeFilter(""); setCategoryFilter(""); setStatusFilter(""); setSearch(""); setCompanyFilter(""); }}
           >
             Сбросить
           </Button>

@@ -119,6 +119,14 @@ export type DocumentMeta =
   | DocumentMetaAvr
   | DocumentMetaCustom;
 
+export interface DocumentCategoryDto {
+  id: string;
+  name: string;
+  shortLabel: string;
+  color: string;
+  createdAt: string;
+}
+
 export interface FileAssetDto {
   id: string;
   originalName: string;
@@ -135,6 +143,8 @@ export interface DocumentDto {
   number?: string;
   counterpartyId?: string;
   counterparty?: CounterpartyDto;
+  categoryId?: string;
+  category?: DocumentCategoryDto;
   meta: DocumentMeta;
   bodyJson: unknown;
   fileAssets?: FileAssetDto[];

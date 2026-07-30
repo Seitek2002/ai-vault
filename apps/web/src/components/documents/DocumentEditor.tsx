@@ -16,7 +16,7 @@ import { DOCUMENT_TEMPLATES } from "@/lib/templates";
 import { ExportMenu } from "./ExportMenu";
 import { uploadFile } from "@/lib/api/files";
 import { DocumentType } from "@ai-vault/types";
-import type { DocumentMeta } from "@ai-vault/types";
+import type { DocumentMeta, DocumentDto } from "@ai-vault/types";
 import {
   syncDateInBody,
   syncNumberInBody,
@@ -113,11 +113,11 @@ interface DocumentEditorProps {
   documentId: string;
 }
 
-function DocTypeBadge({ type }: { type: DocumentType }) {
+function DocTypeBadge({ type, category }: { type: DocumentType; category?: DocumentDto["category"] }) {
   const tpl = DOCUMENT_TEMPLATES[type];
   return (
-    <Badge color={tpl.color} className="rounded-full">
-      {tpl.shortLabel}
+    <Badge color={category?.color ?? tpl.color} className="rounded-full">
+      {category?.shortLabel ?? tpl.shortLabel}
     </Badge>
   );
 }
@@ -507,7 +507,7 @@ export function DocumentEditor({ documentId }: DocumentEditorProps) {
       <aside className="hidden lg:flex flex-col w-72 shrink-0 border-r border-[var(--color-border)] bg-[var(--color-bg-surface)] overflow-y-auto">
         <div className="px-4 py-4 border-b border-[var(--color-border)]">
           <div className="flex items-center gap-2 mb-1">
-            <DocTypeBadge type={document.type} />
+            <DocTypeBadge type={document.type} category={document.category} />
             <span className="text-xs text-[var(--color-text-muted)]">{document.status}</span>
           </div>
           <h2 className="text-sm font-semibold text-[var(--color-text-primary)] truncate">

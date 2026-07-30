@@ -21,7 +21,7 @@ export class DocumentsService {
   ) {}
 
   async findAll(organizationId: string, query: ListDocumentsDto) {
-    const { type, status, counterpartyId, search, page = 1, limit = 20 } = query;
+    const { type, status, counterpartyId, categoryId, search, page = 1, limit = 20 } = query;
     const skip = (page - 1) * limit;
 
     const where: Prisma.DocumentWhereInput = {
@@ -29,6 +29,7 @@ export class DocumentsService {
       ...(type ? { type } : {}),
       ...(status ? { status } : {}),
       ...(counterpartyId ? { counterpartyId } : {}),
+      ...(categoryId ? { categoryId } : {}),
       ...(search ? { title: { contains: search, mode: 'insensitive' } } : {}),
     };
 
@@ -40,6 +41,7 @@ export class DocumentsService {
         orderBy: { updatedAt: 'desc' },
         include: {
           counterparty: true,
+          category: true,
           createdBy: { select: { id: true, name: true } },
         },
       }),
@@ -54,6 +56,7 @@ export class DocumentsService {
       where: { id, organizationId },
       include: {
         counterparty: true,
+        category: true,
         createdBy: { select: { id: true, name: true } },
         versions: { orderBy: { version: 'desc' }, take: 1 },
         changes: { where: { status: 'PENDING' }, orderBy: { createdAt: 'asc' } },
@@ -82,6 +85,7 @@ export class DocumentsService {
         type: dto.type,
         title: dto.title,
         ...(dto.counterpartyId ? { counterpartyId: dto.counterpartyId } : {}),
+        ...(dto.categoryId ? { categoryId: dto.categoryId } : {}),
         meta: (dto.meta ?? {}) as Prisma.InputJsonValue,
         bodyJson,
         createdById: userId,
@@ -122,6 +126,9 @@ export class DocumentsService {
       data.counterparty = dto.counterpartyId
         ? { connect: { id: dto.counterpartyId } }
         : { disconnect: true };
+    }
+    if (dto.categoryId !== undefined) {
+      data.category = dto.categoryId ? { connect: { id: dto.categoryId } } : { disconnect: true };
     }
 
     return this.prisma.document.update({ where: { id }, data });

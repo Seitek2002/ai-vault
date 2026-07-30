@@ -5,10 +5,72 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, X, Pencil, Trash2, Wand2 } from "lucide-react";
 import { templatesApi } from "@/lib/api/templates";
 import type { TemplateDto, CreateTemplateRequest } from "@/lib/api/templates";
+import { documentCategoriesApi } from "@/lib/api/documentCategories";
 import { RichEditor } from "@/components/editor/RichEditor";
 import { extractVariables, setVariableLabelInBody } from "@/lib/variableTokens";
-import { Button, Input, Modal, Card, EmptyState, PageHeader, Spinner } from "@/components/ui";
+import { Button, Input, Select, Modal, Card, EmptyState, PageHeader, Spinner } from "@/components/ui";
 import { DocumentType } from "@ai-vault/types";
+
+const CATEGORY_COLORS = ["#8B5CF6", "#3B82F6", "#10B981", "#F59E0B", "#EF4444", "#EC4899"];
+
+function CategoryCreatePopover({ onClose }: { onClose: (id?: string) => void }) {
+  const qc = useQueryClient();
+  const [name, setName] = useState("");
+  const [color, setColor] = useState(CATEGORY_COLORS[0]);
+
+  const mutation = useMutation({
+    mutationFn: () =>
+      documentCategoriesApi.create({
+        name: name.trim(),
+        shortLabel: name.trim().slice(0, 12),
+        color: color ?? CATEGORY_COLORS[0]!,
+      }),
+    onSuccess: (created) => {
+      qc.invalidateQueries({ queryKey: ["document-categories"] });
+      onClose(created.id);
+    },
+  });
+
+  return (
+    <div className="absolute z-20 mt-2 w-64 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-surface)] p-3 shadow-xl animate-scale-in">
+      <p className="mb-2 text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-wider">
+        Новая категория
+      </p>
+      <Input
+        type="text"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="Например, Накладная"
+        autoFocus
+        className="mb-2"
+      />
+      <div className="mb-3 flex gap-1.5">
+        {CATEGORY_COLORS.map((c) => (
+          <button
+            key={c}
+            type="button"
+            onClick={() => setColor(c)}
+            className={`h-6 w-6 rounded-full border-2 transition-transform ${color === c ? "scale-110 border-white" : "border-transparent"}`}
+            style={{ background: c }}
+          />
+        ))}
+      </div>
+      <div className="flex justify-end gap-2">
+        <Button size="sm" variant="ghost" onClick={() => onClose()}>
+          Отмена
+        </Button>
+        <Button
+          size="sm"
+          onClick={() => mutation.mutate()}
+          disabled={!name.trim()}
+          loading={mutation.isPending}
+        >
+          Создать
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 const EMPTY_BODY = { type: "doc", content: [{ type: "paragraph" }] };
 
@@ -83,7 +145,14 @@ function ConstructorModal({ initial, onClose }: { initial?: TemplateDto; onClose
   const [name, setName] = useState(initial?.name ?? "");
   const [description, setDescription] = useState(initial?.description ?? "");
   const [bodyJson, setBodyJson] = useState<unknown>(initial?.bodyJson ?? EMPTY_BODY);
+  const [categoryId, setCategoryId] = useState(initial?.categoryId ?? "");
+  const [showCategoryCreate, setShowCategoryCreate] = useState(false);
   const isEdit = !!initial;
+
+  const { data: categories = [] } = useQuery({
+    queryKey: ["document-categories"],
+    queryFn: documentCategoriesApi.list,
+  });
 
   const mutation = useMutation({
     mutationFn: () => {
@@ -92,6 +161,7 @@ function ConstructorModal({ initial, onClose }: { initial?: TemplateDto; onClose
       const base = {
         name: name.trim() || "Свой шаблон",
         ...(description.trim() ? { description: description.trim() } : {}),
+        ...(categoryId ? { categoryId } : {}),
         bodyJson,
       };
       return isEdit
@@ -145,6 +215,36 @@ function ConstructorModal({ initial, onClose }: { initial?: TemplateDto; onClose
           </div>
         </div>
 
+        <div className="relative">
+          <label className="text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-wider block mb-1.5">
+            Категория <span className="normal-case font-normal">(необязательно)</span>
+          </label>
+          <div className="flex gap-2">
+            <div className="flex-1">
+              <Select
+                value={categoryId}
+                onChange={setCategoryId}
+                placeholder="Без категории"
+                options={[
+                  { value: "", label: "Без категории" },
+                  ...categories.map((c) => ({ value: c.id, label: c.name })),
+                ]}
+              />
+            </div>
+            <Button type="button" variant="secondary" onClick={() => setShowCategoryCreate((v) => !v)}>
+              <Plus className="w-4 h-4" />
+            </Button>
+          </div>
+          {showCategoryCreate && (
+            <CategoryCreatePopover
+              onClose={(id) => {
+                setShowCategoryCreate(false);
+                if (id) setCategoryId(id);
+              }}
+            />
+          )}
+        </div>
+
         <div>
           <label className="text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-wider block mb-1.5">
             Содержимое документа
@@ -191,12 +291,23 @@ function ConstructorCard({
   onDelete: () => void;
 }) {
   const variables = extractVariables(template.bodyJson);
+  const categoryColor = template.category?.color ?? "#8B5CF6";
 
   return (
     <Card hoverable className="group flex items-start gap-4 px-5 py-4">
-      <div className="mt-0.5 w-1 self-stretch rounded-full shrink-0" style={{ background: "#8B5CF6" }} />
+      <div className="mt-0.5 w-1 self-stretch rounded-full shrink-0" style={{ background: categoryColor }} />
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-[var(--color-text-primary)] truncate">{template.name}</p>
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-sm font-medium text-[var(--color-text-primary)] truncate">{template.name}</p>
+          {template.category && (
+            <span
+              className="shrink-0 rounded-full px-2 py-0.5 text-xs font-medium"
+              style={{ background: `${categoryColor}26`, color: categoryColor }}
+            >
+              {template.category.name}
+            </span>
+          )}
+        </div>
         {template.description && (
           <p className="mt-0.5 text-xs text-[var(--color-text-muted)] truncate">{template.description}</p>
         )}

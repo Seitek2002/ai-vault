@@ -14,6 +14,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { SVGProps } from "react";
 import { FontSize } from "./extensions/fontSize";
 import { VariableToken } from "./extensions/variableToken";
+import { Image } from "./extensions/image";
 import { PLACEHOLDER_MENU } from "@/lib/placeholders";
 import { extractVariables, slugifyVariableKey } from "@/lib/variableTokens";
 import { Select, Button } from "@/components/ui";
@@ -193,6 +194,42 @@ function AddVariableButton({ editor }: { editor: Editor }) {
   );
 }
 
+/* ── Contextual table toolbar (shown only with the cursor inside a table) ── */
+function TableControls({ editor }: { editor: Editor }) {
+  if (!editor.isActive("table")) return null;
+
+  const actions: Array<{ label: string; title: string; onClick: () => void; danger?: boolean }> = [
+    { label: "Строка выше", title: "Добавить строку выше", onClick: () => editor.chain().focus().addRowBefore().run() },
+    { label: "Строка ниже", title: "Добавить строку ниже", onClick: () => editor.chain().focus().addRowAfter().run() },
+    { label: "Столбец слева", title: "Добавить столбец слева", onClick: () => editor.chain().focus().addColumnBefore().run() },
+    { label: "Столбец справа", title: "Добавить столбец справа", onClick: () => editor.chain().focus().addColumnAfter().run() },
+    { label: "Удалить строку", title: "Удалить текущую строку", onClick: () => editor.chain().focus().deleteRow().run(), danger: true },
+    { label: "Удалить столбец", title: "Удалить текущий столбец", onClick: () => editor.chain().focus().deleteColumn().run(), danger: true },
+    { label: "Удалить таблицу", title: "Удалить всю таблицу", onClick: () => editor.chain().focus().deleteTable().run(), danger: true },
+  ];
+
+  return (
+    <div className="flex flex-wrap items-center gap-1 px-3 py-1.5 border-b border-[var(--color-border)] bg-[var(--color-bg-elevated)] shrink-0">
+      {actions.map((a) => (
+        <button
+          key={a.label}
+          type="button"
+          title={a.title}
+          onMouseDown={(e) => { e.preventDefault(); a.onClick(); }}
+          className={[
+            "px-2 py-1 rounded-md text-xs font-medium transition-colors",
+            a.danger
+              ? "text-red-500 hover:bg-red-500/10"
+              : "text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-surface)]",
+          ].join(" ")}
+        >
+          {a.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 /* ── RichEditor ─────────────────────────────────────────────────────── */
 interface RichEditorProps {
   initialContent?: unknown;
@@ -213,10 +250,11 @@ export function RichEditor({ initialContent, onChange, placeholder = "Начни
       FontSize,
       VariableToken,
       Placeholder.configure({ placeholder }),
-      Table.configure({ resizable: false }),
+      Table.configure({ resizable: true }),
       TableRow,
       TableHeader,
       TableCell,
+      Image.configure({ inline: false }),
     ],
     content: (initialContent as object) ?? "",
     editable: !readOnly,
@@ -295,6 +333,8 @@ export function RichEditor({ initialContent, onChange, placeholder = "Начни
           </ToolbarBtn>
         </div>
       )}
+
+      {!readOnly && <TableControls editor={editor} />}
 
       {/* Editor area */}
       <EditorContent

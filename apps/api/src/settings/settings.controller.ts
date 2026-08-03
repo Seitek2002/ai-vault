@@ -1,4 +1,5 @@
-import { Controller, Get, Patch, Body } from '@nestjs/common';
+import { Controller, Get, Patch, Post, Body, Req, BadRequestException } from '@nestjs/common';
+import type { FastifyRequest } from 'fastify';
 import { Permission } from '../common/permissions';
 import { SettingsService } from './settings.service';
 import { UpdateSettingsDto } from './dto/settings.dto';
@@ -18,5 +19,15 @@ export class SettingsController {
   @RequirePermission(Permission.MANAGE_SETTINGS)
   update(@CurrentOrgId() organizationId: string, @Body() dto: UpdateSettingsDto) {
     return this.service.update(organizationId, dto);
+  }
+
+  @Post('logo')
+  @RequirePermission(Permission.MANAGE_SETTINGS)
+  async uploadLogo(@Req() req: FastifyRequest, @CurrentOrgId() organizationId: string) {
+    const file = await (
+      req as FastifyRequest & { file: () => Promise<{ mimetype: string; toBuffer: () => Promise<Buffer> } | undefined> }
+    ).file();
+    if (!file) throw new BadRequestException('No file provided');
+    return this.service.uploadLogo(organizationId, { buffer: await file.toBuffer(), mimeType: file.mimetype });
   }
 }

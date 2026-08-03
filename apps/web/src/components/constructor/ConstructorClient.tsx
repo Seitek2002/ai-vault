@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, X, Pencil, Trash2, Wand2 } from "lucide-react";
 import { templatesApi } from "@/lib/api/templates";
 import type { TemplateDto, CreateTemplateRequest } from "@/lib/api/templates";
 import { documentCategoriesApi } from "@/lib/api/documentCategories";
+import { settingsApi, type CompanySettings } from "@/lib/api/settings";
 import { RichEditor } from "@/components/editor/RichEditor";
 import { extractVariables, setVariableLabelInBody } from "@/lib/variableTokens";
 import { Button, Input, Select, Modal, Card, EmptyState, PageHeader, Spinner } from "@/components/ui";
@@ -73,6 +74,54 @@ function CategoryCreatePopover({ onClose }: { onClose: (id?: string) => void }) 
 }
 
 const EMPTY_BODY = { type: "doc", content: [{ type: "paragraph" }] };
+
+/** Default letterhead (logo + org name/address) prefilled into every new template. */
+function buildDefaultTemplateBody(settings: CompanySettings | undefined): unknown {
+  if (!settings) return EMPTY_BODY;
+
+  const headerCells: Array<Record<string, unknown>> = [];
+  if (settings.logoUrl) {
+    headerCells.push({ type: "image", attrs: { src: settings.logoUrl, width: 90, height: 90 } });
+  }
+  const infoParagraphs: Array<Record<string, unknown>> = [];
+  if (settings.name) {
+    infoParagraphs.push({
+      type: "paragraph",
+      attrs: { textAlign: "center" },
+      content: [{ type: "text", text: settings.name, marks: [{ type: "bold" }] }],
+    });
+  }
+  if (settings.address) {
+    infoParagraphs.push({
+      type: "paragraph",
+      attrs: { textAlign: "center" },
+      content: [{ type: "text", text: settings.address }],
+    });
+  }
+
+  if (headerCells.length === 0 && infoParagraphs.length === 0) return EMPTY_BODY;
+
+  return {
+    type: "doc",
+    content: [
+      {
+        type: "table",
+        content: [
+          {
+            type: "tableRow",
+            content: [
+              {
+                type: "tableHeader",
+                content: [...headerCells, ...infoParagraphs],
+              },
+            ],
+          },
+        ],
+      },
+      { type: "paragraph" },
+    ],
+  };
+}
 
 // ─── Variable badge list (live preview, label renameable) ─────────────────────
 
@@ -147,12 +196,27 @@ function ConstructorModal({ initial, onClose }: { initial?: TemplateDto; onClose
   const [bodyJson, setBodyJson] = useState<unknown>(initial?.bodyJson ?? EMPTY_BODY);
   const [categoryId, setCategoryId] = useState(initial?.categoryId ?? "");
   const [showCategoryCreate, setShowCategoryCreate] = useState(false);
+  const [defaultHeaderApplied, setDefaultHeaderApplied] = useState(false);
   const isEdit = !!initial;
 
   const { data: categories = [] } = useQuery({
     queryKey: ["document-categories"],
     queryFn: documentCategoriesApi.list,
   });
+
+  const { data: companySettings } = useQuery({
+    queryKey: ["settings"],
+    queryFn: settingsApi.getSettings,
+    enabled: !isEdit,
+  });
+
+  // New templates start with the org's letterhead (logo + name/address) prefilled.
+  useEffect(() => {
+    if (!isEdit && companySettings && !defaultHeaderApplied) {
+      setBodyJson(buildDefaultTemplateBody(companySettings));
+      setDefaultHeaderApplied(true);
+    }
+  }, [isEdit, companySettings, defaultHeaderApplied]);
 
   const mutation = useMutation({
     mutationFn: () => {

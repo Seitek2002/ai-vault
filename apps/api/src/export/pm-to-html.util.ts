@@ -102,6 +102,15 @@ function nodeToHtml(node: PmNode): string {
     case 'blockquote':
       return `<blockquote>${children()}</blockquote>`;
 
+    case 'image': {
+      const src = node.attrs?.src as string | undefined;
+      if (!src) return '';
+      const width = node.attrs?.width as number | undefined;
+      const height = node.attrs?.height as number | undefined;
+      const dims = [width ? `width:${width}px` : '', height ? `height:${height}px` : ''].filter(Boolean).join(';');
+      return `<div><img src="${esc(src)}"${dims ? ` style="${dims}"` : ''} /></div>`;
+    }
+
     case 'horizontalRule':
       return '<hr>';
 

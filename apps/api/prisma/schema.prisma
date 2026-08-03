@@ -240,6 +240,7 @@ model CompanySettings {
   vatRate        Float   @default(12)
   currency       String  @default("KGS")
   logoAssetId    String?
+  logoUrl        String?
   updatedAt      DateTime @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)

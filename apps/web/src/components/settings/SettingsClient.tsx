@@ -10,6 +10,7 @@ import {
   type AddMemberDto,
   type CreateMemberDto,
   type UserProfile,
+  type CompanySettings,
 } from '@/lib/api/settings';
 import { positionsApi, Permission, PERMISSION_LABELS, type Position } from '@/lib/api/positions';
 import { hasPermission } from '@/lib/permissions';
@@ -121,6 +122,65 @@ function OrganizationSetupTab() {
 
 // ── Requisites tab ─────────────────────────────────────────────────────────────
 
+function LogoUpload({ settings }: { settings: CompanySettings | undefined }) {
+  const qc = useQueryClient();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [error, setError] = useState('');
+
+  const mutation = useMutation({
+    mutationFn: (file: File) => settingsApi.uploadLogo(file),
+    onSuccess: () => {
+      setError('');
+      void qc.invalidateQueries({ queryKey: ['settings'] });
+    },
+    onError: (err) => setError(err instanceof ApiError ? err.message : 'Ошибка загрузки'),
+  });
+
+  return (
+    <div className="flex items-center gap-4">
+      <button
+        type="button"
+        onClick={() => inputRef.current?.click()}
+        className="group relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elevated)]"
+        title="Изменить логотип"
+      >
+        {settings?.logoUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={settings.logoUrl} alt={settings.name} className="h-full w-full object-contain" />
+        ) : (
+          <span className="text-xs text-[var(--color-text-muted)]">Нет лого</span>
+        )}
+        <span className="absolute inset-0 flex items-center justify-center bg-black/50 text-[10px] font-medium text-white opacity-0 transition-opacity group-hover:opacity-100">
+          Изменить
+        </span>
+      </button>
+      <div>
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          onClick={() => inputRef.current?.click()}
+          loading={mutation.isPending}
+          loadingText="Загрузка…"
+        >
+          Загрузить логотип
+        </Button>
+        {error && <p className="mt-1 text-xs text-red-400">{error}</p>}
+      </div>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) mutation.mutate(file);
+        }}
+      />
+    </div>
+  );
+}
+
 function RequisitesTab() {
   const qc = useQueryClient();
   const { data, isLoading } = useQuery({
@@ -150,7 +210,15 @@ function RequisitesTab() {
   }, [data]);
 
   const mutation = useMutation({
-    mutationFn: () => settingsApi.updateSettings(form),
+    // Optional fields left blank must be omitted, not sent as '' — inn/email
+    // etc. still get validated (@MinLength/@IsEmail) even under @IsOptional()
+    // since an empty string is neither undefined nor null.
+    mutationFn: () => {
+      const payload = Object.fromEntries(
+        Object.entries(form).filter(([, v]) => v !== ''),
+      ) as UpdateSettingsDto;
+      return settingsApi.updateSettings(payload);
+    },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['settings'] });
       setSuccess(true);
@@ -182,6 +250,11 @@ function RequisitesTab() {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-8">
+      <div>
+        <SectionTitle>Логотип</SectionTitle>
+        <LogoUpload settings={data} />
+      </div>
+
       <div>
         <SectionTitle>Основная информация</SectionTitle>
         <div className="grid gap-4 sm:grid-cols-2">

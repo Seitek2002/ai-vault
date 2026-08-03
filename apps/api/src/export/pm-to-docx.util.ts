@@ -3,6 +3,7 @@ import {
   Packer,
   Paragraph,
   TextRun,
+  ImageRun,
   HeadingLevel,
   Table,
   TableRow,
@@ -22,6 +23,50 @@ interface PmNode {
 }
 
 type DocxBlock = Paragraph | Table;
+type DocxImageType = 'jpg' | 'png' | 'gif' | 'bmp';
+type ImageCache = Map<string, { data: Buffer; type: DocxImageType } | null>;
+
+// ─── Images ───────────────────────────────────────────────────────────────────
+
+function docxImageType(url: string): DocxImageType | null {
+  const ext = url.split('.').pop()?.toLowerCase().split(/[?#]/)[0];
+  if (ext === 'png') return 'png';
+  if (ext === 'jpg' || ext === 'jpeg') return 'jpg';
+  if (ext === 'gif') return 'gif';
+  if (ext === 'bmp') return 'bmp';
+  return null; // e.g. webp/svg — not supported by docx's ImageRun
+}
+
+function collectImageUrls(node: PmNode, out: Set<string>): void {
+  if (node.type === 'image' && typeof node.attrs?.src === 'string') out.add(node.attrs.src);
+  for (const child of node.content ?? []) collectImageUrls(child, out);
+}
+
+async function fetchImages(doc: PmNode): Promise<ImageCache> {
+  const urls = new Set<string>();
+  collectImageUrls(doc, urls);
+  const cache: ImageCache = new Map();
+
+  await Promise.all(
+    Array.from(urls).map(async (url) => {
+      const type = docxImageType(url);
+      if (!type) {
+        cache.set(url, null);
+        return;
+      }
+      try {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = Buffer.from(await res.arrayBuffer());
+        cache.set(url, { data, type });
+      } catch {
+        cache.set(url, null);
+      }
+    }),
+  );
+
+  return cache;
+}
 
 /** `date` variables are stored ISO but rendered DD.MM.YYYY (RU/KG convention). */
 function formatVariableValue(value: string, varType: string): string {
@@ -85,13 +130,27 @@ function alignAttr(node: PmNode): (typeof AlignmentType)[keyof typeof AlignmentT
 
 // ─── Block conversion ─────────────────────────────────────────────────────────
 
-function nodeToBlocks(node: PmNode): DocxBlock[] {
+function nodeToBlocks(node: PmNode, images: ImageCache): DocxBlock[] {
   switch (node.type) {
     case 'doc':
-      return (node.content ?? []).flatMap(nodeToBlocks);
+      return (node.content ?? []).flatMap((n) => nodeToBlocks(n, images));
 
     case 'paragraph':
       return [new Paragraph({ children: inlineChildren(node), alignment: alignAttr(node) })];
+
+    case 'image': {
+      const src = node.attrs?.src as string | undefined;
+      const cached = src ? images.get(src) : null;
+      if (!cached) return [];
+      const width = (node.attrs?.width as number | undefined) ?? 120;
+      const height = (node.attrs?.height as number | undefined) ?? 120;
+      return [
+        new Paragraph({
+          alignment: alignAttr(node),
+          children: [new ImageRun({ type: cached.type, data: cached.data, transformation: { width, height } })],
+        }),
+      ];
+    }
 
     case 'heading': {
       const level = (node.attrs?.level as number) ?? 1;
@@ -134,7 +193,7 @@ function nodeToBlocks(node: PmNode): DocxBlock[] {
             children: (row.content ?? []).map(
               (cell) =>
                 new TableCell({
-                  children: (cell.content ?? []).flatMap(nodeToBlocks) as Paragraph[],
+                  children: (cell.content ?? []).flatMap((n) => nodeToBlocks(n, images)) as Paragraph[],
                   borders: {
                     top: borderDef, bottom: borderDef, left: borderDef, right: borderDef,
                   },
@@ -160,14 +219,16 @@ function nodeToBlocks(node: PmNode): DocxBlock[] {
       return [new Paragraph({ children: inlineChildren(node) })];
 
     default:
-      return (node.content ?? []).flatMap(nodeToBlocks);
+      return (node.content ?? []).flatMap((n) => nodeToBlocks(n, images));
   }
 }
 
 // ─── Entry point ──────────────────────────────────────────────────────────────
 
 export async function pmToDocx(doc: unknown, title?: string): Promise<Buffer> {
-  const blocks = nodeToBlocks(doc as PmNode);
+  const pmDoc = doc as PmNode;
+  const images = await fetchImages(pmDoc);
+  const blocks = nodeToBlocks(pmDoc, images);
 
   const document = new Document({
     creator: 'Vault',

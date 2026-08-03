@@ -18,6 +18,7 @@ export interface CompanySettings {
   bankBik?: string | null;
   vatRate?: number | null;
   currency?: string | null;
+  logoUrl?: string | null;
 }
 
 export interface BackgroundFilter {
@@ -107,7 +108,7 @@ export interface AuthTokens {
   refreshToken: string;
 }
 
-async function uploadUserFile(path: string, file: File): Promise<UserProfile> {
+async function uploadFileTo<T>(path: string, file: File): Promise<T> {
   const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
   const form = new FormData();
   form.append('file', file);
@@ -122,7 +123,7 @@ async function uploadUserFile(path: string, file: File): Promise<UserProfile> {
     const body = await res.json().catch(() => ({ message: res.statusText }));
     throw new ApiError(res.status, (body as { message?: string }).message ?? res.statusText);
   }
-  return res.json() as Promise<UserProfile>;
+  return res.json() as Promise<T>;
 }
 
 export const settingsApi = {
@@ -135,7 +136,8 @@ export const settingsApi = {
   createMember: (dto: CreateMemberDto) => api.post<Member>('/auth/members/create', dto),
   updateMember: (id: string, dto: UpdateMemberDto) => api.patch<Member>(`/auth/members/${id}`, dto),
   createOrganization: (dto: CreateOrganizationDto) => api.post<AuthTokens>('/auth/organization', dto),
-  uploadAvatar: (file: File) => uploadUserFile('/auth/me/avatar', file),
-  uploadBackgroundImage: (file: File) => uploadUserFile('/auth/me/background-image', file),
-  uploadSidebarImage: (file: File) => uploadUserFile('/auth/me/sidebar-image', file),
+  uploadAvatar: (file: File) => uploadFileTo<UserProfile>('/auth/me/avatar', file),
+  uploadBackgroundImage: (file: File) => uploadFileTo<UserProfile>('/auth/me/background-image', file),
+  uploadSidebarImage: (file: File) => uploadFileTo<UserProfile>('/auth/me/sidebar-image', file),
+  uploadLogo: (file: File) => uploadFileTo<CompanySettings>('/settings/logo', file),
 };

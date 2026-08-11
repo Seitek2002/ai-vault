@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-const APP_ROUTES = ['/documents', '/counterparties', '/import', '/settings'];
+const APP_ROUTES = ['/documents', '/counterparties', '/archive', '/settings'];
 const AUTH_ROUTES = ['/login', '/register'];
 
 export function proxy(request: NextRequest) {

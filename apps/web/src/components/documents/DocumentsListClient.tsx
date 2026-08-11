@@ -891,7 +891,7 @@ export function DocumentsListClient() {
             description={
               hasFilters
                 ? "Попробуйте изменить фильтры"
-                : "Создайте первый документ или импортируйте файл"
+                : "Создайте первый документ или загрузите файл в архив"
             }
             action={
               !hasFilters && (

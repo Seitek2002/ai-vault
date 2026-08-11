@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import type { ComponentType, SVGProps } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Check, ImageOff, FileText, Building2, Wand2, Upload, Settings, LogOut, Vault } from "lucide-react";
+import { Check, ImageOff, FileText, Building2, Wand2, Archive, Upload, Settings, LogOut, Vault } from "lucide-react";
 import { authApi } from "@/lib/api/auth";
 import { settingsApi } from "@/lib/api/settings";
 import { useBackgroundEditStore } from "@/stores/backgroundEdit.store";
@@ -29,7 +29,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/documents", label: "Документы", icon: FileText },
   { href: "/companies", label: "Компании", icon: Building2 },
   { href: "/builder", label: "Конструктор", icon: Wand2 },
-  { href: "/import", label: "Импорт", icon: Upload },
+  { href: "/archive", label: "Архив", icon: Archive },
   { href: "/settings", label: "Настройки", icon: Settings },
 ];
 

@@ -4,40 +4,35 @@ import { useState, useRef, useCallback } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, FileText, Check, Plus } from "lucide-react";
-import { Badge, Input, Spinner } from "@/components/ui";
+import { Input, Spinner } from "@/components/ui";
 import { uploadFile } from "@/lib/api/files";
 import { api } from "@/lib/api/client";
 import { counterpartiesApi } from "@/lib/api/counterparties";
-import { documentCategoriesApi } from "@/lib/api/documentCategories";
-import { BUILTIN_DOCUMENT_TYPE_LIST } from "@/lib/templates";
 import { DocumentType } from "@ai-vault/types";
 import type { DocumentDto } from "@ai-vault/types";
 
 const MAX_MB = 20;
 
-type Step = "type" | "company" | "drop-file" | "processing";
+type Step = "company" | "drop-file" | "processing";
 
-export function ImportDropzone() {
+/**
+ * Archive: the simplest possible way to get a PDF into the system — pick or
+ * create a company, drop a file, done. No type/category picking; every
+ * archived file is a plain CUSTOM document attached to that company.
+ */
+export function ArchiveDropzone() {
   const router = useRouter();
   const qc = useQueryClient();
   const inputRef = useRef<HTMLInputElement>(null);
-  const [step, setStep] = useState<Step>("type");
-  const [docType, setDocType] = useState<DocumentType | null>(null);
-  const [categoryId, setCategoryId] = useState<string | null>(null);
+  const [step, setStep] = useState<Step>("company");
   const [dragging, setDragging] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Company step state
   const [companySearch, setCompanySearch] = useState("");
   const [selectedExistingCompanyId, setSelectedExistingCompanyId] = useState<string | null>(null);
   const [resolvedCompanyId, setResolvedCompanyId] = useState<string | null>(null);
   const [companyToCreate, setCompanyToCreate] = useState<string | null>(null);
-
-  const { data: categories = [] } = useQuery({
-    queryKey: ["document-categories"],
-    queryFn: documentCategoriesApi.list,
-  });
 
   const { data: searchedCompanies = [] } = useQuery({
     queryKey: ["companies-search", companySearch],
@@ -46,9 +41,8 @@ export function ImportDropzone() {
     staleTime: 30_000,
   });
 
-  const importMutation = useMutation({
+  const archiveMutation = useMutation({
     mutationFn: async (f: File) => {
-      if (!docType) throw new Error("No type selected");
       setStep("processing");
       setError(null);
 
@@ -65,9 +59,8 @@ export function ImportDropzone() {
       const uploaded = await uploadFile(f);
       const doc = await api.post<DocumentDto>("/documents/import", {
         fileId: uploaded.id,
-        type: docType,
+        type: DocumentType.CUSTOM,
         counterpartyId,
-        ...(categoryId ? { categoryId } : {}),
       });
       return doc;
     },
@@ -76,7 +69,7 @@ export function ImportDropzone() {
       router.push(`/documents/${doc.id}`);
     },
     onError: (err) => {
-      setError(err instanceof Error ? err.message : "Ошибка импорта");
+      setError(err instanceof Error ? err.message : "Ошибка загрузки");
       setStep("drop-file");
     },
   });
@@ -92,9 +85,9 @@ export function ImportDropzone() {
         return;
       }
       setFile(f);
-      importMutation.mutate(f);
+      archiveMutation.mutate(f);
     },
-    [importMutation],
+    [archiveMutation],
   );
 
   const onDrop = useCallback(
@@ -115,18 +108,6 @@ export function ImportDropzone() {
     [handleFile],
   );
 
-  function chooseBuiltin(type: DocumentType) {
-    setDocType(type);
-    setCategoryId(null);
-    setStep("company");
-  }
-
-  function chooseCategory(id: string) {
-    setDocType(DocumentType.CUSTOM);
-    setCategoryId(id);
-    setStep("company");
-  }
-
   function handleCompanyNext() {
     if (selectedExistingCompanyId) {
       setResolvedCompanyId(selectedExistingCompanyId);
@@ -139,85 +120,13 @@ export function ImportDropzone() {
     }
   }
 
-  const activeCategory = categoryId ? categories.find((c) => c.id === categoryId) : null;
-  const activeBuiltin = docType ? BUILTIN_DOCUMENT_TYPE_LIST.find((t) => t.type === docType) : null;
   const activeCompanyName = companyToCreate ?? searchedCompanies.find((c) => c.id === resolvedCompanyId)?.name;
 
-  /* ── Step 1: type/category selector ── */
-  if (step === "type") {
-    return (
-      <div className="max-w-lg mx-auto">
-        <h2 className="text-base font-semibold text-[var(--color-text-primary)] mb-4">
-          Выберите тип документа
-        </h2>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          {BUILTIN_DOCUMENT_TYPE_LIST.map((tpl) => (
-            <button
-              key={tpl.type}
-              onClick={() => chooseBuiltin(tpl.type)}
-              className="flex flex-col items-start gap-1.5 px-4 py-4 rounded-xl border text-left transition-all border-[var(--color-border)] bg-[var(--color-bg-surface)] hover:border-[var(--color-border-light)]"
-            >
-              <Badge color={tpl.color}>{tpl.shortLabel}</Badge>
-              <span className="text-xs text-[var(--color-text-secondary)] leading-tight">
-                {tpl.label}
-              </span>
-            </button>
-          ))}
-        </div>
-
-        {categories.length > 0 && (
-          <>
-            <h3 className="text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-wider mt-6 mb-3">
-              Мои категории
-            </h3>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-              {categories.map((c) => (
-                <button
-                  key={c.id}
-                  onClick={() => chooseCategory(c.id)}
-                  className="flex flex-col items-start gap-1.5 px-4 py-4 rounded-xl border text-left transition-all border-[var(--color-border)] bg-[var(--color-bg-surface)] hover:border-[var(--color-border-light)]"
-                >
-                  <span
-                    className="rounded-full px-2 py-0.5 text-xs font-medium"
-                    style={{ background: `${c.color}26`, color: c.color }}
-                  >
-                    {c.shortLabel}
-                  </span>
-                  <span className="text-xs text-[var(--color-text-secondary)] leading-tight">
-                    {c.name}
-                  </span>
-                </button>
-              ))}
-            </div>
-          </>
-        )}
-      </div>
-    );
-  }
-
-  /* ── Step 2: company (mandatory) ── */
+  /* ── Step 1: company (mandatory) ── */
   if (step === "company") {
     const canAdvance = !!selectedExistingCompanyId || companySearch.trim().length > 0;
     return (
       <div className="max-w-lg mx-auto space-y-4">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => setStep("type")}
-            className="text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] transition-colors"
-          >
-            <ChevronLeft className="w-4 h-4" />
-          </button>
-          {activeBuiltin && <Badge color={activeBuiltin.color}>{activeBuiltin.label}</Badge>}
-          {activeCategory && (
-            <span
-              className="rounded-full px-2 py-0.5 text-xs font-medium"
-              style={{ background: `${activeCategory.color}26`, color: activeCategory.color }}
-            >
-              {activeCategory.name}
-            </span>
-          )}
-        </div>
-
         <h2 className="text-base font-semibold text-[var(--color-text-primary)]">
           Выберите компанию
         </h2>
@@ -294,7 +203,7 @@ export function ImportDropzone() {
     );
   }
 
-  /* ── Step 3: drop zone ── */
+  /* ── Step 2: drop zone ── */
   if (step === "drop-file") {
     return (
       <div className="max-w-lg mx-auto space-y-4">
@@ -305,17 +214,8 @@ export function ImportDropzone() {
           >
             <ChevronLeft className="w-4 h-4" />
           </button>
-          {activeBuiltin && <Badge color={activeBuiltin.color}>{activeBuiltin.label}</Badge>}
-          {activeCategory && (
-            <span
-              className="rounded-full px-2 py-0.5 text-xs font-medium"
-              style={{ background: `${activeCategory.color}26`, color: activeCategory.color }}
-            >
-              {activeCategory.name}
-            </span>
-          )}
           {activeCompanyName && (
-            <span className="text-xs text-[var(--color-text-muted)]">{activeCompanyName}</span>
+            <span className="text-sm text-[var(--color-text-secondary)]">{activeCompanyName}</span>
           )}
         </div>
 
@@ -358,7 +258,7 @@ export function ImportDropzone() {
     );
   }
 
-  /* ── Step 4: processing ── */
+  /* ── Step 3: processing ── */
   return (
     <div className="max-w-lg mx-auto flex flex-col items-center justify-center gap-6 py-16 text-[var(--color-accent)]">
       <Spinner size="lg" className="w-12 h-12" />

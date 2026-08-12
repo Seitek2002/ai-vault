@@ -147,6 +147,7 @@ export interface DocumentDto {
   category?: DocumentCategoryDto;
   meta: DocumentMeta;
   bodyJson: unknown;
+  isArchived: boolean;
   fileAssets?: FileAssetDto[];
   createdAt: string;
   updatedAt: string;

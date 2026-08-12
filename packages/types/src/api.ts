@@ -33,6 +33,7 @@ export interface ListDocumentsParams {
   search?: string;
   dateFrom?: string;
   dateTo?: string;
+  archived?: boolean;
 }
 
 export interface CreateDocumentRequest {

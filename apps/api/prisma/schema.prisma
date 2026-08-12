@@ -150,6 +150,7 @@ model Document {
   categoryId     String?
   meta           Json           @default("{}")
   bodyJson       Json           @default("{}")
+  isArchived     Boolean        @default(false)
   createdById    String
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt

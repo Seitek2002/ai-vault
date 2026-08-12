@@ -8,6 +8,7 @@ import {
   IsInt,
   Min,
   Max,
+  IsBooleanString,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { DocumentType, DocumentStatus } from '@prisma/client';
@@ -92,6 +93,10 @@ export class ListDocumentsDto {
   @IsOptional()
   @IsString()
   search?: string;
+
+  @IsOptional()
+  @IsBooleanString()
+  archived?: string;
 
   @IsOptional()
   @Type(() => Number)

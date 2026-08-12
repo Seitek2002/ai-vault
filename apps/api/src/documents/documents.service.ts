@@ -21,11 +21,12 @@ export class DocumentsService {
   ) {}
 
   async findAll(organizationId: string, query: ListDocumentsDto) {
-    const { type, status, counterpartyId, categoryId, search, page = 1, limit = 20 } = query;
+    const { type, status, counterpartyId, categoryId, search, archived, page = 1, limit = 20 } = query;
     const skip = (page - 1) * limit;
 
     const where: Prisma.DocumentWhereInput = {
       organizationId,
+      isArchived: archived === 'true',
       ...(type ? { type } : {}),
       ...(status ? { status } : {}),
       ...(counterpartyId ? { counterpartyId } : {}),
@@ -188,6 +189,7 @@ export class DocumentsService {
         ...(dto.categoryId ? { categoryId: dto.categoryId } : {}),
         meta: {} as Prisma.InputJsonValue,
         bodyJson: emptyBody,
+        isArchived: true,
         createdById: userId,
         fileAssets: { connect: { id: dto.fileId } },
       },

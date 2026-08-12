@@ -7,10 +7,8 @@ import { counterpartiesApi, type CounterpartyFormData } from '@/lib/api/counterp
 import { documentsApi } from '@/lib/api/documents';
 import { templatesApi } from '@/lib/api/templates';
 import { settingsApi } from '@/lib/api/settings';
-import { DOCUMENT_TEMPLATES, BUILTIN_DOCUMENT_TYPE_LIST } from '@/lib/templates';
-import { syncDateInBody, syncNumberInBody, todayISO, injectCounterpartyInBody, injectProviderInBody } from '@/lib/docBody';
+import { injectCounterpartyInBody, injectProviderInBody } from '@/lib/docBody';
 import { substitutePlaceholders, usesCompanyPlaceholders, usesOrgPlaceholders } from '@/lib/placeholders';
-import { computeInvoiceAutoFields, type InvoiceAutoFields } from '@/lib/invoiceAuto';
 import { DocumentType } from '@ai-vault/types';
 import type { CounterpartyDto } from '@ai-vault/types';
 import { ApiError } from '@/lib/api/client';
@@ -141,8 +139,9 @@ function CounterpartyModal({ editing, onClose, onSaved }: ModalProps) {
                     />
                   </div>
                   <div>
-                    <label className={lbl}>ОКПО</label>
+                    <label className={lbl}>ОКПО *</label>
                     <input
+                      required
                       className={inp}
                       placeholder="33748819"
                       value={form.bin}
@@ -151,8 +150,9 @@ function CounterpartyModal({ editing, onClose, onSaved }: ModalProps) {
                   </div>
                 </div>
                 <div>
-                  <label className={lbl}>Юридический адрес</label>
+                  <label className={lbl}>Юридический адрес *</label>
                   <input
+                    required
                     className={inp}
                     placeholder="КР, г. Бишкек, ул. Гоголя, 179-62"
                     value={form.address}
@@ -169,8 +169,9 @@ function CounterpartyModal({ editing, onClose, onSaved }: ModalProps) {
               </p>
               <div className="flex flex-col gap-3">
                 <div>
-                  <label className={lbl}>Расчётный счёт (р/с)</label>
+                  <label className={lbl}>Расчётный счёт (р/с) *</label>
                   <input
+                    required
                     className={inp}
                     placeholder="1240020001943137"
                     value={form.bankAccount}
@@ -179,8 +180,9 @@ function CounterpartyModal({ editing, onClose, onSaved }: ModalProps) {
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className={lbl}>Банк</label>
+                    <label className={lbl}>Банк *</label>
                     <input
+                      required
                       className={inp}
                       placeholder='ОАО «Бакай Банк»'
                       value={form.bankName}
@@ -188,8 +190,9 @@ function CounterpartyModal({ editing, onClose, onSaved }: ModalProps) {
                     />
                   </div>
                   <div>
-                    <label className={lbl}>БИК</label>
+                    <label className={lbl}>БИК *</label>
                     <input
+                      required
                       className={inp}
                       placeholder="124012"
                       value={form.bankBik}
@@ -338,81 +341,48 @@ interface GenerateModalProps {
 function GenerateDocumentModal({ cp, onClose }: GenerateModalProps) {
   const router = useRouter();
   const qc = useQueryClient();
-  const [docType, setDocType] = useState<DocumentType>(DocumentType.AVR);
   const [templateId, setTemplateId] = useState<string>('');
 
+  // "Тип документа" больше не фиксированный список — шаблоны берутся из Конструктора.
   const { data: templates = [] } = useQuery({
-    queryKey: ['templates', docType],
-    queryFn: () => templatesApi.list(docType),
+    queryKey: ['templates', DocumentType.CUSTOM],
+    queryFn: () => templatesApi.list(DocumentType.CUSTOM),
   });
 
   // Auto-select the default (or first) template unless the user picked one explicitly.
   const defaultTemplateId = (templates.find((tpl) => tpl.isDefault) ?? templates[0])?.id ?? '';
   const effectiveTemplateId = templates.some((tpl) => tpl.id === templateId) ? templateId : defaultTemplateId;
-
-  function handleDocTypeChange(newType: DocumentType) {
-    setDocType(newType);
-    setTemplateId('');
-  }
+  const chosenTemplate = templates.find((tpl) => tpl.id === effectiveTemplateId);
 
   const generateMutation = useMutation({
     mutationFn: async () => {
+      if (!chosenTemplate) throw new Error('No template selected');
       const orgSettings = await settingsApi.getSettings().catch(() => null);
-      const chosenTemplate = templates.find((tpl) => tpl.id === effectiveTemplateId);
-      const baseTpl = DOCUMENT_TEMPLATES[docType];
 
-      let bodyJson: unknown = chosenTemplate ? chosenTemplate.bodyJson : baseTpl.bodyJson;
-      let meta: Record<string, unknown> = chosenTemplate
-        ? ((chosenTemplate.metaDefaults as Record<string, unknown>) ?? {})
-        : (baseTpl.metaDefaults as Record<string, unknown>);
+      const hasCompanyPh = usesCompanyPlaceholders(chosenTemplate.bodyJson);
+      const hasOrgPh = usesOrgPlaceholders(chosenTemplate.bodyJson);
 
-      // Автополя счёта: следующий номер (005 → 006 → …) и период по последнему счёту
-      let invoiceAuto: InvoiceAutoFields | null = null;
-      if (docType === DocumentType.INVOICE_PAYMENT) {
-        invoiceAuto = await computeInvoiceAutoFields();
-        meta = {
-          ...meta,
-          invoiceNumber: invoiceAuto.number,
-          periodStart: invoiceAuto.periodStartIso,
-          periodEnd: invoiceAuto.periodEndIso,
-        };
-      }
-
-      const today = todayISO();
-      const dateKey =
-        docType === DocumentType.AVR ? 'actDate' :
-        docType === DocumentType.CONTRACT ? 'startDate' : 'invoiceDate';
-      meta = { ...meta, [dateKey]: today };
-      bodyJson = syncDateInBody(bodyJson, '', today);
-      bodyJson = syncNumberInBody(bodyJson, '', (meta.invoiceNumber as string) ?? '');
-
-      const hasCompanyPh = usesCompanyPlaceholders(bodyJson);
-      const hasOrgPh = usesOrgPlaceholders(bodyJson);
-
-      // Системные плейсхолдеры: {{company.*}}, {{org.*}}, даты, номер, сумма, период
-      bodyJson = substitutePlaceholders(bodyJson, {
+      // Системные плейсхолдеры: {{company.*}}, {{org.*}}
+      let bodyJson = substitutePlaceholders(chosenTemplate.bodyJson, {
         company: cp,
         org: orgSettings,
-        number: (meta.invoiceNumber ?? meta.actNumber ?? meta.contractNumber ?? '') as string,
-        amount: Number(meta.totalAmount ?? 0),
-        periodStart: invoiceAuto?.periodStart,
-        periodEnd: invoiceAuto?.periodEnd,
       });
 
-      // Старые эвристики — только для шаблонов без плейсхолдеров
+      // Старые эвристики по ключевым словам — только для шаблонов без плейсхолдеров
       if (!hasCompanyPh) {
-        bodyJson = injectCounterpartyInBody(bodyJson, docType, cp);
+        bodyJson = injectCounterpartyInBody(bodyJson, DocumentType.CUSTOM, cp);
       }
       if (orgSettings?.name && !hasOrgPh) {
         bodyJson = injectProviderInBody(bodyJson, orgSettings);
       }
 
       return documentsApi.create({
-        type: docType,
-        title: `${baseTpl.label} — ${cp.name}`,
+        type: DocumentType.CUSTOM,
+        title: `${chosenTemplate.name} — ${cp.name}`,
         bodyJson,
-        meta,
+        meta: (chosenTemplate.metaDefaults as Record<string, unknown>) ?? {},
         counterpartyId: cp.id,
+        ...(chosenTemplate.categoryId ? { categoryId: chosenTemplate.categoryId } : {}),
       });
     },
     onSuccess: (doc) => {
@@ -432,34 +402,28 @@ function GenerateDocumentModal({ cp, onClose }: GenerateModalProps) {
           для <span className="font-medium text-[var(--color-text-primary)]">{cp.name}</span>
         </p>
 
-        <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1">
-          Тип документа
-        </label>
-        <select
-          value={docType}
-          onChange={(e) => handleDocTypeChange(e.target.value as DocumentType)}
-          className="w-full px-3 py-2 mb-3 text-sm rounded-lg bg-[var(--color-bg-base)] border border-[var(--color-border)] text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-accent)] transition-colors"
-        >
-          {BUILTIN_DOCUMENT_TYPE_LIST.map((tpl) => (
-            <option key={tpl.type} value={tpl.type}>{tpl.label}</option>
-          ))}
-        </select>
-
-        <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1">
-          Шаблон
-        </label>
-        <select
-          value={effectiveTemplateId}
-          onChange={(e) => setTemplateId(e.target.value)}
-          className="w-full px-3 py-2 mb-4 text-sm rounded-lg bg-[var(--color-bg-base)] border border-[var(--color-border)] text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-accent)] transition-colors"
-        >
-          <option value="">Базовый шаблон ({DOCUMENT_TEMPLATES[docType].label})</option>
-          {templates.map((tpl) => (
-            <option key={tpl.id} value={tpl.id}>
-              {tpl.name}{tpl.isDefault ? ' (по умолчанию)' : ''}
-            </option>
-          ))}
-        </select>
+        {templates.length === 0 ? (
+          <p className="text-xs text-[var(--color-text-muted)] mb-4">
+            Своих шаблонов пока нет. Создайте шаблон в разделе «Конструктор», чтобы генерировать документы отсюда.
+          </p>
+        ) : (
+          <>
+            <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1">
+              Шаблон
+            </label>
+            <select
+              value={effectiveTemplateId}
+              onChange={(e) => setTemplateId(e.target.value)}
+              className="w-full px-3 py-2 mb-4 text-sm rounded-lg bg-[var(--color-bg-base)] border border-[var(--color-border)] text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-accent)] transition-colors"
+            >
+              {templates.map((tpl) => (
+                <option key={tpl.id} value={tpl.id}>
+                  {tpl.name}{tpl.isDefault ? ' (по умолчанию)' : ''}
+                </option>
+              ))}
+            </select>
+          </>
+        )}
 
         {generateMutation.isError && (
           <p className="text-xs text-red-400 mb-3">Не удалось создать документ</p>
@@ -474,7 +438,7 @@ function GenerateDocumentModal({ cp, onClose }: GenerateModalProps) {
           </button>
           <button
             onClick={() => generateMutation.mutate()}
-            disabled={generateMutation.isPending}
+            disabled={generateMutation.isPending || !chosenTemplate}
             className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg bg-[var(--color-accent)] text-[#0F172A] hover:bg-[var(--color-accent-hover)] disabled:opacity-50 transition-colors"
           >
             {generateMutation.isPending && (

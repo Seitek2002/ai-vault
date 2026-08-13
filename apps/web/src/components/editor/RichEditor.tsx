@@ -10,7 +10,7 @@ import Table from "@tiptap/extension-table";
 import TableRow from "@tiptap/extension-table-row";
 import TableCell from "@tiptap/extension-table-cell";
 import TableHeader from "@tiptap/extension-table-header";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { SVGProps } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { FontSize } from "./extensions/fontSize";
@@ -19,10 +19,13 @@ import { Image } from "./extensions/image";
 import { PLACEHOLDER_MENU } from "@/lib/placeholders";
 import { extractVariables, slugifyVariableKey } from "@/lib/variableTokens";
 import { settingsApi } from "@/lib/api/settings";
+import { documentsApi } from "@/lib/api/documents";
 import { buildLetterheadNode } from "@/lib/letterhead";
-import { Select, Button } from "@/components/ui";
+import { Select, Button, Spinner } from "@/components/ui";
 import type { TemplateVariableType } from "@ai-vault/types";
 import "./editor.css";
+
+const CONTENT_IMAGE_DEFAULT_WIDTH = 320;
 
 const FONT_SIZES = ["8", "9", "10", "10.5", "11", "12", "14", "16", "18", "20", "24", "28", "32", "36"];
 
@@ -105,6 +108,13 @@ const LetterheadIcon = () => (
     <path d="M3 9h18" />
     <circle cx="6.5" cy="6.5" r="1" />
     <path d="M10 6.5h8" />
+  </svg>
+);
+const ImageIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+    <rect x="3" y="3" width="18" height="18" rx="2" />
+    <circle cx="8.5" cy="8.5" r="1.5" />
+    <path d="M21 15l-5-5L5 21" />
   </svg>
 );
 
@@ -236,6 +246,54 @@ function InsertLetterheadButton({ editor }: { editor: Editor }) {
   );
 }
 
+/* ── Insert an arbitrary image (photo) at the cursor, uploaded on the spot ── */
+function InsertImageButton({ editor }: { editor: Editor }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+
+  const handleFile = useCallback(
+    async (file: File) => {
+      setUploading(true);
+      try {
+        const { url } = await documentsApi.uploadContentImage(file);
+        editor
+          .chain()
+          .focus()
+          .insertContent({ type: "image", attrs: { src: url, width: CONTENT_IMAGE_DEFAULT_WIDTH } })
+          .run();
+      } catch (err) {
+        alert(err instanceof Error ? err.message : "Не удалось загрузить изображение");
+      } finally {
+        setUploading(false);
+      }
+    },
+    [editor],
+  );
+
+  return (
+    <>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          e.target.value = "";
+          if (file) void handleFile(file);
+        }}
+      />
+      <ToolbarBtn
+        title="Вставить изображение"
+        disabled={uploading}
+        onClick={() => inputRef.current?.click()}
+      >
+        {uploading ? <Spinner size="sm" /> : <ImageIcon />}
+      </ToolbarBtn>
+    </>
+  );
+}
+
 /* ── Contextual table toolbar (shown only with the cursor inside a table) ── */
 function TableControls({ editor }: { editor: Editor }) {
   if (!editor.isActive("table")) return null;
@@ -332,6 +390,7 @@ export function RichEditor({ initialContent, onChange, placeholder = "Начни
           {!variablesEnabled && <InsertFieldSelect editor={editor} />}
           {variablesEnabled && <AddVariableButton editor={editor} />}
           <InsertLetterheadButton editor={editor} />
+          <InsertImageButton editor={editor} />
           <SEP />
           <ToolbarBtn active={editor.isActive("bold")} title="Жирный (Ctrl+B)" onClick={() => editor.chain().focus().toggleBold().run()}>
             <BoldIcon className="w-4 h-4" />

@@ -1,4 +1,5 @@
-import { Controller, Get, Post, Patch, Delete, Body, Param, Query } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, Query, Req, BadRequestException } from '@nestjs/common';
+import type { FastifyRequest } from 'fastify';
 import { Permission } from '../common/permissions';
 import { DocumentsService } from './documents.service';
 import { CreateDocumentDto, UpdateDocumentDto, ListDocumentsDto, ReplaceFileDto } from './dto/document.dto';
@@ -53,5 +54,15 @@ export class DocumentsController {
   @RequirePermission(Permission.MANAGE_DOCUMENTS)
   importFromFile(@Body() dto: ImportDocumentDto, @CurrentOrgId() organizationId: string, @CurrentUser() user: JwtPayload) {
     return this.service.importFromFile(organizationId, user.sub, dto);
+  }
+
+  @Post('content-image')
+  @RequirePermission(Permission.MANAGE_DOCUMENTS)
+  async uploadContentImage(@Req() req: FastifyRequest, @CurrentOrgId() organizationId: string) {
+    const file = await (
+      req as FastifyRequest & { file: () => Promise<{ mimetype: string; toBuffer: () => Promise<Buffer> } | undefined> }
+    ).file();
+    if (!file) throw new BadRequestException('No file provided');
+    return this.service.uploadContentImage(organizationId, { buffer: await file.toBuffer(), mimeType: file.mimetype });
   }
 }

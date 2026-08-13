@@ -1,7 +1,9 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { FilesService } from '../files/files.service';
+import { StorageService } from '../storage/storage.service';
 import type { CreateDocumentDto, UpdateDocumentDto, ListDocumentsDto, ReplaceFileDto } from './dto/document.dto';
 import type { ImportDocumentDto } from './dto/import.dto';
 
@@ -13,11 +15,14 @@ interface PmNode {
   marks?: Array<{ type: string; attrs?: Record<string, unknown> }>;
 }
 
+const ALLOWED_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
+
 @Injectable()
 export class DocumentsService {
   constructor(
     private prisma: PrismaService,
     private files: FilesService,
+    private storage: StorageService,
   ) {}
 
   async findAll(organizationId: string, query: ListDocumentsDto) {
@@ -205,6 +210,21 @@ export class DocumentsService {
     });
 
     return doc;
+  }
+
+  /**
+   * Arbitrary photos/images inserted into a document or template body via the
+   * editor's "Вставить изображение" button — just stored and handed back as a
+   * URL, no FileAsset row (unlike the original-file attachment concept).
+   */
+  async uploadContentImage(organizationId: string, file: { buffer: Buffer; mimeType: string }) {
+    if (!ALLOWED_IMAGE_TYPES.has(file.mimeType)) {
+      throw new BadRequestException(`Unsupported image type: ${file.mimeType}. Allowed: PNG, JPEG, WEBP.`);
+    }
+    const ext = file.mimeType.split('/')[1];
+    const key = `content-images/${organizationId}/${randomUUID()}.${ext}`;
+    const url = await this.storage.upload(key, file.buffer, file.mimeType);
+    return { url };
   }
 
   private rawTextToPm(text: string): { type: 'doc'; content: PmNode[] } {

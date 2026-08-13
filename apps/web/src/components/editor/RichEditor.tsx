@@ -12,11 +12,14 @@ import TableCell from "@tiptap/extension-table-cell";
 import TableHeader from "@tiptap/extension-table-header";
 import { useCallback, useEffect, useState } from "react";
 import type { SVGProps } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { FontSize } from "./extensions/fontSize";
 import { VariableToken } from "./extensions/variableToken";
 import { Image } from "./extensions/image";
 import { PLACEHOLDER_MENU } from "@/lib/placeholders";
 import { extractVariables, slugifyVariableKey } from "@/lib/variableTokens";
+import { settingsApi } from "@/lib/api/settings";
+import { buildLetterheadNode } from "@/lib/letterhead";
 import { Select, Button } from "@/components/ui";
 import type { TemplateVariableType } from "@ai-vault/types";
 import "./editor.css";
@@ -96,15 +99,25 @@ const TableIcon = () => (
     <path d="M3 9h18M3 15h18M9 3v18M15 3v18" />
   </svg>
 );
+const LetterheadIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+    <rect x="3" y="4" width="18" height="16" rx="1.5" />
+    <path d="M3 9h18" />
+    <circle cx="6.5" cy="6.5" r="1" />
+    <path d="M10 6.5h8" />
+  </svg>
+);
 
 /* ── Toolbar button ─────────────────────────────────────────────────── */
 function ToolbarBtn({
   active,
+  disabled,
   title,
   onClick,
   children,
 }: {
   active?: boolean;
+  disabled?: boolean;
   title: string;
   onClick: () => void;
   children: React.ReactNode;
@@ -113,10 +126,13 @@ function ToolbarBtn({
     <button
       type="button"
       title={title}
-      onMouseDown={(e) => { e.preventDefault(); onClick(); }}
+      disabled={disabled}
+      onMouseDown={(e) => { e.preventDefault(); if (!disabled) onClick(); }}
       className={[
         "p-1.5 rounded-md transition-colors",
-        active
+        disabled
+          ? "text-[var(--color-text-muted)] opacity-40 cursor-not-allowed"
+          : active
           ? "bg-[var(--color-accent-dim)] text-[var(--color-accent)]"
           : "text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-elevated)]",
       ].join(" ")}
@@ -191,6 +207,32 @@ function AddVariableButton({ editor }: { editor: Editor }) {
         </>
       )}
     </div>
+  );
+}
+
+/* ── Insert letterhead button (logo + company name/address, on demand) ── */
+function InsertLetterheadButton({ editor }: { editor: Editor }) {
+  const { data: settings } = useQuery({
+    queryKey: ["settings"],
+    queryFn: settingsApi.getSettings,
+  });
+  const letterhead = buildLetterheadNode(settings);
+
+  return (
+    <ToolbarBtn
+      title={
+        letterhead
+          ? "Добавить верхний колонтитул (лого и реквизиты компании)"
+          : "Заполните название/адрес или логотип в Настройках, чтобы добавить колонтитул"
+      }
+      disabled={!letterhead}
+      onClick={() => {
+        if (!letterhead) return;
+        editor.chain().focus().insertContentAt(0, letterhead).run();
+      }}
+    >
+      <LetterheadIcon />
+    </ToolbarBtn>
   );
 }
 
@@ -289,6 +331,7 @@ export function RichEditor({ initialContent, onChange, placeholder = "Начни
           <FontSizeSelect editor={editor} />
           {!variablesEnabled && <InsertFieldSelect editor={editor} />}
           {variablesEnabled && <AddVariableButton editor={editor} />}
+          <InsertLetterheadButton editor={editor} />
           <SEP />
           <ToolbarBtn active={editor.isActive("bold")} title="Жирный (Ctrl+B)" onClick={() => editor.chain().focus().toggleBold().run()}>
             <BoldIcon className="w-4 h-4" />

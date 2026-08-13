@@ -7,6 +7,7 @@ import { templatesApi } from "@/lib/api/templates";
 import type { TemplateDto, CreateTemplateRequest } from "@/lib/api/templates";
 import { documentCategoriesApi } from "@/lib/api/documentCategories";
 import { settingsApi, type CompanySettings } from "@/lib/api/settings";
+import { buildLetterheadNode } from "@/lib/letterhead";
 import { RichEditor } from "@/components/editor/RichEditor";
 import { extractVariables, setVariableLabelInBody } from "@/lib/variableTokens";
 import { Button, Input, Select, Modal, Card, EmptyState, PageHeader, Spinner } from "@/components/ui";
@@ -77,50 +78,9 @@ const EMPTY_BODY = { type: "doc", content: [{ type: "paragraph" }] };
 
 /** Default letterhead (logo + org name/address) prefilled into every new template. */
 function buildDefaultTemplateBody(settings: CompanySettings | undefined): unknown {
-  if (!settings) return EMPTY_BODY;
-
-  const headerCells: Array<Record<string, unknown>> = [];
-  if (settings.logoUrl) {
-    headerCells.push({ type: "image", attrs: { src: settings.logoUrl, width: 90, height: 90 } });
-  }
-  const infoParagraphs: Array<Record<string, unknown>> = [];
-  if (settings.name) {
-    infoParagraphs.push({
-      type: "paragraph",
-      attrs: { textAlign: "center" },
-      content: [{ type: "text", text: settings.name, marks: [{ type: "bold" }] }],
-    });
-  }
-  if (settings.address) {
-    infoParagraphs.push({
-      type: "paragraph",
-      attrs: { textAlign: "center" },
-      content: [{ type: "text", text: settings.address }],
-    });
-  }
-
-  if (headerCells.length === 0 && infoParagraphs.length === 0) return EMPTY_BODY;
-
-  return {
-    type: "doc",
-    content: [
-      {
-        type: "table",
-        content: [
-          {
-            type: "tableRow",
-            content: [
-              {
-                type: "tableHeader",
-                content: [...headerCells, ...infoParagraphs],
-              },
-            ],
-          },
-        ],
-      },
-      { type: "paragraph" },
-    ],
-  };
+  const letterhead = buildLetterheadNode(settings);
+  if (!letterhead) return EMPTY_BODY;
+  return { type: "doc", content: [letterhead, { type: "paragraph" }] };
 }
 
 // ─── Variable badge list (live preview, label renameable) ─────────────────────

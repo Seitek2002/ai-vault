@@ -1,8 +1,6 @@
-import { api, ApiError } from './client';
+import { api } from './client';
 import type { Position } from './positions';
 import type { BackgroundImageScope } from '../backgrounds';
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api';
 
 export interface CompanySettings {
   id: string;
@@ -108,22 +106,10 @@ export interface AuthTokens {
   refreshToken: string;
 }
 
-async function uploadFileTo<T>(path: string, file: File): Promise<T> {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+function uploadFileTo<T>(path: string, file: File): Promise<T> {
   const form = new FormData();
   form.append('file', file);
-
-  const res = await fetch(`${API_BASE}${path}`, {
-    method: 'POST',
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-    body: form,
-  });
-
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({ message: res.statusText }));
-    throw new ApiError(res.status, (body as { message?: string }).message ?? res.statusText);
-  }
-  return res.json() as Promise<T>;
+  return api.upload<T>(path, form);
 }
 
 export const settingsApi = {

@@ -1,16 +1,7 @@
-const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api';
+import { api } from './client';
 
-function getToken() {
-  return typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
-}
-
-async function downloadBlob(url: string, filename: string) {
-  const token = getToken();
-  const res = await fetch(url, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-  });
-  if (!res.ok) throw new Error(`Export failed: ${res.status}`);
-  const blob = await res.blob();
+async function downloadBlob(path: string, filename: string) {
+  const blob = await api.getBlob(path);
   const href = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = href;
@@ -20,19 +11,14 @@ async function downloadBlob(url: string, filename: string) {
 }
 
 export async function exportPdf(documentId: string, title: string) {
-  await downloadBlob(`${API}/documents/${documentId}/export/pdf`, `${title}.pdf`);
+  await downloadBlob(`/documents/${documentId}/export/pdf`, `${title}.pdf`);
 }
 
 export async function exportDocx(documentId: string, title: string) {
-  await downloadBlob(`${API}/documents/${documentId}/export/docx`, `${title}.docx`);
+  await downloadBlob(`/documents/${documentId}/export/docx`, `${title}.docx`);
 }
 
 export async function openOriginalFile(documentId: string) {
-  const token = getToken();
-  const res = await fetch(`${API}/documents/${documentId}/export/original`, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-  });
-  if (!res.ok) throw new Error(`Failed to get original file: ${res.status}`);
-  const { url } = (await res.json()) as { url: string };
+  const { url } = await api.get<{ url: string }>(`/documents/${documentId}/export/original`);
   window.open(url, '_blank');
 }

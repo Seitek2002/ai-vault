@@ -7,8 +7,6 @@ import type {
   ListDocumentsParams,
 } from '@ai-vault/types';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api';
-
 function buildQuery(params: Record<string, unknown>): string {
   const q = Object.entries(params)
     .filter(([, v]) => v !== undefined && v !== null && v !== '')
@@ -17,23 +15,10 @@ function buildQuery(params: Record<string, unknown>): string {
   return q ? `?${q}` : '';
 }
 
-async function uploadContentImage(file: File): Promise<{ url: string }> {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+function uploadContentImage(file: File): Promise<{ url: string }> {
   const form = new FormData();
   form.append('file', file);
-
-  const res = await fetch(`${API_BASE}/documents/content-image`, {
-    method: 'POST',
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-    body: form,
-  });
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ message: res.statusText }));
-    throw new Error((err as { message: string }).message ?? 'Upload failed');
-  }
-
-  return res.json() as Promise<{ url: string }>;
+  return api.upload<{ url: string }>('/documents/content-image', form);
 }
 
 export const documentsApi = {

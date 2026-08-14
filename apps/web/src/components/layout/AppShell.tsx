@@ -4,6 +4,7 @@ import { useState, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
+import { ReauthOverlay } from "./ReauthOverlay";
 import { settingsApi } from "@/lib/api/settings";
 import { getBackgroundPreset, backgroundFilterCss, DEFAULT_BACKGROUND_FILTER } from "@/lib/backgrounds";
 import { useBackgroundEditStore } from "@/stores/backgroundEdit.store";
@@ -34,6 +35,8 @@ export function AppShell({ children }: AppShellProps) {
 
   return (
     <div className="flex h-full">
+      <ReauthOverlay />
+
       {/* Desktop sidebar */}
       <aside
         className="hidden md:flex flex-col shrink-0"

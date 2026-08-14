@@ -8,6 +8,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Check, ImageOff, FileText, Building2, Wand2, Archive, Upload, Settings, LogOut, Vault } from "lucide-react";
 import { authApi } from "@/lib/api/auth";
 import { settingsApi } from "@/lib/api/settings";
+import { ApiError } from "@/lib/api/client";
 import { useBackgroundEditStore } from "@/stores/backgroundEdit.store";
 import {
   BACKGROUND_PRESETS,
@@ -185,6 +186,7 @@ function BackgroundPicker() {
   const right = useBackgroundEditStore((s) => s.right);
   const left = useBackgroundEditStore((s) => s.left);
   const exit = useBackgroundEditStore((s) => s.exit);
+  const [error, setError] = useState("");
 
   const mutation = useMutation({
     mutationFn: async () => {
@@ -202,8 +204,12 @@ function BackgroundPicker() {
       });
     },
     onSuccess: () => {
+      setError("");
       void qc.invalidateQueries({ queryKey: ["me"] });
       exit();
+    },
+    onError: (err) => {
+      setError(err instanceof ApiError ? err.message : "Не удалось сохранить фон");
     },
   });
 
@@ -254,13 +260,16 @@ function BackgroundPicker() {
         <PresetPicker label="Цвет сайдбара" selected={previewSidebarId ?? "default"} onSelect={setPreviewSidebarPreset} />
       </div>
 
-      <div className="px-4 py-4 border-t border-[var(--color-border)] shrink-0 flex gap-2">
-        <Button variant="secondary" size="sm" onClick={exit} fullWidth>
-          Отмена
-        </Button>
-        <Button size="sm" onClick={() => mutation.mutate()} loading={mutation.isPending} fullWidth>
-          Готово
-        </Button>
+      <div className="px-4 py-4 border-t border-[var(--color-border)] shrink-0 flex flex-col gap-2">
+        {error && <p className="text-xs text-red-400">{error}</p>}
+        <div className="flex gap-2">
+          <Button variant="secondary" size="sm" onClick={exit} fullWidth>
+            Отмена
+          </Button>
+          <Button size="sm" onClick={() => mutation.mutate()} loading={mutation.isPending} fullWidth>
+            Готово
+          </Button>
+        </div>
       </div>
     </div>
   );

@@ -21,7 +21,21 @@ export class StorageService implements OnModuleInit {
   constructor(private config: ConfigService) {
     const endpoint = this.config.get<string>('MINIO_ENDPOINT') ?? 'http://localhost:9000';
     this.bucket = this.config.get<string>('MINIO_BUCKET') ?? 'ai-vault';
-    this.publicUrl = this.config.get<string>('MINIO_PUBLIC_URL') ?? endpoint;
+    const publicUrlConfigured = this.config.get<string>('MINIO_PUBLIC_URL');
+    this.publicUrl = publicUrlConfigured ?? endpoint;
+
+    // Every stored file's URL is built from this value and saved permanently
+    // (avatarUrl, logoUrl, backgroundImageUrl, exported PDFs, ...) — if it
+    // silently falls back to MINIO_ENDPOINT (often a Docker-internal
+    // hostname like "minio", unreachable from a real browser), every image
+    // in the app renders broken with no error anywhere. Fail loudly instead.
+    if (!publicUrlConfigured) {
+      this.logger.warn(
+        `MINIO_PUBLIC_URL is not set — falling back to MINIO_ENDPOINT ("${endpoint}") for all stored file URLs. ` +
+          `If that's a Docker-internal hostname, every uploaded image/avatar/logo/export will be broken in the browser. ` +
+          `Set MINIO_PUBLIC_URL to the URL browsers can actually reach.`,
+      );
+    }
 
     this.s3 = new S3Client({
       endpoint,

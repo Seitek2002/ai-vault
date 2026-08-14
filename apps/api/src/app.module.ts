@@ -10,6 +10,7 @@ import { FilesModule } from './files/files.module';
 import { ExportModule } from './export/export.module';
 import { SettingsModule } from './settings/settings.module';
 import { TemplatesModule } from './templates/templates.module';
+import { LetterheadsModule } from './letterheads/letterheads.module';
 import { PositionsModule } from './positions/positions.module';
 import { DocumentCategoriesModule } from './document-categories/document-categories.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
@@ -28,6 +29,7 @@ import { PermissionsGuard } from './auth/guards/permissions.guard';
     ExportModule,
     SettingsModule,
     TemplatesModule,
+    LetterheadsModule,
     PositionsModule,
     DocumentCategoriesModule,
   ],

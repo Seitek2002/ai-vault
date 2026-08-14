@@ -20,6 +20,7 @@ import { PLACEHOLDER_MENU } from "@/lib/placeholders";
 import { extractVariables, slugifyVariableKey } from "@/lib/variableTokens";
 import { settingsApi } from "@/lib/api/settings";
 import { documentsApi } from "@/lib/api/documents";
+import { letterheadsApi, type LetterheadDto } from "@/lib/api/letterheads";
 import { buildLetterheadNode } from "@/lib/letterhead";
 import { Select, Button, Spinner } from "@/components/ui";
 import type { TemplateVariableType } from "@ai-vault/types";
@@ -220,29 +221,99 @@ function AddVariableButton({ editor }: { editor: Editor }) {
   );
 }
 
-/* ── Insert letterhead button (logo + company name/address, on demand) ── */
-function InsertLetterheadButton({ editor }: { editor: Editor }) {
+/* ── Letterhead dropdown: pick from saved letterhead templates, with search ── */
+const DEFAULT_LETTERHEAD_LABEL = "Реквизиты компании";
+
+function LetterheadDropdown({ editor }: { editor: Editor }) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+
   const { data: settings } = useQuery({
     queryKey: ["settings"],
     queryFn: settingsApi.getSettings,
   });
-  const letterhead = buildLetterheadNode(settings);
+  const { data: letterheads = [] } = useQuery({
+    queryKey: ["letterheads"],
+    queryFn: () => letterheadsApi.list(),
+  });
+
+  const defaultNode = buildLetterheadNode(settings);
+  const q = search.trim().toLowerCase();
+  const defaultVisible = !!defaultNode && DEFAULT_LETTERHEAD_LABEL.toLowerCase().includes(q);
+  const filtered = letterheads.filter((l) => l.name.toLowerCase().includes(q));
+  const hasAny = defaultVisible || filtered.length > 0;
+
+  function close() {
+    setOpen(false);
+    setSearch("");
+  }
+
+  function insertDefault() {
+    if (!defaultNode) return;
+    editor.chain().focus().insertContentAt(0, defaultNode).run();
+    close();
+  }
+
+  function insertCustom(lh: LetterheadDto) {
+    const content = (lh.bodyJson as { content?: unknown[] } | null)?.content;
+    if (!content || content.length === 0) return;
+    editor.chain().focus().insertContentAt(0, content).run();
+    close();
+  }
 
   return (
-    <ToolbarBtn
-      title={
-        letterhead
-          ? "Добавить верхний колонтитул (лого и реквизиты компании)"
-          : "Заполните название/адрес или логотип в Настройках, чтобы добавить колонтитул"
-      }
-      disabled={!letterhead}
-      onClick={() => {
-        if (!letterhead) return;
-        editor.chain().focus().insertContentAt(0, letterhead).run();
-      }}
-    >
-      <LetterheadIcon />
-    </ToolbarBtn>
+    <div className="relative">
+      <ToolbarBtn title="Добавить верхний колонтитул" onClick={() => setOpen((v) => !v)}>
+        <LetterheadIcon />
+      </ToolbarBtn>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={close} />
+          <div className="absolute left-0 top-full mt-1 z-20 w-72 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-surface)] shadow-xl flex flex-col">
+            <div className="p-2 border-b border-[var(--color-border)]">
+              <input
+                autoFocus
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Escape") close(); }}
+                placeholder="Поиск колонтитула…"
+                className="w-full px-2 py-1.5 text-sm rounded-md border border-[var(--color-border)] bg-[var(--color-bg-elevated)] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:border-[var(--color-accent)]"
+              />
+            </div>
+            <div className="max-h-64 overflow-y-auto py-1">
+              {defaultVisible && (
+                <button
+                  type="button"
+                  onClick={insertDefault}
+                  className="w-full text-left px-3 py-2 text-sm text-[var(--color-text-primary)] hover:bg-[var(--color-bg-elevated)] transition-colors"
+                >
+                  {DEFAULT_LETTERHEAD_LABEL}{" "}
+                  <span className="text-xs text-[var(--color-text-muted)]">(по умолчанию)</span>
+                </button>
+              )}
+              {filtered.map((lh) => (
+                <button
+                  key={lh.id}
+                  type="button"
+                  onClick={() => insertCustom(lh)}
+                  className="w-full text-left px-3 py-2 text-sm text-[var(--color-text-primary)] hover:bg-[var(--color-bg-elevated)] transition-colors truncate"
+                >
+                  {lh.name}
+                </button>
+              ))}
+              {!hasAny && (
+                <p className="px-3 py-4 text-xs text-[var(--color-text-muted)] text-center">
+                  {letterheads.length === 0 && !defaultNode
+                    ? "Колонтитулов пока нет — создайте в Конструкторе"
+                    : "Ничего не найдено"}
+                </p>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 
@@ -389,7 +460,7 @@ export function RichEditor({ initialContent, onChange, placeholder = "Начни
           <FontSizeSelect editor={editor} />
           {!variablesEnabled && <InsertFieldSelect editor={editor} />}
           {variablesEnabled && <AddVariableButton editor={editor} />}
-          <InsertLetterheadButton editor={editor} />
+          <LetterheadDropdown editor={editor} />
           <InsertImageButton editor={editor} />
           <SEP />
           <ToolbarBtn active={editor.isActive("bold")} title="Жирный (Ctrl+B)" onClick={() => editor.chain().focus().toggleBold().run()}>

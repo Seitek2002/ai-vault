@@ -1,3 +1,5 @@
+import { isBorderlessTable } from './table-borders.util';
+
 interface PmNode {
   type: string;
   text?: string;
@@ -82,7 +84,7 @@ function nodeToHtml(node: PmNode): string {
       return `<li>${children()}</li>`;
 
     case 'table':
-      return `<table>${children()}</table>`;
+      return `<table${isBorderlessTable(node) ? ' class="borderless"' : ''}>${children()}</table>`;
 
     case 'tableRow':
       return `<tr>${children()}</tr>`;
@@ -140,10 +142,10 @@ const PAGE_CSS = `
   table { width: 100%; border-collapse: collapse; margin: 0.45em 0; font-size: 10.5pt; }
   th, td { border: 1px solid #333; padding: 3pt 6pt; vertical-align: top; }
   th { font-weight: bold; }
-  /* Реквизитные таблицы (нет th) — без рамок */
-  table:not(:has(th)) { border: none; margin: 0.1em 0; }
-  table:not(:has(th)) td { border: none; padding: 1.5pt 5pt; }
-  table:not(:has(th)) td:first-child { padding-left: 0; white-space: nowrap; }
+  /* Реквизитные/разметочные таблицы — без рамок (см. isBorderlessTable) */
+  table.borderless { border: none; margin: 0.1em 0; }
+  table.borderless th, table.borderless td { border: none; padding: 1.5pt 5pt; }
+  table.borderless td:first-child { padding-left: 0; white-space: nowrap; }
   strong { font-weight: bold; }
   em { font-style: italic; }
   u  { text-decoration: underline; }

@@ -92,6 +92,22 @@
   white-space: nowrap;
   color: #000000;
 }
+
+/* Явный флаг borderless (attrs.borderless на table) — приоритетнее эвристики
+   "нет th ⇒ без рамок" выше, тот же признак читают PDF/DOCX-экспорт */
+.prose-editor .tiptap table[data-borderless="true"],
+.prose-editor .tiptap table[data-borderless="true"] th,
+.prose-editor .tiptap table[data-borderless="true"] td {
+  border: none;
+}
+.prose-editor .tiptap table[data-borderless="true"] td:first-child {
+  padding-left: 0;
+  white-space: nowrap;
+}
+.prose-editor .tiptap table[data-borderless="false"] th,
+.prose-editor .tiptap table[data-borderless="false"] td {
+  border: 1px solid #333333;
+}
 .prose-editor .tiptap .selectedCell::after {
   background: rgba(59, 130, 246, 0.15);
   position: absolute;

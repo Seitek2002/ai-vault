@@ -14,6 +14,8 @@ import {
   UnderlineType,
   ThematicBreak,
 } from 'docx';
+import { isBorderlessTable } from './table-borders.util';
+
 interface PmNode {
   type: string;
   text?: string;
@@ -186,7 +188,14 @@ function nodeToBlocks(node: PmNode, images: ImageCache): DocxBlock[] {
     }
 
     case 'table': {
-      const borderDef = { style: BorderStyle.SINGLE, size: 1, color: '333333' };
+      // Layout-only tables (dates/places, реквизиты blocks, signature rows —
+      // see isBorderlessTable) must render with no grid at all, matching the
+      // editor and the PDF export — otherwise Word's default table style
+      // draws a visible border even when none is set explicitly here.
+      const borderless = isBorderlessTable(node);
+      const borderDef = borderless
+        ? { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' }
+        : { style: BorderStyle.SINGLE, size: 1, color: '333333' };
       const rows = (node.content ?? []).map(
         (row) =>
           new TableRow({
@@ -197,7 +206,7 @@ function nodeToBlocks(node: PmNode, images: ImageCache): DocxBlock[] {
                   borders: {
                     top: borderDef, bottom: borderDef, left: borderDef, right: borderDef,
                   },
-                  ...(cell.type === 'tableHeader'
+                  ...(!borderless && cell.type === 'tableHeader'
                     ? { shading: { fill: 'F5F5F5', color: 'F5F5F5', type: 'solid' as const } }
                     : {}),
                 }),

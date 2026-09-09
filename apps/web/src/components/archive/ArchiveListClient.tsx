@@ -6,13 +6,14 @@ import { Plus, Search, FileText, Trash2, ExternalLink } from "lucide-react";
 import { Button, Input, Card, EmptyState, PageHeader, Spinner } from "@/components/ui";
 import { CompanyFilterDropdown } from "@/components/documents/CompanyFilterDropdown";
 import { documentsApi } from "@/lib/api/documents";
+import { openOriginalFile } from "@/lib/api/export";
 import { ArchiveUploadModal } from "./ArchiveUploadModal";
 import type { DocumentDto } from "@ai-vault/types";
 
 function ArchiveCard({ doc }: { doc: DocumentDto }) {
   const qc = useQueryClient();
   const [confirming, setConfirming] = useState(false);
-  const fileUrl = doc.fileAssets?.[0]?.s3Url;
+  const [opening, setOpening] = useState(false);
   const date = new Date(doc.createdAt).toLocaleDateString("ru-RU", {
     day: "2-digit",
     month: "short",
@@ -24,17 +25,28 @@ function ArchiveCard({ doc }: { doc: DocumentDto }) {
     onSuccess: () => void qc.invalidateQueries({ queryKey: ["documents"] }),
   });
 
+  async function handleOpen() {
+    setOpening(true);
+    try {
+      await openOriginalFile(doc.id);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Не удалось открыть файл");
+    } finally {
+      setOpening(false);
+    }
+  }
+
   return (
     <Card hoverable className="group w-full flex items-start gap-3 px-4 py-4">
       <div className="mt-0.5 w-9 h-9 rounded-lg bg-[var(--color-bg-elevated)] border border-[var(--color-border)] flex items-center justify-center shrink-0">
         <FileText className="w-4 h-4 text-[var(--color-text-muted)]" />
       </div>
 
-      <a
-        href={fileUrl}
-        target="_blank"
-        rel="noreferrer"
-        className="flex-1 min-w-0 text-left"
+      <button
+        type="button"
+        onClick={() => void handleOpen()}
+        disabled={opening}
+        className="flex-1 min-w-0 text-left disabled:opacity-60"
       >
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-1">
           {doc.counterparty && (
@@ -45,9 +57,9 @@ function ArchiveCard({ doc }: { doc: DocumentDto }) {
         </div>
         <p className="text-sm font-medium text-[var(--color-text-primary)] truncate group-hover:text-[var(--color-accent)] transition-colors flex items-center gap-1.5">
           {doc.title}
-          <ExternalLink className="w-3 h-3 text-[var(--color-text-muted)] shrink-0" />
+          {opening ? <Spinner size="sm" /> : <ExternalLink className="w-3 h-3 text-[var(--color-text-muted)] shrink-0" />}
         </p>
-      </a>
+      </button>
 
       <div className="flex items-center gap-3 shrink-0">
         <time className="text-xs text-[var(--color-text-muted)]">{date}</time>

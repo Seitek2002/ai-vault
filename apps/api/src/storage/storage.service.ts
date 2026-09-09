@@ -60,10 +60,16 @@ export class StorageService implements OnModuleInit {
       }
     }
 
-    // Every uploaded object (avatars, background photos, exported/imported files) is
-    // referenced directly via its public s3Url, so the bucket needs a public-read
-    // policy — without it, GETs 403 even though uploads succeed. Idempotent, safe to
-    // re-apply on every boot.
+    // Cosmetic/branding objects (avatars, logos, background photos, inline
+    // editor images) are referenced directly via their public s3Url, so those
+    // prefixes need public-read — without it, GETs 403 even though uploads
+    // succeed. Deliberately NOT included: the bucket-root prefix used by
+    // FileAsset uploads (Archive PDFs, replaced/imported originals) — those
+    // are real business documents and stay private, served only via
+    // short-lived presigned URLs (see StorageService.presignedUrl /
+    // ExportService.getOriginalFileUrl). Idempotent, safe to re-apply on
+    // every boot.
+    const PUBLIC_PREFIXES = ['avatars', 'logos', 'backgrounds', 'sidebars', 'content-images'];
     try {
       await this.s3.send(
         new PutBucketPolicyCommand({
@@ -75,7 +81,7 @@ export class StorageService implements OnModuleInit {
                 Effect: 'Allow',
                 Principal: '*',
                 Action: ['s3:GetObject'],
-                Resource: [`arn:aws:s3:::${this.bucket}/*`],
+                Resource: PUBLIC_PREFIXES.map((p) => `arn:aws:s3:::${this.bucket}/${p}/*`),
               },
             ],
           }),

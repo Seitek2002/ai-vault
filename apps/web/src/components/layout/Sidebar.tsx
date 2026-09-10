@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import type { ComponentType, SVGProps } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Check, ImageOff, FileText, Building2, Wand2, Archive, Upload, Settings, LogOut, Vault } from "lucide-react";
+import { Check, ImageOff, FileText, Building2, Wand2, Archive, Upload, Settings, LogOut, Vault, CalendarDays, Handshake } from "lucide-react";
 import { authApi } from "@/lib/api/auth";
 import { settingsApi } from "@/lib/api/settings";
 import { ApiError } from "@/lib/api/client";
@@ -27,6 +27,8 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
+  { href: "/month", label: "Этот месяц", icon: CalendarDays },
+  { href: "/contracts", label: "Договоры", icon: Handshake },
   { href: "/documents", label: "Документы", icon: FileText },
   { href: "/companies", label: "Компании", icon: Building2 },
   { href: "/builder", label: "Конструктор", icon: Wand2 },

@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@ai-vault/doc-placeholders": "*",
     "@ai-vault/types": "*",
     "@tanstack/react-query": "^5.80.6",
     "@tiptap/extension-image": "^2.27.2",

@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, Plus } from "lucide-react";
 import { Button, Card, Badge, Spinner } from "@/components/ui";
 import { counterpartiesApi } from "@/lib/api/counterparties";
+import { CompanySettlements } from "@/components/settlements/CompanySettlements";
 import { documentsApi } from "@/lib/api/documents";
 import { DOCUMENT_TEMPLATES } from "@/lib/templates";
 import { DocumentType, DocumentStatus } from "@ai-vault/types";
@@ -307,6 +308,8 @@ export function CompanyDetailClient({ companyId }: { companyId: string }) {
             )}
           </div>
         )}
+
+        <CompanySettlements counterpartyId={companyId} />
 
         {/* Monthly automation */}
         <div>

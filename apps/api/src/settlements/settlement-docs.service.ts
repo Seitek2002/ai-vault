@@ -11,7 +11,7 @@ import {
   substitutePlaceholders,
   type PlaceholderContext,
 } from '@ai-vault/doc-placeholders';
-import { firstDayOfMonth, isoDate, lastDayOfMonth, periodLabel } from './period.util';
+import { firstDayOfMonth, isoDate, lastDayOfMonth } from './period.util';
 
 type Tx = Prisma.TransactionClient;
 
@@ -27,7 +27,7 @@ interface PmNodeLike {
  * единой ошибки. Шаблон из Конструктора вполне может его содержать, поэтому
  * чистим перед сохранением, а не надеемся на аккуратность шаблона.
  */
-function sanitizePm(node: unknown): unknown {
+export function sanitizePm(node: unknown): unknown {
   if (Array.isArray(node)) {
     return node
       .map(sanitizePm)

@@ -11,18 +11,37 @@ export interface UploadedFile {
   mimeType: string;
 }
 
-const ALLOWED_TYPES = new Set([
+/**
+ * Сканы принимаются как вложения: подписанный акт часто приходит фотографией
+ * с телефона. Текст из них не извлекается — только хранение и привязка к шагу.
+ */
+const SCAN_TYPES = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/heic',
+  'image/heif',
+]);
+
+const TEXT_TYPES = new Set([
   'application/pdf',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   'application/msword',
   'text/plain',
 ]);
 
+const ALLOWED_TYPES = new Set([...TEXT_TYPES, ...SCAN_TYPES]);
+
 const MIME_EXT: Record<string, string> = {
   'application/pdf': 'pdf',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
   'application/msword': 'doc',
   'text/plain': 'txt',
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+  'image/heic': 'heic',
+  'image/heif': 'heif',
 };
 
 @Injectable()
@@ -40,7 +59,7 @@ export class FilesService {
   ) {
     if (!ALLOWED_TYPES.has(file.mimeType)) {
       throw new BadRequestException(
-        `Unsupported file type: ${file.mimeType}. Allowed: PDF, DOCX, TXT.`,
+        `Unsupported file type: ${file.mimeType}. Allowed: PDF, DOCX, TXT, JPG/PNG/WebP/HEIC scans.`,
       );
     }
 
@@ -88,6 +107,12 @@ export class FilesService {
       where: { id: fileAssetId, organizationId },
     });
     if (!asset) throw new NotFoundException('File not found');
+
+    if (SCAN_TYPES.has(asset.mimeType)) {
+      throw new BadRequestException(
+        'Cannot extract text from a scan — OCR is not wired up. The file is stored as an attachment.',
+      );
+    }
 
     const buffer = await this.storage.download(asset.s3Key);
 

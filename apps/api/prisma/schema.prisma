@@ -46,6 +46,15 @@ enum ChangeStatus {
   REJECTED
 }
 
+enum SettlementStepType {
+  ISSUE_ACT
+  ISSUE_INVOICE
+  SEND
+  ISSUE_ESF
+  RECEIVE_SIGNED
+  RECEIVE_PAYMENT
+}
+
 // ─── Models ──────────────────────────────────────────────────────────────────
 
 model Organization {
@@ -63,6 +72,9 @@ model Organization {
   categories     DocumentCategory[]
   positions      Position[]
   settings       CompanySettings?
+  contracts      Contract[]
+  settlements    Settlement[]
+  payments       Payment[]
 }
 
 model User {
@@ -89,6 +101,8 @@ model User {
   versions         DocumentVersion[]
   fileAssets       FileAsset[]
   refreshTokens    RefreshToken[]
+  completedSteps   SettlementStep[]
+  payments         Payment[]
 
   @@index([organizationId])
   @@index([positionId])
@@ -135,6 +149,9 @@ model Counterparty {
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   documents    Document[]
+  contracts    Contract[]
+  settlements  Settlement[]
+  payments     Payment[]
 
   @@index([organizationId])
   @@index([organizationId, inn])
@@ -152,6 +169,9 @@ model Document {
   meta           Json           @default("{}")
   bodyJson       Json           @default("{}")
   isArchived     Boolean        @default(false)
+  settlementId   String?
+  // Скан подписанного документа ссылается на исходный документ, который подписали.
+  sourceDocumentId String?
   createdById    String
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
@@ -160,6 +180,11 @@ model Document {
   counterparty Counterparty?     @relation(fields: [counterpartyId], references: [id], onDelete: SetNull)
   category     DocumentCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   createdBy    User              @relation("DocumentCreatedBy", fields: [createdById], references: [id])
+  settlement   Settlement?       @relation(fields: [settlementId], references: [id], onDelete: SetNull)
+  sourceDocument Document?       @relation("DocumentScanOf", fields: [sourceDocumentId], references: [id], onDelete: SetNull)
+  scans        Document[]        @relation("DocumentScanOf")
+  contract     Contract?         @relation("ContractDocument")
+  steps        SettlementStep[]
   versions     DocumentVersion[]
   changes      DocumentChange[]
   fileAssets   FileAsset[]
@@ -169,6 +194,8 @@ model Document {
   @@index([organizationId, status])
   @@index([organizationId, createdAt(sort: Desc)])
   @@index([categoryId])
+  @@index([settlementId])
+  @@index([sourceDocumentId])
 }
 
 model DocumentVersion {
@@ -211,6 +238,7 @@ model FileAsset {
   id             String   @id @default(cuid())
   organizationId String
   documentId     String?
+  settlementId   String?
   originalName   String
   mimeType       String
   size           Int
@@ -219,12 +247,16 @@ model FileAsset {
   createdById    String
   createdAt      DateTime @default(now())
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  document     Document?    @relation(fields: [documentId], references: [id], onDelete: SetNull)
-  createdBy    User         @relation(fields: [createdById], references: [id])
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  document     Document?        @relation(fields: [documentId], references: [id], onDelete: SetNull)
+  settlement   Settlement?      @relation(fields: [settlementId], references: [id], onDelete: SetNull)
+  createdBy    User             @relation(fields: [createdById], references: [id])
+  steps        SettlementStep[]
+  payments     Payment[]
 
   @@index([organizationId])
   @@index([documentId])
+  @@index([settlementId])
 }
 
 model CompanySettings {
@@ -243,6 +275,16 @@ model CompanySettings {
   currency       String  @default("KGS")
   logoAssetId    String?
   logoUrl        String?
+
+  // Сквозная нумерация автоматически генерируемых документов.
+  // Счётчик сбрасывается при смене года.
+  actPrefix          String @default("АВР")
+  actCounter         Int    @default(0)
+  actCounterYear     Int?
+  invoicePrefix      String @default("СЧ")
+  invoiceCounter     Int    @default(0)
+  invoiceCounterYear Int?
+
   updatedAt      DateTime @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -295,4 +337,122 @@ model DocumentCategory {
   templates    DocumentTemplate[]
 
   @@index([organizationId])
+}
+
+// ─── Расчёты по месяцам ──────────────────────────────────────────────────────
+
+/// Договор как бизнес-объект: с кем, на сколько, с какой периодичностью.
+/// Текст договора — отдельный Document типа CONTRACT, ссылка опциональна.
+model Contract {
+  id             String  @id @default(cuid())
+  organizationId String
+  counterpartyId String
+  documentId     String? @unique
+
+  title          String
+  defaultAmount  Decimal  @db.Decimal(14, 2)
+  vatRate        Float    @default(12)
+  currency       String   @default("KGS")
+  /// День месяца (1–28), когда создаётся расчёт за этот месяц.
+  billingDay     Int      @default(1)
+  /// Срок оплаты в днях от конца расчётного месяца.
+  paymentDueDays Int      @default(10)
+  esfRequired    Boolean  @default(true)
+  active         Boolean  @default(true)
+  startDate      DateTime?
+  endDate        DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  counterparty Counterparty @relation(fields: [counterpartyId], references: [id], onDelete: Cascade)
+  document     Document?    @relation("ContractDocument", fields: [documentId], references: [id], onDelete: SetNull)
+  settlements  Settlement[]
+
+  @@index([organizationId])
+  @@index([organizationId, active])
+  @@index([counterpartyId])
+}
+
+/// Расчёт за один месяц по одному договору.
+/// Статус не хранится — выводится из шагов и платежей.
+model Settlement {
+  id             String @id @default(cuid())
+  organizationId String
+  contractId     String
+  counterpartyId String
+
+  year      Int
+  month     Int
+  amount    Decimal @db.Decimal(14, 2)
+  vatAmount Decimal @default(0) @db.Decimal(14, 2)
+  currency  String  @default("KGS")
+
+  closedAt  DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  contract     Contract         @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  counterparty Counterparty     @relation(fields: [counterpartyId], references: [id], onDelete: Cascade)
+  steps        SettlementStep[]
+  documents    Document[]
+  payments     Payment[]
+  fileAssets   FileAsset[]
+
+  @@unique([contractId, year, month])
+  @@index([organizationId, year, month])
+  @@index([counterpartyId])
+}
+
+/// Шаг чек-листа. Закрытый шаг несёт доказательство: документ, файл или платёж.
+model SettlementStep {
+  id           String             @id @default(cuid())
+  settlementId String
+  type         SettlementStepType
+  order        Int
+  dueDate      DateTime?
+  doneAt       DateTime?
+  doneById     String?
+  documentId   String?
+  fileAssetId  String?
+  paymentId    String?
+  note         String?
+  createdAt    DateTime           @default(now())
+
+  settlement Settlement @relation(fields: [settlementId], references: [id], onDelete: Cascade)
+  doneBy     User?      @relation(fields: [doneById], references: [id], onDelete: SetNull)
+  document   Document?  @relation(fields: [documentId], references: [id], onDelete: SetNull)
+  fileAsset  FileAsset? @relation(fields: [fileAssetId], references: [id], onDelete: SetNull)
+  payment    Payment?   @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+
+  @@unique([settlementId, type])
+  @@index([settlementId])
+  @@index([dueDate])
+}
+
+/// Подтверждение оплаты. Несколько записей на расчёт = частичная оплата.
+model Payment {
+  id             String  @id @default(cuid())
+  organizationId String
+  counterpartyId String
+  settlementId   String?
+
+  amount      Decimal  @db.Decimal(14, 2)
+  paidAt      DateTime
+  reference   String?
+  fileAssetId String?
+  createdById String
+  createdAt   DateTime @default(now())
+
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  counterparty Counterparty     @relation(fields: [counterpartyId], references: [id], onDelete: Cascade)
+  settlement   Settlement?      @relation(fields: [settlementId], references: [id], onDelete: SetNull)
+  fileAsset    FileAsset?       @relation(fields: [fileAssetId], references: [id], onDelete: SetNull)
+  createdBy    User             @relation(fields: [createdById], references: [id])
+  steps        SettlementStep[]
+
+  @@index([organizationId])
+  @@index([settlementId])
+  @@index([counterpartyId])
 }

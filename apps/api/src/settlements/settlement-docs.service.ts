@@ -135,6 +135,76 @@ export class SettlementDocsService {
     return created;
   }
 
+  /**
+   * Перерисовывает черновики расчёта после смены суммы.
+   *
+   * Номер и сам документ сохраняются — меняется только тело, и на него
+   * заводится новая версия. Иначе правка суммы расходилась бы с уже
+   * сгенерированным актом: в расчёте одна цифра, в документе другая.
+   * Тронуты только черновики; выставленный документ правится руками.
+   */
+  async refreshDraftsForSettlement(
+    tx: Tx,
+    params: {
+      settlement: Settlement;
+      counterparty: Counterparty;
+      settings: CompanySettings | null;
+      userId: string;
+      organizationId: string;
+    },
+  ): Promise<number> {
+    const { settlement, counterparty, settings, userId, organizationId } = params;
+
+    const drafts = await tx.document.findMany({
+      where: { settlementId: settlement.id, status: 'DRAFT' },
+      select: { id: true, type: true, number: true, meta: true },
+    });
+
+    let updated = 0;
+    for (const draft of drafts) {
+      const generated = GENERATED.find((g) => g.type === draft.type);
+      if (!generated) continue;
+
+      const template = await this.resolveTemplate(tx, organizationId, draft.type);
+      if (!template) continue;
+
+      const context = this.buildContext({
+        settlement,
+        counterparty,
+        settings,
+        number: draft.number ?? '',
+      });
+      const bodyJson = sanitizePm(
+        substitutePlaceholders(template.bodyJson, context),
+      ) as Prisma.InputJsonValue;
+
+      const meta = {
+        ...(draft.meta as Record<string, unknown>),
+        currency: settlement.currency,
+        totalAmount: settlement.amount.toNumber(),
+      } as Prisma.InputJsonValue;
+
+      await tx.document.update({ where: { id: draft.id }, data: { bodyJson, meta } });
+
+      const last = await tx.documentVersion.findFirst({
+        where: { documentId: draft.id },
+        orderBy: { version: 'desc' },
+        select: { version: true },
+      });
+      await tx.documentVersion.create({
+        data: {
+          documentId: draft.id,
+          version: (last?.version ?? 0) + 1,
+          bodyJson,
+          createdById: userId,
+        },
+      });
+      updated += 1;
+    }
+
+    return updated;
+  }
+
   /** Контекст подстановки: реквизиты обеих сторон, номер, сумма и период месяца. */
   buildContext(params: {
     settlement: Settlement;

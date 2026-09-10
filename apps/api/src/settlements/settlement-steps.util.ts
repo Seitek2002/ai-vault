@@ -102,3 +102,20 @@ export function nextOpenStep<T extends StepStateLike>(steps: T[]): T | null {
   if (open.length === 0) return null;
   return open.reduce((a, b) => (a.order <= b.order ? a : b));
 }
+
+/**
+ * Выделяет НДС из суммы «с налогом»: сумма × ставка / (100 + ставка).
+ * Партнёру без ЭСФ налог не выделяется вовсе.
+ *
+ * Формула нужна и при создании расчёта, и при правке суммы, поэтому живёт
+ * здесь: иначе два места считали бы налог по-своему.
+ */
+export function extractVat(
+  amountWithVat: number,
+  vatRate: number,
+  esfRequired: boolean,
+): number {
+  if (!esfRequired || vatRate <= 0) return 0;
+  const vat = (amountWithVat * vatRate) / (100 + vatRate);
+  return Math.round(vat * 100) / 100;
+}

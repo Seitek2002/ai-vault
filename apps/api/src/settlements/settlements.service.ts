@@ -10,6 +10,7 @@ import { SettlementDocsService } from './settlement-docs.service';
 import {
   buildStepPlans,
   deriveStatus,
+  extractVat,
   type SettlementStatus,
 } from './settlement-steps.util';
 import type {
@@ -212,10 +213,9 @@ export class SettlementsService {
     });
     if (existing) return null;
 
-    const vatAmount = contract.defaultAmount
-      .mul(contract.vatRate)
-      .div(new Prisma.Decimal(100).add(contract.vatRate))
-      .toDecimalPlaces(2);
+    const vatAmount = new Prisma.Decimal(
+      extractVat(contract.defaultAmount.toNumber(), contract.vatRate, contract.esfRequired),
+    );
 
     try {
       return await this.prisma.$transaction(async (tx) => {
@@ -227,7 +227,7 @@ export class SettlementsService {
             year,
             month,
             amount: contract.defaultAmount,
-            vatAmount: contract.esfRequired ? vatAmount : new Prisma.Decimal(0),
+            vatAmount,
             currency: contract.currency,
             steps: {
               create: buildStepPlans(year, month, {
@@ -282,7 +282,12 @@ export class SettlementsService {
 
   // ── Правки расчёта ────────────────────────────────────────────────────────
 
-  async update(id: string, organizationId: string, dto: UpdateSettlementDto) {
+  async update(
+    id: string,
+    organizationId: string,
+    userId: string,
+    dto: UpdateSettlementDto,
+  ) {
     const settlement = await this.getEntity(id, organizationId);
 
     if (dto.amount !== undefined) {
@@ -297,10 +302,43 @@ export class SettlementsService {
     }
 
     const data: Prisma.SettlementUpdateInput = {};
-    if (dto.amount !== undefined) data.amount = new Prisma.Decimal(dto.amount);
+    if (dto.amount !== undefined) {
+      data.amount = new Prisma.Decimal(dto.amount);
+
+      // НДС пересчитывается вместе с суммой, иначе остался бы от прежней.
+      // Явно переданный vatAmount ниже перекрывает расчётный.
+      if (dto.vatAmount === undefined) {
+        const contract = await this.prisma.contract.findUnique({
+          where: { id: settlement.contractId },
+          select: { vatRate: true, esfRequired: true },
+        });
+        data.vatAmount = new Prisma.Decimal(
+          extractVat(dto.amount, contract?.vatRate ?? 0, contract?.esfRequired ?? false),
+        );
+      }
+    }
     if (dto.vatAmount !== undefined) data.vatAmount = new Prisma.Decimal(dto.vatAmount);
 
-    await this.prisma.settlement.update({ where: { id: settlement.id }, data });
+    await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.settlement.update({ where: { id: settlement.id }, data });
+
+      // Черновики перерисовываем той же транзакцией: сумма в расчёте и сумма
+      // в акте не должны разъезжаться даже на мгновение.
+      if (dto.amount !== undefined || dto.vatAmount !== undefined) {
+        const [counterparty, settings] = await Promise.all([
+          tx.counterparty.findUniqueOrThrow({ where: { id: updated.counterpartyId } }),
+          tx.companySettings.findUnique({ where: { organizationId } }),
+        ]);
+        await this.docs.refreshDraftsForSettlement(tx, {
+          settlement: updated,
+          counterparty,
+          settings,
+          userId,
+          organizationId,
+        });
+      }
+    });
+
     await this.syncPaymentStep(id);
     return this.findOne(id, organizationId);
   }

@@ -49,8 +49,9 @@ export class SettlementsController {
     @Param('id') id: string,
     @Body() dto: UpdateSettlementDto,
     @CurrentOrgId() organizationId: string,
+    @CurrentUser() user: JwtPayload,
   ) {
-    return this.service.update(id, organizationId, dto);
+    return this.service.update(id, organizationId, user.sub, dto);
   }
 
   @Delete(':id')

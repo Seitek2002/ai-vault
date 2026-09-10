@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { SettlementStepType } from '@prisma/client';
-import { buildStepPlans, deriveStatus, nextOpenStep } from '../settlement-steps.util';
+import { buildStepPlans, deriveStatus, extractVat, nextOpenStep } from '../settlement-steps.util';
 
 const iso = (d: Date) => d.toISOString().slice(0, 10);
 
@@ -116,5 +116,34 @@ describe('nextOpenStep', () => {
 
   it('возвращает null, когда всё закрыто', () => {
     expect(nextOpenStep([step(SettlementStepType.ISSUE_ACT, 1, PAST, PAST)])).toBeNull();
+  });
+});
+
+// ── extractVat ───────────────────────────────────────────────────────────────
+
+describe('extractVat', () => {
+  it('выделяет налог из суммы с НДС, а не начисляет сверху', () => {
+    // 30 000 с НДС 12% → 30000 × 12 / 112
+    expect(extractVat(30000, 12, true)).toBe(3214.29);
+    expect(extractVat(100000, 12, true)).toBe(10714.29);
+  });
+
+  it('партнёру без ЭСФ налог не выделяется', () => {
+    expect(extractVat(30000, 12, false)).toBe(0);
+  });
+
+  it('нулевая ставка даёт ноль', () => {
+    expect(extractVat(30000, 0, true)).toBe(0);
+  });
+
+  it('округляет до копеек', () => {
+    const vat = extractVat(12345.67, 12, true);
+    expect(vat).toBe(Math.round(vat * 100) / 100);
+  });
+
+  it('сумма без налога плюс налог равны исходной сумме', () => {
+    const amount = 87654.32;
+    const vat = extractVat(amount, 12, true);
+    expect(Math.round((amount - vat) * 1.12 * 100) / 100).toBeCloseTo(amount, 1);
   });
 });

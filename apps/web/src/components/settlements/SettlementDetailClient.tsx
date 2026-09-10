@@ -11,6 +11,7 @@ import {
   settlementsApi,
   type SettlementStep,
 } from '@/lib/api/settlements';
+import { AmountEditor } from './AmountEditor';
 import { StepActionModal } from './StepActionModal';
 import { stepState } from './StepBadge';
 
@@ -72,16 +73,7 @@ export function SettlementDetailClient({ settlementId }: { settlementId: string 
             {data.contractTitle} · {MONTH_NAMES[data.month - 1]} {data.year}
           </p>
         </div>
-        <div className="text-right">
-          <p className="text-lg font-semibold text-[var(--color-text-primary)]">
-            {formatMoney(data.amount, data.currency)}
-          </p>
-          <p className="text-xs text-[var(--color-text-muted)]">
-            {data.dueAmount > 0
-              ? `не оплачено ${formatMoney(data.dueAmount, data.currency)}`
-              : 'оплачено полностью'}
-          </p>
-        </div>
+        <AmountEditor settlement={data} />
       </div>
 
       <div className="grid lg:grid-cols-2 gap-6">

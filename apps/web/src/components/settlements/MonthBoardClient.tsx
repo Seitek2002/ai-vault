@@ -206,7 +206,7 @@ export function MonthBoardClient() {
       ) : (
         <>
           {/* Десктоп: таблица «партнёр × шаги» */}
-          <Card className="hidden lg:block overflow-hidden p-0">
+          <Card className="hidden lg:block shrink-0 overflow-hidden p-0">
             <table className="w-full border-collapse">
               <thead>
                 <tr className="bg-[var(--color-bg-elevated)]">
@@ -293,7 +293,7 @@ export function MonthBoardClient() {
           </Card>
 
           {/* Мобильный: карточка на партнёра */}
-          <div className="lg:hidden flex flex-col gap-3">
+          <div className="lg:hidden shrink-0 flex flex-col gap-3">
             {settlements.map((s) => (
               <Card key={s.id} className="p-4">
                 <div className="flex items-start justify-between gap-3 mb-1">

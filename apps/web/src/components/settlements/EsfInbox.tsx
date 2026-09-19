@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, ChevronRight, ExternalLink, Link2, Link2Off } from "lucide-react";
 import { ApiError } from "@/lib/api/client";
@@ -48,6 +48,10 @@ function MonthGroup({
 }) {
   const qc = useQueryClient();
   const [open, setOpen] = useState(defaultOpen);
+  // Переключили месяц стрелками на дашборде — раскрываем его группу.
+  useEffect(() => {
+    if (defaultOpen) setOpen(true);
+  }, [defaultOpen]);
   const [choice, setChoice] = useState<Record<string, string>>({});
 
   const { data: board } = useQuery({
@@ -188,7 +192,7 @@ export function EsfInbox({ year, month }: { year: number; month: number }) {
   if (items.length === 0) return null;
 
   return (
-    <section className="mt-6">
+    <section className="mt-6 shrink-0">
       <div className="flex items-baseline justify-between gap-3 mb-2">
         <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">
           ЭСФ без расчёта{" "}

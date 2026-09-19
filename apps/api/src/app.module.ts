@@ -16,6 +16,7 @@ import { PositionsModule } from './positions/positions.module';
 import { DocumentCategoriesModule } from './document-categories/document-categories.module';
 import { ContractsModule } from './contracts/contracts.module';
 import { SettlementsModule } from './settlements/settlements.module';
+import { EsfModule } from './esf/esf.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { RolesGuard } from './auth/guards/roles.guard';
 import { PermissionsGuard } from './auth/guards/permissions.guard';
@@ -38,6 +39,7 @@ import { PermissionsGuard } from './auth/guards/permissions.guard';
     DocumentCategoriesModule,
     ContractsModule,
     SettlementsModule,
+    EsfModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },

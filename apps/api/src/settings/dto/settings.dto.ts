@@ -1,4 +1,4 @@
-import { IsString, IsEmail, IsOptional, IsNumber, Min, Max, MinLength, MaxLength } from 'class-validator';
+import { IsString, IsEmail, IsOptional, IsNumber, IsBoolean, Min, Max, MinLength, MaxLength } from 'class-validator';
 
 export class UpdateSettingsDto {
   @IsOptional()
@@ -50,4 +50,33 @@ export class UpdateSettingsDto {
   @IsOptional()
   @IsString()
   currency?: string;
+
+  // ── Кабинет ЭСФ (esf.salyk.kg) ──
+  // Пароль принимается только на запись: шифруется и в ответах не появляется.
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  esfLogin?: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(200)
+  esfPassword?: string;
+
+  /** Отключить кабинет — стереть логин и пароль. */
+  @IsOptional()
+  @IsBoolean()
+  esfClear?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(10)
+  actPrefix?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(10)
+  invoicePrefix?: string;
 }

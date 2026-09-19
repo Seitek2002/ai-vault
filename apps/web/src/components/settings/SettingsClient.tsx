@@ -18,6 +18,7 @@ import { useBackgroundEditStore } from '@/stores/backgroundEdit.store';
 import { ApiError } from '@/lib/api/client';
 import { saveTokens } from '@/lib/tokens';
 import { Button, Input, Select, Card, Badge, Spinner, Modal } from '@/components/ui';
+import { EsfCabinetTab } from './EsfCabinetTab';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -937,10 +938,11 @@ function TeamTab() {
 
 // ── Main ───────────────────────────────────────────────────────────────────────
 
-type Tab = 'requisites' | 'team' | 'positions' | 'profile';
+type Tab = 'requisites' | 'team' | 'positions' | 'profile' | 'esf';
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'requisites', label: 'Реквизиты организации' },
+  { id: 'esf', label: 'Кабинет ЭСФ' },
   { id: 'team', label: 'Сотрудники' },
   { id: 'positions', label: 'Должности' },
   { id: 'profile', label: 'Профиль' },
@@ -1002,6 +1004,7 @@ export function SettingsClient() {
         <div className="flex-1 overflow-y-auto p-4 md:p-6">
           <div className="mx-auto max-w-2xl">
             {tab === 'requisites' && <RequisitesTab />}
+            {tab === 'esf' && <EsfCabinetTab />}
             {tab === 'team' && <TeamTab />}
             {tab === 'positions' && <PositionsTab />}
             {tab === 'profile' && <ProfileTab />}

@@ -75,6 +75,7 @@ model Organization {
   contracts      Contract[]
   settlements    Settlement[]
   payments       Payment[]
+  esfInvoices    EsfInvoice[]
 }
 
 model User {
@@ -152,6 +153,7 @@ model Counterparty {
   contracts    Contract[]
   settlements  Settlement[]
   payments     Payment[]
+  esfInvoices  EsfInvoice[]
 
   @@index([organizationId])
   @@index([organizationId, inn])
@@ -253,6 +255,7 @@ model FileAsset {
   createdBy    User             @relation(fields: [createdById], references: [id])
   steps        SettlementStep[]
   payments     Payment[]
+  esfInvoice   EsfInvoice?
 
   @@index([organizationId])
   @@index([documentId])
@@ -284,6 +287,13 @@ model CompanySettings {
   invoicePrefix      String @default("СЧ")
   invoiceCounter     Int    @default(0)
   invoiceCounterYear Int?
+
+  // Кабинет ЭСФ (esf.salyk.kg). Пароль хранится зашифрованным ключом из
+  // окружения и никогда не отдаётся наружу.
+  esfLogin         String?
+  esfPasswordEnc   String?
+  esfLastSyncAt    DateTime?
+  esfLastSyncError String?
 
   updatedAt      DateTime @updatedAt
 
@@ -399,6 +409,7 @@ model Settlement {
   documents    Document[]
   payments     Payment[]
   fileAssets   FileAsset[]
+  esfInvoices  EsfInvoice[]
 
   @@unique([contractId, year, month])
   @@index([organizationId, year, month])
@@ -454,5 +465,53 @@ model Payment {
 
   @@index([organizationId])
   @@index([settlementId])
+  @@index([counterpartyId])
+}
+
+/// Статус ЭСФ на портале. Шаг «Выставить ЭСФ» закрывают только SENT и ACCEPTED.
+enum EsfStatus {
+  NEW
+  SENT
+  ACCEPTED
+  REVOKED
+  REJECTED
+  UNKNOWN
+}
+
+/// ЭСФ, вытянутая из кабинета esf.salyk.kg. Хранится всегда — даже без
+/// сопоставленного расчёта, чтобы ничего не терялось и можно было привязать руками.
+model EsfInvoice {
+  id             String    @id @default(cuid())
+  organizationId String
+  /// documentUUID на портале — по нему же скачивается публичный PDF
+  uuid           String    @unique
+  number         String?
+  status         EsfStatus @default(UNKNOWN)
+  createdOn      DateTime?
+  deliveryDate   DateTime?
+  issuedOn       DateTime?
+  buyerInn       String?
+  buyerName      String
+  amount         Decimal   @db.Decimal(14, 2)
+  /// «Номер учётной системы» — сюда партнёр может вписать наш номер акта
+  crmRef         String?
+  note           String?
+
+  counterpartyId String?
+  settlementId   String?
+  fileAssetId    String?   @unique
+  /// Почему не сопоставлено — показывается менеджеру
+  matchNote      String?
+
+  importedAt DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  counterparty Counterparty? @relation(fields: [counterpartyId], references: [id], onDelete: SetNull)
+  settlement   Settlement?   @relation(fields: [settlementId], references: [id], onDelete: SetNull)
+  fileAsset    FileAsset?    @relation(fields: [fileAssetId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@index([organizationId, settlementId])
   @@index([counterpartyId])
 }

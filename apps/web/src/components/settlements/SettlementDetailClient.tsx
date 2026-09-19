@@ -12,6 +12,7 @@ import {
   type SettlementStep,
 } from '@/lib/api/settlements';
 import { AmountEditor } from './AmountEditor';
+import { EsfOnSettlement } from './EsfInbox';
 import { StepActionModal } from './StepActionModal';
 import { stepState } from './StepBadge';
 
@@ -120,6 +121,9 @@ export function SettlementDetailClient({ settlementId }: { settlementId: string 
             <h2 className="text-sm font-semibold text-[var(--color-text-primary)] mb-3">
               Документы
             </h2>
+            <div className="mb-1.5">
+              <EsfOnSettlement settlementId={data.id} />
+            </div>
             {data.documents.length === 0 ? (
               <p className="text-sm text-[var(--color-text-muted)]">Документов нет.</p>
             ) : (

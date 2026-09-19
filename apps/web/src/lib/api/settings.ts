@@ -17,6 +17,13 @@ export interface CompanySettings {
   vatRate?: number | null;
   currency?: string | null;
   logoUrl?: string | null;
+  actPrefix?: string | null;
+  invoicePrefix?: string | null;
+  // Кабинет ЭСФ: пароль сервер не возвращает, только факт подключения
+  esfLogin?: string | null;
+  esfConfigured?: boolean;
+  esfLastSyncAt?: string | null;
+  esfLastSyncError?: string | null;
 }
 
 export interface BackgroundFilter {
@@ -55,6 +62,11 @@ export interface UpdateSettingsDto {
   bankBik?: string;
   vatRate?: number;
   currency?: string;
+  actPrefix?: string;
+  invoicePrefix?: string;
+  esfLogin?: string;
+  esfPassword?: string;
+  esfClear?: boolean;
 }
 
 export interface UpdateMeDto {

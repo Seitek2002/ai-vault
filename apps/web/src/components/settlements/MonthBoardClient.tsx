@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
 import { ApiError } from "@/lib/api/client";
 import { Button, Card, EmptyState, PageHeader, Spinner } from "@/components/ui";
 import { cn } from "@/lib/cn";
@@ -16,6 +16,9 @@ import {
   type Settlement,
   type SettlementStep,
 } from "@/lib/api/settlements";
+import { esfApi } from "@/lib/api/esf";
+import { settingsApi } from "@/lib/api/settings";
+import { EsfInbox } from "./EsfInbox";
 import { StepActionModal } from "./StepActionModal";
 import { StepCell, StepChip } from "./StepBadge";
 
@@ -66,6 +69,26 @@ export function MonthBoardClient() {
   const { data, isLoading } = useQuery({
     queryKey: ["settlements", year, month],
     queryFn: () => settlementsApi.board(year, month),
+  });
+
+  const { data: settings } = useQuery({
+    queryKey: ["settings"],
+    queryFn: () => settingsApi.getSettings(),
+  });
+
+  const syncEsf = useMutation({
+    mutationFn: () => esfApi.sync(),
+    onSuccess: (r) => {
+      void qc.invalidateQueries({ queryKey: ["settlements"] });
+      void qc.invalidateQueries({ queryKey: ["esf"] });
+      void qc.invalidateQueries({ queryKey: ["settings"] });
+      setNotice(
+        `ЭСФ: получено ${r.fetched}, новых ${r.created}, привязано ${r.matched}, без расчёта ${r.unmatched}` +
+          (r.errors.length ? ` · ошибок ${r.errors.length}` : ""),
+      );
+    },
+    onError: (err) =>
+      setNotice(err instanceof ApiError ? err.message : "Не удалось синхронизировать ЭСФ"),
   });
 
   const generate = useMutation({
@@ -121,6 +144,18 @@ export function MonthBoardClient() {
                 <ChevronRight className="w-4 h-4" />
               </button>
             </div>
+            {settings?.esfConfigured && (
+              <Button
+                variant="secondary"
+                onClick={() => syncEsf.mutate()}
+                loading={syncEsf.isPending}
+                loadingText="Тяну ЭСФ…"
+                title="Забрать выставленные ЭСФ из кабинета esf.salyk.kg"
+              >
+                <RefreshCw className="w-4 h-4" />
+                ЭСФ
+              </Button>
+            )}
             <Button
               onClick={() => generate.mutate()}
               loading={generate.isPending}
@@ -296,6 +331,10 @@ export function MonthBoardClient() {
             ))}
           </div>
         </>
+      )}
+
+      {settings?.esfConfigured && (
+        <EsfInbox candidates={settlements} />
       )}
 
       {selected && (

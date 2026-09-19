@@ -144,3 +144,35 @@ describe('matchSettlement', () => {
     expect(r.kind).toBe('none');
   });
 });
+
+// ── normalizeCompanyName ─────────────────────────────────────────────────────
+
+import { normalizeCompanyName } from '../esf-matching';
+
+describe('normalizeCompanyName', () => {
+  it('портал и карточка сходятся без юридической формы и кавычек', () => {
+    expect(normalizeCompanyName('Общество с ограниченной ответственностью "Кей Джи Лотерея"')).toBe(
+      normalizeCompanyName('ОсОО «Кей Джи Лотерея»'),
+    );
+    expect(normalizeCompanyName('Открытое акционерное общество "Бакай банк"')).toBe(
+      normalizeCompanyName('ОАО «Бакай Банк»'),
+    );
+    expect(normalizeCompanyName('Общественный фонд "Экселерейт Просперити"')).toBe(
+      normalizeCompanyName('ОФ Экселерейт Просперити'),
+    );
+  });
+
+  it('вложенные кавычки и скобки не мешают', () => {
+    expect(normalizeCompanyName('Общество с ограниченной ответственностью "Строительная компания "Авангард стиль"')).toBe(
+      'строительная компания авангард стиль',
+    );
+    expect(normalizeCompanyName('ОсОО "Borsan Construction"(Борсан Констракшн"')).toBe(
+      'borsan construction борсан констракшн',
+    );
+  });
+
+  it('форма внутри слова не режется', () => {
+    // «ип» — часть слова, а не «индивидуальный предприниматель»
+    expect(normalizeCompanyName('Типография')).toBe('типография');
+  });
+});

@@ -9,6 +9,7 @@ import {
   RETAIL_INN,
   mapPortalStatus,
   matchSettlement,
+  normalizeCompanyName,
   parsePortalAmount,
   parsePortalDate,
   statusClosesStep,
@@ -102,8 +103,9 @@ export class EsfService {
       try {
         const existing = known.get(row.uuid);
         if (existing) {
-          const changed = await this.refreshExisting(existing, row);
-          if (changed) report.updated += 1;
+          const changed = await this.refreshExisting(existing, row, organizationId, userId);
+          if (changed === 'rematched') report.matched += 1;
+          else if (changed === 'status') report.updated += 1;
           continue;
         }
         const outcome = await this.importNew(organizationId, userId, row);
@@ -214,8 +216,17 @@ export class EsfService {
   private async refreshExisting(
     existing: { id: string; uuid: string; status: EsfStatus; settlementId: string | null },
     row: EsfListRow,
-  ): Promise<boolean> {
+    organizationId: string,
+    userId: string,
+  ): Promise<'rematched' | 'status' | false> {
     const status = mapPortalStatus(row.status);
+
+    // Без расчёта — пробуем снова: партнёру могли проставить ИНН, расчёт
+    // могли сформировать позже. Иначе ЭСФ застряла бы «без расчёта» навсегда.
+    if (!existing.settlementId && (await this.rematch(existing.id, organizationId, userId))) {
+      return 'rematched';
+    }
+
     if (status === existing.status) return false;
 
     await this.prisma.esfInvoice.update({
@@ -229,7 +240,7 @@ export class EsfService {
 
     if (existing.settlementId) {
       const step = await this.esfStep(existing.settlementId);
-      if (!step) return true;
+      if (!step) return 'status';
       if (statusClosesStep(status) && !step.doneAt) {
         await this.prisma.settlementStep.update({
           where: { id: step.id },
@@ -244,6 +255,43 @@ export class EsfService {
       }
       await this.refreshClosedAt(existing.settlementId);
     }
+    return 'status';
+  }
+
+  /** Повторное сопоставление уже импортированной ЭСФ. true — привязалась. */
+  private async rematch(invoiceId: string, organizationId: string, userId: string): Promise<boolean> {
+    const inv = await this.prisma.esfInvoice.findUnique({ where: { id: invoiceId } });
+    if (!inv || inv.settlementId || inv.buyerInn === RETAIL_INN) return false;
+
+    const counterparty =
+      (inv.counterpartyId ? { id: inv.counterpartyId } : null) ??
+      (await this.findCounterparty(organizationId, inv.buyerInn, inv.buyerName));
+    if (!counterparty) return false;
+
+    const result = matchSettlement(
+      { crmRef: inv.crmRef, deliveryDate: inv.deliveryDate, amount: inv.amount.toNumber() },
+      await this.candidatesFor(organizationId, counterparty.id),
+    );
+
+    const note = result.kind === 'matched' ? null : result.note;
+    await this.prisma.esfInvoice.update({
+      where: { id: inv.id },
+      data: {
+        counterpartyId: counterparty.id,
+        ...(result.kind === 'matched' ? { settlementId: result.settlementId } : {}),
+        matchNote: note,
+      },
+    });
+    if (result.kind !== 'matched') return false;
+
+    await this.attachToSettlement(
+      result.settlementId,
+      inv.fileAssetId,
+      inv.number,
+      inv.issuedOn ? this.formatDate(inv.issuedOn) : '',
+      inv.status,
+      userId,
+    );
     return true;
   }
 
@@ -326,7 +374,11 @@ export class EsfService {
 
   // ── Внутреннее ────────────────────────────────────────────────────────────
 
-  /** Сначала по ИНН — надёжно; по имени — только если ИНН в карточке не заполнен. */
+  /**
+   * Сначала по ИНН — надёжно. Иначе по наименованию без юридической формы и
+   * кавычек; при таком совпадении ИНН дозаписывается в карточку, чтобы дальше
+   * партнёр находился по ИНН, а не по имени.
+   */
   private async findCounterparty(organizationId: string, inn: string | null, name: string) {
     if (inn && inn !== RETAIL_INN) {
       const byInn = await this.prisma.counterparty.findFirst({
@@ -335,12 +387,23 @@ export class EsfService {
       });
       if (byInn) return byInn;
     }
-    const normalized = name.replace(/\s+/g, ' ').trim();
-    if (!normalized) return null;
-    return this.prisma.counterparty.findFirst({
-      where: { organizationId, name: { equals: normalized, mode: 'insensitive' } },
-      select: { id: true },
+
+    const wanted = normalizeCompanyName(name);
+    if (!wanted) return null;
+
+    const all = await this.prisma.counterparty.findMany({
+      where: { organizationId },
+      select: { id: true, name: true, inn: true },
     });
+    const byName = all.filter((c) => normalizeCompanyName(c.name) === wanted);
+    if (byName.length !== 1) return null;
+
+    const found = byName[0]!;
+    if (inn && inn !== RETAIL_INN && !found.inn) {
+      await this.prisma.counterparty.update({ where: { id: found.id }, data: { inn } });
+      this.logger.log(`Партнёру «${found.name}» дозаписан ИНН ${inn} из ЭСФ`);
+    }
+    return { id: found.id };
   }
 
   private async candidatesFor(organizationId: string, counterpartyId: string): Promise<SettlementCandidate[]> {

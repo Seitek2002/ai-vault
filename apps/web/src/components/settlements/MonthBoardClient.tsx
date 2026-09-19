@@ -334,7 +334,7 @@ export function MonthBoardClient() {
       )}
 
       {settings?.esfConfigured && (
-        <EsfInbox candidates={settlements} />
+        <EsfInbox year={year} month={month} />
       )}
 
       {selected && (

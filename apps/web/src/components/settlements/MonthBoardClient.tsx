@@ -334,7 +334,14 @@ export function MonthBoardClient() {
       )}
 
       {settings?.esfConfigured && (
-        <EsfInbox year={year} month={month} />
+        <EsfInbox
+          year={year}
+          month={month}
+          onPickMonth={(y, m) => {
+            setYear(y);
+            setMonth(m);
+          }}
+        />
       )}
 
       {selected && (

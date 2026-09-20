@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight, ExternalLink, Eye, EyeOff, Link2, Link2Off, Lock } from "lucide-react";
+import { ExternalLink, Eye, EyeOff, Link2, Link2Off, Lock } from "lucide-react";
 import { ApiError } from "@/lib/api/client";
 import { Button, Card, Input, Select } from "@/components/ui";
 import { cn } from "@/lib/cn";
@@ -31,36 +31,27 @@ function monthKey(inv: EsfInvoice): { year: number; month: number } {
 }
 
 /**
- * Одна группа-месяц. Расчёты на выбор подгружаются для этого же месяца —
+ * ЭСФ без расчёта за месяц дашборда. Расчёты на выбор — того же месяца:
  * августовскую ЭСФ нет смысла предлагать привязать к сентябрьскому расчёту.
  */
-function MonthGroup({
+function MonthList({
   year,
   month,
   items,
-  defaultOpen,
   onError,
 }: {
   year: number;
   month: number;
   items: EsfInvoice[];
-  defaultOpen: boolean;
   onError: (msg: string) => void;
 }) {
   const qc = useQueryClient();
-  const [open, setOpen] = useState(defaultOpen);
-  // Переключили месяц стрелками на дашборде — раскрываем его группу.
-  useEffect(() => {
-    if (defaultOpen) setOpen(true);
-  }, [defaultOpen]);
   const [choice, setChoice] = useState<Record<string, string>>({});
 
   const { data: board } = useQuery({
     queryKey: ["settlements", year, month],
     queryFn: () => settlementsApi.board(year, month),
-    enabled: open,
   });
-
   const attach = useMutation({
     mutationFn: ({ id, settlementId }: { id: string; settlementId: string }) =>
       esfApi.attach(id, settlementId),
@@ -88,29 +79,15 @@ function MonthGroup({
       label: `${s.counterpartyName} · ${formatMoney(s.amount, s.currency)}`,
     }));
 
-  const total = items.reduce((sum, i) => sum + i.amount, 0);
 
   return (
     <div>
-      <button
-        onClick={() => setOpen((o) => !o)}
-        className="w-full flex items-center gap-2 py-2 text-left"
-      >
-        {open ? (
-          <ChevronDown className="w-4 h-4 text-[var(--color-text-muted)]" />
-        ) : (
-          <ChevronRight className="w-4 h-4 text-[var(--color-text-muted)]" />
-        )}
-        <span className="text-sm font-medium text-[var(--color-text-primary)]">
-          {MONTH_NAMES[month - 1]} {year}
-        </span>
-        <span className="text-xs text-[var(--color-text-muted)]">
-          {items.length} шт · {formatMoney(total)}
-        </span>
-      </button>
-
-      {open && (
-        <div className="flex flex-col gap-2 mb-3">
+      {items.length === 0 ? (
+        <p className="text-xs text-[var(--color-text-muted)] py-2">
+          За {MONTH_NAMES[month - 1]?.toLowerCase()} {year} все ЭСФ привязаны
+        </p>
+      ) : (
+        <div className="flex flex-col gap-2">
           {items.map((inv) => (
             <Card key={inv.id} className="px-4 py-3">
               <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
@@ -296,10 +273,18 @@ function HiddenEsf() {
 }
 
 /**
- * ЭСФ, вытянутые из кабинета, но не привязанные к расчёту — по месяцам,
- * свежие сверху. Текущий месяц дашборда раскрыт, остальные свёрнуты.
+ * ЭСФ, вытянутые из кабинета, но не привязанные к расчёту — за месяц
+ * дашборда. Остальные месяцы — чипами, клик переключает месяц.
  */
-export function EsfInbox({ year, month }: { year: number; month: number }) {
+export function EsfInbox({
+  year,
+  month,
+  onPickMonth,
+}: {
+  year: number;
+  month: number;
+  onPickMonth: (year: number, month: number) => void;
+}) {
   const [error, setError] = useState("");
 
   const { data: unmatched } = useQuery({
@@ -307,20 +292,26 @@ export function EsfInbox({ year, month }: { year: number; month: number }) {
     queryFn: () => esfApi.list({ unmatchedOnly: true }),
   });
 
-  const groups = useMemo(() => {
-    const map = new Map<string, { year: number; month: number; items: EsfInvoice[] }>();
+  const { current, others } = useMemo(() => {
+    const current: EsfInvoice[] = [];
+    const map = new Map<string, { year: number; month: number; count: number }>();
     for (const inv of unmatched ?? []) {
       const k = monthKey(inv);
+      if (k.year === year && k.month === month) {
+        current.push(inv);
+        continue;
+      }
       const key = `${k.year}-${k.month}`;
-      const g = map.get(key) ?? { ...k, items: [] };
-      g.items.push(inv);
+      const g = map.get(key) ?? { ...k, count: 0 };
+      g.count += 1;
       map.set(key, g);
     }
-    return [...map.values()].sort((a, b) => b.year - a.year || b.month - a.month);
-  }, [unmatched]);
+    const others = [...map.values()].sort((a, b) => b.year - a.year || b.month - a.month);
+    return { current, others };
+  }, [unmatched, year, month]);
 
-  const items = unmatched ?? [];
-  if (items.length === 0) {
+  const total = unmatched?.length ?? 0;
+  if (total === 0) {
     return (
       <section className="mt-6 shrink-0">
         <HiddenEsf />
@@ -333,7 +324,9 @@ export function EsfInbox({ year, month }: { year: number; month: number }) {
       <div className="flex items-baseline justify-between gap-3 mb-2">
         <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">
           ЭСФ без расчёта{" "}
-          <span className="text-[var(--color-text-muted)] font-normal">({items.length})</span>
+          <span className="text-[var(--color-text-muted)] font-normal">
+            ({current.length} за {MONTH_NAMES[month - 1]?.toLowerCase()})
+          </span>
         </h2>
         <p className="text-xs text-[var(--color-text-muted)]">
           Пришли из кабинета, но к расчёту не подошли — привяжите вручную
@@ -342,18 +335,22 @@ export function EsfInbox({ year, month }: { year: number; month: number }) {
 
       {error && <p className="mb-3 text-sm text-[var(--color-danger)]">{error}</p>}
 
-      <div className="divide-y divide-[var(--color-border)]">
-        {groups.map((g) => (
-          <MonthGroup
-            key={`${g.year}-${g.month}`}
-            year={g.year}
-            month={g.month}
-            items={g.items}
-            defaultOpen={g.year === year && g.month === month}
-            onError={setError}
-          />
-        ))}
-      </div>
+      <MonthList year={year} month={month} items={current} onError={setError} />
+
+      {others.length > 0 && (
+        <div className="mt-3 flex flex-wrap items-center gap-1.5">
+          <span className="text-xs text-[var(--color-text-muted)] mr-1">В других месяцах:</span>
+          {others.map((g) => (
+            <button
+              key={`${g.year}-${g.month}`}
+              onClick={() => onPickMonth(g.year, g.month)}
+              className="text-xs px-2 py-0.5 rounded-full border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[var(--color-accent)] hover:text-[var(--color-text-primary)] transition-colors"
+            >
+              {MONTH_NAMES[g.month - 1]} {g.year} · {g.count}
+            </button>
+          ))}
+        </div>
+      )}
 
       <HiddenEsf />
     </section>

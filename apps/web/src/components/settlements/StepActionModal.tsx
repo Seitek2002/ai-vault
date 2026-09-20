@@ -2,10 +2,11 @@
 
 import { useState, type FormEvent } from "react";
 import Link from "next/link";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, Trash2 } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ArrowRight, ExternalLink, FileText, Trash2 } from "lucide-react";
 import { ApiError } from "@/lib/api/client";
-import { uploadFile } from "@/lib/api/files";
+import { esfApi } from "@/lib/api/esf";
+import { openFile, uploadFile } from "@/lib/api/files";
 import { Button, Input, Modal } from "@/components/ui";
 import {
   formatMoney,
@@ -137,6 +138,7 @@ export function StepActionModal({ settlement, step, onClose }: Props) {
             {step.note && (
               <p className="text-sm text-[var(--color-text-primary)] mb-3">{step.note}</p>
             )}
+            <DoneStepFiles step={step} settlementId={settlement.id} />
             {error && <p className="text-xs text-[var(--color-danger)] mb-2">{error}</p>}
             <div className="flex justify-end gap-2 mt-4">
               <Button variant="ghost" onClick={onClose}>Закрыть</Button>
@@ -265,5 +267,55 @@ export function StepActionModal({ settlement, step, onClose }: Props) {
         )}
       </div>
     </Modal>
+  );
+}
+
+/**
+ * Что приложено к закрытому шагу: наш файл (скан, PDF ЭСФ) по короткой
+ * ссылке и, для ЭСФ, официальная страница на портале.
+ */
+function DoneStepFiles({ step, settlementId }: { step: SettlementStep; settlementId: string }) {
+  const [opening, setOpening] = useState(false);
+  const { data: esf } = useQuery({
+    queryKey: ["esf", "settlement", settlementId],
+    queryFn: () => esfApi.list().then((all) => all.filter((i) => i.settlementId === settlementId)),
+    enabled: step.type === "ISSUE_ESF",
+  });
+  const portal = esf?.find((i) => i.fileAssetId === step.fileAssetId) ?? esf?.[0];
+
+  if (!step.fileAssetId && !portal) return null;
+
+  return (
+    <div className="flex flex-wrap gap-2 mb-1">
+      {step.fileAssetId && (
+        <Button
+          size="sm"
+          variant="secondary"
+          disabled={opening}
+          onClick={async () => {
+            setOpening(true);
+            try {
+              await openFile(step.fileAssetId!);
+            } finally {
+              setOpening(false);
+            }
+          }}
+        >
+          <FileText className="w-3.5 h-3.5" />
+          {step.type === "ISSUE_ESF" ? "Открыть PDF" : "Открыть файл"}
+        </Button>
+      )}
+      {portal && (
+        <a
+          href={esfApi.portalPdfUrl(portal.uuid)}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center gap-1.5 text-sm text-[var(--color-accent)] hover:underline px-2 py-1.5"
+        >
+          <ExternalLink className="w-3.5 h-3.5" />
+          На портале
+        </a>
+      )}
+    </div>
   );
 }

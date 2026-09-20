@@ -13,6 +13,7 @@ import {
 } from '@/lib/api/settlements';
 import { AmountEditor } from './AmountEditor';
 import { EsfOnSettlement } from './EsfInbox';
+import { openFile } from '@/lib/api/files';
 import { StepActionModal } from './StepActionModal';
 import { stepState } from './StepBadge';
 
@@ -193,9 +194,13 @@ export function SettlementDetailClient({ settlementId }: { settlementId: string 
                     key={f.id}
                     className="flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg bg-[var(--color-bg-surface)] border border-[var(--color-border)]"
                   >
-                    <span className="text-sm text-[var(--color-text-primary)] truncate">
+                    <button
+                      onClick={() => void openFile(f.id)}
+                      className="text-sm text-[var(--color-text-primary)] truncate text-left hover:text-[var(--color-accent)] transition-colors"
+                      title="Открыть"
+                    >
                       {f.originalName}
-                    </span>
+                    </button>
                     <span className="text-xs text-[var(--color-text-muted)] shrink-0">
                       {formatSize(f.size)}
                     </span>

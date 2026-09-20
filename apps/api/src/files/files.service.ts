@@ -46,6 +46,12 @@ const MIME_EXT: Record<string, string> = {
 
 @Injectable()
 export class FilesService {
+  async presignedUrl(id: string, organizationId: string): Promise<string> {
+    const asset = await this.prisma.fileAsset.findFirst({ where: { id, organizationId }, select: { s3Key: true } });
+    if (!asset) throw new NotFoundException('Файл не найден');
+    return this.storage.presignedUrl(asset.s3Key, 600);
+  }
+
   constructor(
     private prisma: PrismaService,
     private storage: StorageService,

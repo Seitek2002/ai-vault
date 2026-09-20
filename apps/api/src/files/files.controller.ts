@@ -1,5 +1,7 @@
 import {
   Controller,
+  Get,
+  Param,
   Post,
   Req,
   BadRequestException,
@@ -19,6 +21,12 @@ interface MultipartFile {
 @Controller('files')
 export class FilesController {
   constructor(private service: FilesService) {}
+
+  /** Короткоживущая ссылка на файл (сканы, ЭСФ) — бакет приватный. */
+  @Get(':id/url')
+  async url(@Param('id') id: string, @CurrentOrgId() organizationId: string) {
+    return { url: await this.service.presignedUrl(id, organizationId) };
+  }
 
   @Post('upload')
   @HttpCode(HttpStatus.CREATED)

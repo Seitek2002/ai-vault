@@ -22,6 +22,7 @@ export interface CompanySettings {
   // Кабинет ЭСФ: пароль сервер не возвращает, только факт подключения
   esfLogin?: string | null;
   esfConfigured?: boolean;
+  esfHiddenPinSet?: boolean;
   esfLastSyncAt?: string | null;
   esfLastSyncError?: string | null;
 }
@@ -67,6 +68,8 @@ export interface UpdateSettingsDto {
   esfLogin?: string;
   esfPassword?: string;
   esfClear?: boolean;
+  esfHiddenPin?: string;
+  esfHiddenPinClear?: boolean;
 }
 
 export interface UpdateMeDto {

@@ -70,6 +70,17 @@ export class UpdateSettingsDto {
   @IsBoolean()
   esfClear?: boolean;
 
+  /** PIN на просмотр скрытых ЭСФ — принимается только на запись. */
+  @IsOptional()
+  @IsString()
+  @MinLength(4)
+  @MaxLength(32)
+  esfHiddenPin?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  esfHiddenPinClear?: boolean;
+
   @IsOptional()
   @IsString()
   @MaxLength(10)

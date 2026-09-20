@@ -2,7 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ShieldCheck, Unplug } from "lucide-react";
+import { KeyRound, ShieldCheck, Unplug } from "lucide-react";
 import { ApiError } from "@/lib/api/client";
 import { settingsApi } from "@/lib/api/settings";
 import { esfApi } from "@/lib/api/esf";
@@ -92,6 +92,19 @@ export function EsfCabinetTab() {
       setNotice(
         `Получено ${r.fetched}, новых ${r.created}, привязано к расчётам ${r.matched}, без расчёта ${r.unmatched}`,
       );
+    },
+    onError: (err) => setError(errorText(err)),
+  });
+
+  const [pin, setPin] = useState("");
+  const savePin = useMutation({
+    mutationFn: (clear: boolean) =>
+      settingsApi.updateSettings(clear ? { esfHiddenPinClear: true } : { esfHiddenPin: pin }),
+    onSuccess: (_r, clear) => {
+      invalidate();
+      setPin("");
+      setError("");
+      setNotice(clear ? "Код снят — скрытые ЭСФ видны всем" : "Код доступа к скрытым ЭСФ сохранён");
     },
     onError: (err) => setError(errorText(err)),
   });
@@ -230,6 +243,47 @@ export function EsfCabinetTab() {
           </p>
         )}
       </form>
+
+      <div className="pt-6 border-t border-[var(--color-border)] space-y-3">
+        <div>
+          <h3 className="text-sm font-semibold text-[var(--color-text-primary)] mb-1">
+            Код доступа к скрытым ЭСФ
+          </h3>
+          <p className="text-xs text-[var(--color-text-secondary)]">
+            Скрытые с дашборда ЭСФ открываются и возвращаются только по этому коду.
+            {settings?.esfHiddenPinSet ? " Сейчас код задан." : " Сейчас кода нет — скрытые видны всем."}
+          </p>
+        </div>
+        <div className="flex items-end gap-2">
+          <label className="block w-48">
+            <span className={labelClass}>{settings?.esfHiddenPinSet ? "Новый код" : "Код"}</span>
+            <Input
+              type="password"
+              inputMode="numeric"
+              value={pin}
+              onChange={(e) => setPin(e.target.value)}
+              autoComplete="new-password"
+              placeholder="от 4 символов"
+            />
+          </label>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => savePin.mutate(false)}
+            loading={savePin.isPending}
+            loadingText="Сохраняю…"
+            disabled={pin.length < 4}
+          >
+            <KeyRound className="w-4 h-4" />
+            {settings?.esfHiddenPinSet ? "Сменить" : "Задать"}
+          </Button>
+          {settings?.esfHiddenPinSet && (
+            <Button type="button" variant="ghost" onClick={() => savePin.mutate(true)} disabled={savePin.isPending}>
+              Снять код
+            </Button>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

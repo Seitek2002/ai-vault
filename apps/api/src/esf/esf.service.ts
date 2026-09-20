@@ -1,4 +1,5 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import * as argon2 from 'argon2';
+import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { EsfStatus, Prisma, SettlementStepType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
@@ -346,6 +347,26 @@ export class EsfService {
       data: { settlementId: null, matchNote: 'Отвязана вручную' },
     });
     return this.findOneDto(invoiceId, organizationId);
+  }
+
+  /**
+   * Скрытые ЭСФ закрыты PIN-кодом из настроек: без него список не отдаём и
+   * вернуть из скрытых нельзя. Пока PIN не задан — доступ свободный.
+   */
+  async assertHiddenPin(organizationId: string, pin: string | undefined): Promise<void> {
+    const settings = await this.prisma.companySettings.findUnique({
+      where: { organizationId },
+      select: { esfHiddenPinHash: true },
+    });
+    if (!settings?.esfHiddenPinHash) return;
+    if (!pin || !(await argon2.verify(settings.esfHiddenPinHash, pin))) {
+      throw new ForbiddenException('Неверный код доступа к скрытым ЭСФ');
+    }
+  }
+
+  /** Сколько скрыто — без PIN, чтобы показать ссылку «Скрытые (N)». */
+  hiddenCount(organizationId: string): Promise<number> {
+    return this.prisma.esfInvoice.count({ where: { organizationId, hiddenAt: { not: null } } });
   }
 
   /** Убрать из «без расчёта»: чужая, розничная и т.п. Привязанную скрывать незачем. */

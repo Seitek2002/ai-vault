@@ -294,6 +294,8 @@ model CompanySettings {
   esfPasswordEnc   String?
   esfLastSyncAt    DateTime?
   esfLastSyncError String?
+  /// PIN на просмотр скрытых ЭСФ — argon2-хэш
+  esfHiddenPinHash String?
 
   updatedAt      DateTime @updatedAt
 

@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight, ExternalLink, Eye, EyeOff, Link2, Link2Off } from "lucide-react";
+import { ChevronDown, ChevronRight, ExternalLink, Eye, EyeOff, Link2, Link2Off, Lock } from "lucide-react";
 import { ApiError } from "@/lib/api/client";
-import { Button, Card, Select } from "@/components/ui";
+import { Button, Card, Input, Select } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import { ESF_STATUS_LABELS, esfApi, type EsfInvoice } from "@/lib/api/esf";
+import { settingsApi } from "@/lib/api/settings";
 import { MONTH_NAMES, formatMoney, settlementsApi } from "@/lib/api/settlements";
 
 const STATUS_CLASS: Record<EsfInvoice["status"], string> = {
@@ -181,33 +182,95 @@ function MonthGroup({
   );
 }
 
-/** Скрытые ЭСФ — свёрнутый список, из которого можно вернуть. */
+/**
+ * Скрытые ЭСФ. Список закрыт PIN-кодом из настроек: без кода сервер отдаёт
+ * только количество. Код живёт в памяти вкладки — при перезагрузке спросим снова.
+ */
 function HiddenEsf() {
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
-  const { data: hidden } = useQuery({
-    queryKey: ["esf", "hidden"],
-    queryFn: () => esfApi.list({ hiddenOnly: true }),
+  const [pinInput, setPinInput] = useState("");
+  const [pin, setPin] = useState<string | null>(null);
+  const [error, setError] = useState("");
+
+  const { data: settings } = useQuery({
+    queryKey: ["settings"],
+    queryFn: () => settingsApi.getSettings(),
   });
-  const unhide = useMutation({
-    mutationFn: (id: string) => esfApi.unhide(id),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ["esf"] }),
+  const pinRequired = settings?.esfHiddenPinSet ?? true;
+
+  const { data: count } = useQuery({
+    queryKey: ["esf", "hidden-count"],
+    queryFn: () => esfApi.hiddenCount().then((r) => r.count),
   });
 
-  const items = hidden ?? [];
-  if (items.length === 0) return null;
+  const unlocked = open && (!pinRequired || pin !== null);
+  const { data: hidden, error: listError } = useQuery({
+    queryKey: ["esf", "hidden", pin],
+    queryFn: () => esfApi.listHidden(pin ?? ""),
+    enabled: unlocked,
+    retry: false,
+  });
+
+  useEffect(() => {
+    if (!listError) return;
+    // Неверный код — сбрасываем и просим снова.
+    setPin(null);
+    setError(listError instanceof ApiError ? listError.message : "Не удалось открыть скрытые");
+  }, [listError]);
+
+  const unhide = useMutation({
+    mutationFn: (id: string) => esfApi.unhide(id, pin ?? ""),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["esf"] });
+      setError("");
+    },
+    onError: (err) => setError(err instanceof ApiError ? err.message : "Не удалось вернуть"),
+  });
+
+  if (!count) return null;
+
+  function submitPin(e: FormEvent) {
+    e.preventDefault();
+    setError("");
+    setPin(pinInput);
+    setPinInput("");
+  }
 
   return (
     <div className="mt-3">
       <button
         onClick={() => setOpen((o) => !o)}
-        className="text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] transition-colors"
+        className="flex items-center gap-1.5 text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] transition-colors"
       >
-        {open ? "Спрятать скрытые" : `Скрытые (${items.length})`}
+        {pinRequired && <Lock className="w-3 h-3" />}
+        {open ? "Спрятать скрытые" : `Скрытые (${count})`}
       </button>
-      {open && (
+
+      {open && !unlocked && (
+        <form onSubmit={submitPin} className="mt-2 flex items-center gap-2">
+          <div className="w-40">
+            <Input
+              type="password"
+              inputMode="numeric"
+              value={pinInput}
+              onChange={(e) => setPinInput(e.target.value)}
+              placeholder="Код доступа"
+              autoComplete="off"
+              autoFocus
+            />
+          </div>
+          <Button type="submit" size="sm" variant="secondary" disabled={!pinInput}>
+            Открыть
+          </Button>
+          {error && <span className="text-xs text-[var(--color-danger)]">{error}</span>}
+        </form>
+      )}
+
+      {unlocked && hidden && (
         <div className="mt-2 flex flex-col gap-1.5">
-          {items.map((inv) => (
+          {error && <p className="text-xs text-[var(--color-danger)]">{error}</p>}
+          {hidden.map((inv) => (
             <div
               key={inv.id}
               className="flex items-center gap-3 px-3 py-2 rounded-lg border border-[var(--color-border)] text-xs text-[var(--color-text-muted)]"

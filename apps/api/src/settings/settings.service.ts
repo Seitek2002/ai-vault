@@ -1,3 +1,4 @@
+import * as argon2 from 'argon2';
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import type { CompanySettings } from '@prisma/client';
@@ -9,11 +10,18 @@ import type { UpdateSettingsDto } from './dto/settings.dto';
 const ALLOWED_LOGO_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
 
 /** Наружу настройки уходят без шифртекста пароля — только флаг «подключён». */
-export type PublicSettings = Omit<CompanySettings, 'esfPasswordEnc'> & { esfConfigured: boolean };
+export type PublicSettings = Omit<CompanySettings, 'esfPasswordEnc' | 'esfHiddenPinHash'> & {
+  esfConfigured: boolean;
+  esfHiddenPinSet: boolean;
+};
 
 function toPublic(row: CompanySettings): PublicSettings {
-  const { esfPasswordEnc, ...rest } = row;
-  return { ...rest, esfConfigured: !!(row.esfLogin && esfPasswordEnc) };
+  const { esfPasswordEnc, esfHiddenPinHash, ...rest } = row;
+  return {
+    ...rest,
+    esfConfigured: !!(row.esfLogin && esfPasswordEnc),
+    esfHiddenPinSet: !!esfHiddenPinHash,
+  };
 }
 
 @Injectable()
@@ -28,8 +36,11 @@ export class SettingsService {
   }
 
   async update(organizationId: string, dto: UpdateSettingsDto): Promise<PublicSettings> {
-    const { esfLogin, esfPassword, esfClear, ...rest } = dto;
+    const { esfLogin, esfPassword, esfClear, esfHiddenPin, esfHiddenPinClear, ...rest } = dto;
     const data: Record<string, unknown> = { ...rest };
+
+    if (esfHiddenPinClear) data['esfHiddenPinHash'] = null;
+    else if (esfHiddenPin !== undefined) data['esfHiddenPinHash'] = await argon2.hash(esfHiddenPin);
 
     if (esfClear) {
       data['esfLogin'] = null;

@@ -56,6 +56,10 @@ export const esfApi = {
   listHidden: (pin: string) => api.get<EsfInvoice[]>('/esf/invoices?hiddenOnly=true', pinHeader(pin)),
   hiddenCount: () => api.get<{ count: number }>('/esf/invoices/hidden-count'),
   sync: () => api.post<EsfSyncReport>('/esf/sync', {}),
+  /** Черновик на портале для расчёта — подписать и отправить нужно на портале. */
+  createDraft: (settlementId: string) =>
+    api.post<EsfInvoice>(`/esf/settlements/${settlementId}/draft`, {}),
+  portalListUrl: 'https://esf.salyk.kg/esf/view/document/realization_list.xhtml',
   checkConnection: (login: string, password: string) =>
     api.post<{ ok: true }>('/esf/check-connection', { login, password }),
   attach: (id: string, settlementId: string) =>

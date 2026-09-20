@@ -4,6 +4,7 @@ import { EsfStatus, Prisma, SettlementStepType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
 import { open as openSecret } from '../common/secret-box';
+import { EsfDraftClient } from './esf-draft.client';
 import { EsfPortalClient, EsfPortalError, type EsfListRow } from './esf-portal.client';
 import { EsfPdfService } from './esf-pdf';
 import {
@@ -53,6 +54,11 @@ const INCLUDE = {
 
 type Row = Prisma.EsfInvoiceGetPayload<{ include: typeof INCLUDE }>;
 
+const MONTH_NAMES_RU = [
+  'январь', 'февраль', 'март', 'апрель', 'май', 'июнь',
+  'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь',
+];
+
 @Injectable()
 export class EsfService {
   private readonly logger = new Logger(EsfService.name);
@@ -61,8 +67,80 @@ export class EsfService {
     private prisma: PrismaService,
     private storage: StorageService,
     private portal: EsfPortalClient,
+    private draft: EsfDraftClient,
     private pdf: EsfPdfService,
   ) {}
+
+  // ── Черновик на портале ───────────────────────────────────────────────────
+
+  /**
+   * Создаёт в кабинете черновик ЭСФ для расчёта: копия последней отправленной
+   * ЭСФ этого партнёра с новой датой, суммой и номером учётной системы.
+   * Подписать и отправить черновик может только человек — на портале.
+   */
+  async createDraft(organizationId: string, userId: string, settlementId: string): Promise<EsfInvoiceDto> {
+    const settings = await this.prisma.companySettings.findUnique({ where: { organizationId } });
+    if (!settings?.esfLogin || !settings.esfPasswordEnc) {
+      throw new BadRequestException('Кабинет ЭСФ не подключён — укажите логин и пароль в настройках');
+    }
+
+    const settlement = await this.prisma.settlement.findFirst({
+      where: { id: settlementId, organizationId },
+      include: { contract: true, counterparty: true, steps: true, documents: true },
+    });
+    if (!settlement) throw new NotFoundException('Расчёт не найден');
+    const step = settlement.steps.find((s) => s.type === SettlementStepType.ISSUE_ESF);
+    if (!step) throw new BadRequestException('В этом расчёте нет шага «Выставить ЭСФ»');
+    if (step.doneAt) throw new BadRequestException('Шаг «Выставить ЭСФ» уже закрыт');
+    const existing = await this.prisma.esfInvoice.findFirst({ where: { settlementId } });
+    if (existing) {
+      throw new BadRequestException(`К расчёту уже привязана ЭСФ ${existing.number ?? '(черновик)'}`);
+    }
+
+    // Образец — последняя отправленная/принятая ЭСФ этого партнёра.
+    const source = await this.prisma.esfInvoice.findFirst({
+      where: { organizationId, counterpartyId: settlement.counterpartyId, status: { in: ['SENT', 'ACCEPTED'] } },
+      orderBy: [{ issuedOn: 'desc' }, { importedAt: 'desc' }],
+    });
+    if (!source) {
+      throw new BadRequestException(
+        `У партнёра «${settlement.counterparty.name}» нет ни одной отправленной ЭСФ — первую выставьте на портале вручную, дальше Vault будет её копировать`,
+      );
+    }
+
+    // Номер учётной системы — номер акта: по нему синхронизация узнаёт свою ЭСФ.
+    const act = settlement.documents.find((d) => d.type === 'AVR' && d.number);
+    const crmRef = act?.number ?? `VAULT-${settlement.year}${String(settlement.month).padStart(2, '0')}-${settlement.id.slice(-6)}`;
+
+    // Дата поставки — конец месяца, но не позже сегодня.
+    const periodEnd = new Date(Date.UTC(settlement.year, settlement.month, 0));
+    const today = new Date();
+    const delivery = periodEnd > today ? today : periodEnd;
+    const deliveryDate = `${String(delivery.getUTCDate()).padStart(2, '0')}-${String(delivery.getUTCMonth() + 1).padStart(2, '0')}-${delivery.getUTCFullYear()}`;
+
+    const monthName = MONTH_NAMES_RU[settlement.month - 1] ?? String(settlement.month);
+    const note = `${settlement.contract.title} — ${monthName} ${settlement.year}`;
+
+    const { uuid } = await this.draft.createByCopy({
+      login: settings.esfLogin,
+      password: openSecret(settings.esfPasswordEnc),
+      sourceUuid: source.uuid,
+      amount: settlement.amount.toNumber(),
+      deliveryDate,
+      crmRef,
+      note,
+    });
+
+    // Подтягиваем черновик как обычную ЭСФ и привязываем к расчёту.
+    await this.sync(organizationId, userId);
+    const invoice = await this.prisma.esfInvoice.findFirst({ where: { organizationId, uuid } });
+    if (!invoice) throw new BadRequestException('Черновик создан на портале, но синхронизация его не нашла — нажмите «ЭСФ» на дашборде');
+    if (invoice.settlementId !== settlementId) {
+      if (invoice.settlementId) await this.detach(organizationId, invoice.id);
+      return this.attach(organizationId, userId, invoice.id, settlementId);
+    }
+    return this.findOneDto(invoice.id, organizationId);
+  }
 
   // ── Синхронизация ─────────────────────────────────────────────────────────
 

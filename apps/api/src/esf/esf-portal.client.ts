@@ -83,26 +83,7 @@ export class EsfPortalClient {
    * Пароль живёт только в аргументе на время вызова.
    */
   async fetchRealizationList(login: string, password: string): Promise<EsfListRow[]> {
-    const jar = new CookieJar();
-
-    // 1. Страница входа: получаем JSESSIONID и ViewState формы.
-    const loginPage = await this.get(LOGIN_PATH, jar);
-    const viewState = this.extractViewState(loginPage, 'login-form');
-    const submitName = this.extractSubmitName(loginPage);
-
-    // 2. Отправляем форму. Успех — редирект на main.xhtml; ошибка — та же страница с сообщением.
-    const body = new URLSearchParams({
-      'login-form': 'login-form',
-      username: login,
-      password,
-      [submitName]: 'Войти',
-      'javax.faces.ViewState': viewState,
-    });
-    const loginResponse = await this.post(LOGIN_PATH, jar, body, { redirect: 'manual' });
-    if (loginResponse.status !== 302 && loginResponse.status !== 303) {
-      const html = await loginResponse.text();
-      throw new EsfPortalError(this.describeLoginFailure(html), 'auth');
-    }
+    const jar = await this.login(login, password);
 
     // 3. Страница списка — нужен её ViewState для partial-запроса.
     const listPage = await this.get(LIST_PATH, jar);
@@ -141,6 +122,32 @@ export class EsfPortalClient {
 
   /** Проверка учётных данных без чтения списка. */
   async checkCredentials(login: string, password: string): Promise<void> {
+    await this.login(login, password);
+  }
+
+  /**
+   * Авторизованная сессия для многошаговых сценариев (создание черновика):
+   * тот же cookie-jar на всю цепочку запросов. Пароль дальше не хранится.
+   */
+  async openSession(login: string, password: string) {
+    const jar = await this.login(login, password);
+    return {
+      get: (path: string) => this.get(path, jar),
+      post: (path: string, body: URLSearchParams, opts?: { headers?: Record<string, string> }) =>
+        this.post(path, jar, body, { redirect: 'follow', ...(opts ?? {}) }),
+    };
+  }
+
+  /** ViewState формы на странице — нужен любому POST в JSF. */
+  viewStateOf(html: string, formId: string): string {
+    return this.extractViewState(html, formId);
+  }
+
+  /**
+   * 1–2. Страница входа → JSESSIONID и ViewState → submit формы.
+   * Успех — редирект на main.xhtml; ошибка — та же страница с сообщением.
+   */
+  private async login(login: string, password: string): Promise<CookieJar> {
     const jar = new CookieJar();
     const loginPage = await this.get(LOGIN_PATH, jar);
     const viewState = this.extractViewState(loginPage, 'login-form');
@@ -160,6 +167,7 @@ export class EsfPortalClient {
     if (response.status !== 302 && response.status !== 303) {
       throw new EsfPortalError(this.describeLoginFailure(await response.text()), 'auth');
     }
+    return jar;
   }
 
   // ── HTTP ──────────────────────────────────────────────────────────────────
@@ -243,8 +251,8 @@ export class EsfPortalClient {
     return 'Не удалось войти в кабинет ЭСФ';
   }
 
-  /** Строки таблицы из CDATA partial-ответа. Порядок колонок — как на портале. */
-  private parseRows(xml: string): EsfListRow[] {
+  /** Строки таблицы (из HTML страницы или CDATA partial-ответа). Порядок колонок — как на портале. */
+  parseRows(xml: string): EsfListRow[] {
     const rows: EsfListRow[] = [];
     const rowRe = /<tr[^>]*data-rk="[^"]*"[^>]*>([\s\S]*?)<\/tr>/g;
     let m: RegExpExecArray | null;

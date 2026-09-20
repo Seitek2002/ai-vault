@@ -44,6 +44,13 @@ export class EsfController {
     return { ok: true };
   }
 
+  /** Черновик ЭСФ на портале для расчёта — подписывает и отправляет человек. */
+  @Post('settlements/:id/draft')
+  @RequirePermission(Permission.MANAGE_DOCUMENTS)
+  createDraft(@Param('id') id: string, @CurrentOrgId() organizationId: string, @CurrentUser() user: JwtPayload) {
+    return this.service.createDraft(organizationId, user.sub, id);
+  }
+
   @Post('invoices/:id/attach')
   @RequirePermission(Permission.MANAGE_DOCUMENTS)
   attach(

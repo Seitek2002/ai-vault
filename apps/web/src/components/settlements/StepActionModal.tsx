@@ -150,15 +150,17 @@ export function StepActionModal({ settlement, step, onClose }: Props) {
         ) : (
           <form onSubmit={onSubmit}>
             {step.type === "ISSUE_ESF" && (
-              <label className="block mb-3">
-                <span className={labelClass}>Номер и дата ЭСФ</span>
-                <Input
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                  placeholder="ЭСФ № 4417 от 05.10.2026"
-                  autoFocus
-                />
-              </label>
+              <>
+                <EsfDraftPanel settlementId={settlement.id} stepNote={step.note} />
+                <label className="block mb-3">
+                  <span className={labelClass}>Номер и дата ЭСФ</span>
+                  <Input
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                    placeholder="ЭСФ № 4417 от 05.10.2026"
+                  />
+                </label>
+              </>
             )}
 
             {step.type === "RECEIVE_SIGNED" && (
@@ -316,6 +318,78 @@ function DoneStepFiles({ step, settlementId }: { step: SettlementStep; settlemen
           На портале
         </a>
       )}
+    </div>
+  );
+}
+
+/**
+ * Черновик ЭСФ на портале: Vault копирует последнюю ЭСФ партнёра с новой
+ * датой, суммой и номером акта. Подписать и отправить — только на портале,
+ * после этого синхронизация закроет шаг сама.
+ */
+function EsfDraftPanel({ settlementId, stepNote }: { settlementId: string; stepNote: string | null }) {
+  const qc = useQueryClient();
+  const [error, setError] = useState("");
+  const { data: esf } = useQuery({
+    queryKey: ["esf", "settlement", settlementId],
+    queryFn: () => esfApi.list().then((all) => all.filter((i) => i.settlementId === settlementId)),
+  });
+  const draft = esf?.[0];
+
+  const create = useMutation({
+    mutationFn: () => esfApi.createDraft(settlementId),
+    onSuccess: () => {
+      setError("");
+      void qc.invalidateQueries({ queryKey: ["esf"] });
+      void qc.invalidateQueries({ queryKey: ["settlements"] });
+      void qc.invalidateQueries({ queryKey: ["settlement", settlementId] });
+    },
+    onError: (err) => setError(err instanceof ApiError ? err.message : "Не удалось создать черновик"),
+  });
+
+  if (draft) {
+    return (
+      <div className="mb-3 px-3 py-2.5 rounded-lg bg-[var(--color-bg-surface)] border border-[var(--color-border)]">
+        <p className="text-sm text-[var(--color-text-primary)]">
+          {draft.status === "NEW" ? "Черновик на портале" : `ЭСФ № ${draft.number ?? "—"}`}
+          {draft.status === "NEW" && (
+            <span className="text-xs text-[#FBBF24] ml-2">ждёт подписи</span>
+          )}
+        </p>
+        <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
+          {draft.status === "NEW"
+            ? "Откройте портал, проверьте и нажмите «Подписать» — после этого шаг закроется сам при синхронизации."
+            : stepNote ?? ""}
+        </p>
+        <a
+          href={esfApi.portalListUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center gap-1.5 text-xs text-[var(--color-accent)] hover:underline mt-1.5"
+        >
+          <ExternalLink className="w-3.5 h-3.5" />
+          Открыть «Реализация» на портале
+        </a>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mb-3">
+      <Button
+        type="button"
+        variant="secondary"
+        onClick={() => create.mutate()}
+        loading={create.isPending}
+        loadingText="Создаю на портале…"
+      >
+        <FileText className="w-4 h-4" />
+        Создать черновик ЭСФ на портале
+      </Button>
+      <p className="text-[11px] text-[var(--color-text-muted)] mt-1.5">
+        Копия последней ЭСФ этого партнёра с датой, суммой и номером акта этого месяца. Подпись — на портале.
+      </p>
+      {error && <p className="text-xs text-[var(--color-danger)] mt-1.5">{error}</p>}
     </div>
   );
 }

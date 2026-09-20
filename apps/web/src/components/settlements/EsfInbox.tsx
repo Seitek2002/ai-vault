@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ExternalLink, Eye, EyeOff, Link2, Link2Off, Lock } from "lucide-react";
 import { ApiError } from "@/lib/api/client";
@@ -8,7 +8,7 @@ import { Button, Card, Input, Select } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import { ESF_STATUS_LABELS, esfApi, type EsfInvoice } from "@/lib/api/esf";
 import { settingsApi } from "@/lib/api/settings";
-import { MONTH_NAMES, formatMoney, settlementsApi } from "@/lib/api/settlements";
+import { MONTH_NAMES, formatMoney, settlementsApi, type Settlement } from "@/lib/api/settlements";
 
 const STATUS_CLASS: Record<EsfInvoice["status"], string> = {
   ACCEPTED: "text-[#4ADE80]",
@@ -72,12 +72,25 @@ function MonthList({
     onError: (err) => onError(err instanceof ApiError ? err.message : "Не удалось скрыть"),
   });
 
-  const options = (board?.settlements ?? [])
-    .filter((s) => s.steps.some((st) => st.type === "ISSUE_ESF"))
-    .map((s) => ({
+  const settlements = (board?.settlements ?? []).filter((s) =>
+    s.steps.some((st) => st.type === "ISSUE_ESF"),
+  );
+  const hasEsf = (s: Settlement) => !!s.steps.find((st) => st.type === "ISSUE_ESF")?.doneAt;
+
+  /**
+   * Партнёра знаем по ИНН — его расчёт ставим первым и подставляем сразу.
+   * Расчёты, где ЭСФ уже есть, оставляем в списке, но помечаем.
+   */
+  function optionsFor(inv: EsfInvoice) {
+    const own = settlements.filter((s) => s.counterpartyId === inv.counterpartyId);
+    const rest = settlements.filter((s) => s.counterpartyId !== inv.counterpartyId);
+    const toOption = (s: Settlement) => ({
       value: s.id,
-      label: `${s.counterpartyName} · ${formatMoney(s.amount, s.currency)}`,
-    }));
+      label: `${s.counterpartyName} · ${formatMoney(s.amount, s.currency)}${hasEsf(s) ? " · ЭСФ уже есть" : ""}`,
+    });
+    const preselected = own.find((s) => !hasEsf(s)) ?? own[0];
+    return { options: [...own.map(toOption), ...rest.map(toOption)], preselected: preselected?.id ?? "" };
+  }
 
 
   return (
@@ -88,18 +101,27 @@ function MonthList({
         </p>
       ) : (
         <div className="flex flex-col gap-2">
-          {items.map((inv) => (
+          {items.map((inv) => {
+            const { options, preselected } = optionsFor(inv);
+            const selected = choice[inv.id] ?? preselected;
+            return (
             <Card key={inv.id} className="px-4 py-3">
               <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
                 <div className="flex-1 min-w-[220px]">
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-medium text-[var(--color-text-primary)] truncate">
-                      {inv.buyerName}
+                      {inv.counterpartyName ?? inv.buyerName}
                     </span>
                     <span className={cn("text-xs shrink-0", STATUS_CLASS[inv.status])}>
                       {ESF_STATUS_LABELS[inv.status]}
                     </span>
                   </div>
+                  {inv.counterpartyName && (
+                    <p className="text-[11px] text-[var(--color-text-muted)] truncate" title={inv.buyerName}>
+                      {inv.buyerName}
+                      {inv.buyerInn ? ` · ИНН ${inv.buyerInn}` : ""}
+                    </p>
+                  )}
                   <p className="text-xs text-[var(--color-text-muted)]">
                     {inv.number ? `№ ${inv.number}` : "без номера"} · поставка {fmtDate(inv.deliveryDate)} ·{" "}
                     {formatMoney(inv.amount)}
@@ -121,7 +143,7 @@ function MonthList({
                   </a>
                   <div className="w-64">
                     <Select
-                      value={choice[inv.id] ?? ""}
+                      value={selected}
                       onChange={(v) => setChoice((c) => ({ ...c, [inv.id]: v }))}
                       options={[
                         {
@@ -135,8 +157,8 @@ function MonthList({
                   <Button
                     size="sm"
                     variant="secondary"
-                    disabled={!choice[inv.id] || attach.isPending}
-                    onClick={() => attach.mutate({ id: inv.id, settlementId: choice[inv.id]! })}
+                    disabled={!selected || attach.isPending}
+                    onClick={() => attach.mutate({ id: inv.id, settlementId: selected })}
                   >
                     <Link2 className="w-3.5 h-3.5" />
                     Привязать
@@ -152,7 +174,8 @@ function MonthList({
                 </div>
               </div>
             </Card>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
@@ -181,20 +204,19 @@ function HiddenEsf() {
     queryFn: () => esfApi.hiddenCount().then((r) => r.count),
   });
 
-  const unlocked = open && (!pinRequired || pin !== null);
   const { data: hidden, error: listError } = useQuery({
     queryKey: ["esf", "hidden", pin],
     queryFn: () => esfApi.listHidden(pin ?? ""),
-    enabled: unlocked,
+    enabled: open && (!pinRequired || pin !== null),
     retry: false,
   });
-
-  useEffect(() => {
-    if (!listError) return;
-    // Неверный код — сбрасываем и просим снова.
-    setPin(null);
-    setError(listError instanceof ApiError ? listError.message : "Не удалось открыть скрытые");
-  }, [listError]);
+  // Неверный код — список не открыт, показываем форму с ошибкой сервера.
+  const unlocked = open && (!pinRequired || (pin !== null && !listError));
+  const pinError = listError
+    ? listError instanceof ApiError
+      ? listError.message
+      : "Не удалось открыть скрытые"
+    : "";
 
   const unhide = useMutation({
     mutationFn: (id: string) => esfApi.unhide(id, pin ?? ""),
@@ -240,7 +262,9 @@ function HiddenEsf() {
           <Button type="submit" size="sm" variant="secondary" disabled={!pinInput}>
             Открыть
           </Button>
-          {error && <span className="text-xs text-[var(--color-danger)]">{error}</span>}
+          {(pinError || error) && (
+            <span className="text-xs text-[var(--color-danger)]">{pinError || error}</span>
+          )}
         </form>
       )}
 

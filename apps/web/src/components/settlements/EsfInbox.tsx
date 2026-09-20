@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight, ExternalLink, Link2, Link2Off } from "lucide-react";
+import { ChevronDown, ChevronRight, ExternalLink, Eye, EyeOff, Link2, Link2Off } from "lucide-react";
 import { ApiError } from "@/lib/api/client";
 import { Button, Card, Select } from "@/components/ui";
 import { cn } from "@/lib/cn";
@@ -69,6 +69,15 @@ function MonthGroup({
       onError("");
     },
     onError: (err) => onError(err instanceof ApiError ? err.message : "Не удалось привязать"),
+  });
+
+  const hide = useMutation({
+    mutationFn: (id: string) => esfApi.hide(id),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["esf"] });
+      onError("");
+    },
+    onError: (err) => onError(err instanceof ApiError ? err.message : "Не удалось скрыть"),
   });
 
   const options = (board?.settlements ?? [])
@@ -154,9 +163,68 @@ function MonthGroup({
                     <Link2 className="w-3.5 h-3.5" />
                     Привязать
                   </Button>
+                  <button
+                    onClick={() => hide.mutate(inv.id)}
+                    disabled={hide.isPending}
+                    title="Скрыть — не наша, розница и т.п."
+                    className="p-1.5 rounded-lg text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] transition-colors"
+                  >
+                    <EyeOff className="w-4 h-4" />
+                  </button>
                 </div>
               </div>
             </Card>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Скрытые ЭСФ — свёрнутый список, из которого можно вернуть. */
+function HiddenEsf() {
+  const qc = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const { data: hidden } = useQuery({
+    queryKey: ["esf", "hidden"],
+    queryFn: () => esfApi.list({ hiddenOnly: true }),
+  });
+  const unhide = useMutation({
+    mutationFn: (id: string) => esfApi.unhide(id),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["esf"] }),
+  });
+
+  const items = hidden ?? [];
+  if (items.length === 0) return null;
+
+  return (
+    <div className="mt-3">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] transition-colors"
+      >
+        {open ? "Спрятать скрытые" : `Скрытые (${items.length})`}
+      </button>
+      {open && (
+        <div className="mt-2 flex flex-col gap-1.5">
+          {items.map((inv) => (
+            <div
+              key={inv.id}
+              className="flex items-center gap-3 px-3 py-2 rounded-lg border border-[var(--color-border)] text-xs text-[var(--color-text-muted)]"
+            >
+              <span className="flex-1 min-w-0 truncate">
+                {inv.buyerName} · {inv.number ? `№ ${inv.number}` : "без номера"} · поставка{" "}
+                {fmtDate(inv.deliveryDate)} · {formatMoney(inv.amount)}
+              </span>
+              <button
+                onClick={() => unhide.mutate(inv.id)}
+                disabled={unhide.isPending}
+                title="Вернуть в список"
+                className="p-1 rounded text-[var(--color-text-muted)] hover:text-[var(--color-accent)] transition-colors shrink-0"
+              >
+                <Eye className="w-3.5 h-3.5" />
+              </button>
+            </div>
           ))}
         </div>
       )}
@@ -189,7 +257,13 @@ export function EsfInbox({ year, month }: { year: number; month: number }) {
   }, [unmatched]);
 
   const items = unmatched ?? [];
-  if (items.length === 0) return null;
+  if (items.length === 0) {
+    return (
+      <section className="mt-6 shrink-0">
+        <HiddenEsf />
+      </section>
+    );
+  }
 
   return (
     <section className="mt-6 shrink-0">
@@ -217,6 +291,8 @@ export function EsfInbox({ year, month }: { year: number; month: number }) {
           />
         ))}
       </div>
+
+      <HiddenEsf />
     </section>
   );
 }

@@ -42,6 +42,7 @@ export interface EsfInvoiceDto {
   settlementId: string | null;
   fileAssetId: string | null;
   matchNote: string | null;
+  hiddenAt: string | null;
   importedAt: string;
 }
 
@@ -94,7 +95,7 @@ export class EsfService {
       (
         await this.prisma.esfInvoice.findMany({
           where: { organizationId },
-          select: { id: true, uuid: true, status: true, settlementId: true },
+          select: { id: true, uuid: true, status: true, settlementId: true, hiddenAt: true },
         })
       ).map((r) => [r.uuid, r]),
     );
@@ -214,7 +215,7 @@ export class EsfService {
 
   /** Статус на портале меняется (Отправлен → Принят → иногда Отозван). Ведём его в ногу. */
   private async refreshExisting(
-    existing: { id: string; uuid: string; status: EsfStatus; settlementId: string | null },
+    existing: { id: string; uuid: string; status: EsfStatus; settlementId: string | null; hiddenAt: Date | null },
     row: EsfListRow,
     organizationId: string,
     userId: string,
@@ -223,7 +224,7 @@ export class EsfService {
 
     // Без расчёта — пробуем снова: партнёру могли проставить ИНН, расчёт
     // могли сформировать позже. Иначе ЭСФ застряла бы «без расчёта» навсегда.
-    if (!existing.settlementId && (await this.rematch(existing.id, organizationId, userId))) {
+    if (!existing.settlementId && !existing.hiddenAt && (await this.rematch(existing.id, organizationId, userId))) {
       return 'rematched';
     }
 
@@ -311,7 +312,7 @@ export class EsfService {
 
     await this.prisma.esfInvoice.update({
       where: { id: invoiceId },
-      data: { settlementId, matchNote: null, counterpartyId: invoice.counterpartyId ?? settlement.counterpartyId },
+      data: { settlementId, matchNote: null, hiddenAt: null, counterpartyId: invoice.counterpartyId ?? settlement.counterpartyId },
     });
     await this.attachToSettlement(
       settlementId,
@@ -347,11 +348,27 @@ export class EsfService {
     return this.findOneDto(invoiceId, organizationId);
   }
 
+  /** Убрать из «без расчёта»: чужая, розничная и т.п. Привязанную скрывать незачем. */
+  async setHidden(organizationId: string, invoiceId: string, hidden: boolean): Promise<EsfInvoiceDto> {
+    const invoice = await this.prisma.esfInvoice.findFirst({ where: { id: invoiceId, organizationId } });
+    if (!invoice) throw new NotFoundException('ЭСФ не найдена');
+    if (hidden && invoice.settlementId) throw new BadRequestException('ЭСФ привязана к расчёту — сначала отвяжите');
+    await this.prisma.esfInvoice.update({
+      where: { id: invoiceId },
+      data: { hiddenAt: hidden ? new Date() : null },
+    });
+    return this.findOneDto(invoiceId, organizationId);
+  }
+
   // ── Чтение ────────────────────────────────────────────────────────────────
 
-  async list(organizationId: string, filter: { unmatchedOnly?: boolean; year?: number; month?: number }): Promise<EsfInvoiceDto[]> {
+  async list(
+    organizationId: string,
+    filter: { unmatchedOnly?: boolean; hiddenOnly?: boolean; year?: number; month?: number },
+  ): Promise<EsfInvoiceDto[]> {
     const where: Prisma.EsfInvoiceWhereInput = { organizationId };
-    if (filter.unmatchedOnly) where.settlementId = null;
+    if (filter.hiddenOnly) where.hiddenAt = { not: null };
+    else if (filter.unmatchedOnly) Object.assign(where, { settlementId: null, hiddenAt: null });
     if (filter.year && filter.month) {
       where.deliveryDate = {
         gte: new Date(Date.UTC(filter.year, filter.month - 1, 1)),
@@ -509,6 +526,7 @@ export class EsfService {
       settlementId: r.settlementId,
       fileAssetId: r.fileAssetId,
       matchNote: r.matchNote,
+      hiddenAt: r.hiddenAt?.toISOString() ?? null,
       importedAt: r.importedAt.toISOString(),
     };
   }

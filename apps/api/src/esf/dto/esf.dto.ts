@@ -8,6 +8,11 @@ export class ListEsfDto {
   unmatchedOnly?: boolean;
 
   @IsOptional()
+  @Transform(({ value }) => value === true || value === 'true')
+  @IsBoolean()
+  hiddenOnly?: boolean;
+
+  @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(2000)

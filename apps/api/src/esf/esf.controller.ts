@@ -13,6 +13,7 @@ export class EsfController {
   list(@CurrentOrgId() organizationId: string, @Query() query: ListEsfDto) {
     return this.service.list(organizationId, {
       ...(query.unmatchedOnly !== undefined ? { unmatchedOnly: query.unmatchedOnly } : {}),
+      ...(query.hiddenOnly !== undefined ? { hiddenOnly: query.hiddenOnly } : {}),
       ...(query.year !== undefined ? { year: query.year } : {}),
       ...(query.month !== undefined ? { month: query.month } : {}),
     });
@@ -47,5 +48,17 @@ export class EsfController {
   @RequirePermission(Permission.MANAGE_DOCUMENTS)
   detach(@Param('id') id: string, @CurrentOrgId() organizationId: string) {
     return this.service.detach(organizationId, id);
+  }
+
+  @Post('invoices/:id/hide')
+  @RequirePermission(Permission.MANAGE_DOCUMENTS)
+  hide(@Param('id') id: string, @CurrentOrgId() organizationId: string) {
+    return this.service.setHidden(organizationId, id, true);
+  }
+
+  @Post('invoices/:id/unhide')
+  @RequirePermission(Permission.MANAGE_DOCUMENTS)
+  unhide(@Param('id') id: string, @CurrentOrgId() organizationId: string) {
+    return this.service.setHidden(organizationId, id, false);
   }
 }

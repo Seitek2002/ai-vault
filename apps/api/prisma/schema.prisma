@@ -502,6 +502,8 @@ model EsfInvoice {
   fileAssetId    String?   @unique
   /// Почему не сопоставлено — показывается менеджеру
   matchNote      String?
+  /// Скрыта менеджером из «без расчёта»: не наша, розница и т.п. Автоподбор её не трогает.
+  hiddenAt       DateTime?
 
   importedAt DateTime @default(now())
   updatedAt  DateTime @updatedAt

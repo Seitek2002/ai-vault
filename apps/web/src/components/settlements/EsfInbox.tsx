@@ -30,10 +30,153 @@ function monthKey(inv: EsfInvoice): { year: number; month: number } {
   return { year: d.getUTCFullYear(), month: d.getUTCMonth() + 1 };
 }
 
+const hasEsf = (s: Settlement) => !!s.steps.find((st) => st.type === "ISSUE_ESF")?.doneAt;
+const monthLabel = (s: Settlement) => `${MONTH_NAMES[s.month - 1]} ${s.year}`;
+
 /**
- * ЭСФ без расчёта за месяц дашборда. Расчёты на выбор — того же месяца:
- * августовскую ЭСФ нет смысла предлагать привязать к сентябрьскому расчёту.
+ * Одна ЭСФ без расчёта. Партнёра знаем по ИНН, поэтому предлагаем его расчёты
+ * за все месяцы — ЭСФ нередко выставляют позже, чем оказана услуга; следом идут
+ * остальные расчёты месяца дашборда. Расчёты, где ЭСФ уже есть, помечены.
  */
+function EsfCard({
+  inv,
+  monthSettlements,
+  onError,
+}: {
+  inv: EsfInvoice;
+  monthSettlements: Settlement[];
+  onError: (msg: string) => void;
+}) {
+  const qc = useQueryClient();
+  const [choice, setChoice] = useState<string | null>(null);
+
+  const { data: own } = useQuery({
+    queryKey: ["settlements", "by-counterparty", inv.counterpartyId],
+    queryFn: () => settlementsApi.byCounterparty(inv.counterpartyId!),
+    enabled: !!inv.counterpartyId,
+  });
+
+  const attach = useMutation({
+    mutationFn: (settlementId: string) => esfApi.attach(inv.id, settlementId),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["esf"] });
+      void qc.invalidateQueries({ queryKey: ["settlements"] });
+      onError("");
+    },
+    onError: (err) => onError(err instanceof ApiError ? err.message : "Не удалось привязать"),
+  });
+
+  const hide = useMutation({
+    mutationFn: () => esfApi.hide(inv.id),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["esf"] });
+      onError("");
+    },
+    onError: (err) => onError(err instanceof ApiError ? err.message : "Не удалось скрыть"),
+  });
+
+  const ownSorted = [...(own ?? [])]
+    .filter((s) => s.steps.some((st) => st.type === "ISSUE_ESF"))
+    .sort((x, y) => y.year - x.year || y.month - x.month);
+  const rest = monthSettlements.filter((s) => s.counterpartyId !== inv.counterpartyId);
+
+  const options = [
+    ...ownSorted.map((s) => ({
+      value: s.id,
+      label: `${monthLabel(s)} · ${formatMoney(s.amount, s.currency)}${hasEsf(s) ? " · ЭСФ уже есть" : ""}`,
+    })),
+    ...rest.map((s) => ({
+      value: s.id,
+      label: `${s.counterpartyName} · ${monthLabel(s)} · ${formatMoney(s.amount, s.currency)}${hasEsf(s) ? " · ЭСФ уже есть" : ""}`,
+    })),
+  ];
+
+  // Подставляем расчёт партнёра за месяц поставки без ЭСФ; иначе — самый свежий без ЭСФ.
+  const esfMonth = monthKey(inv);
+  const preselected =
+    ownSorted.find((s) => !hasEsf(s) && s.year === esfMonth.year && s.month === esfMonth.month) ??
+    ownSorted.find((s) => !hasEsf(s)) ??
+    ownSorted[0];
+  const selected = choice ?? preselected?.id ?? "";
+
+  return (
+    <Card className="px-4 py-3">
+      <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
+        <div className="flex-1 min-w-[220px]">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-[var(--color-text-primary)] truncate">
+              {inv.counterpartyName ?? inv.buyerName}
+            </span>
+            <span className={cn("text-xs shrink-0", STATUS_CLASS[inv.status])}>
+              {ESF_STATUS_LABELS[inv.status]}
+            </span>
+          </div>
+          {inv.counterpartyName && (
+            <p className="text-[11px] text-[var(--color-text-muted)] truncate" title={inv.buyerName}>
+              {inv.buyerName}
+              {inv.buyerInn ? ` · ИНН ${inv.buyerInn}` : ""}
+            </p>
+          )}
+          <p className="text-xs text-[var(--color-text-muted)]">
+            {inv.number ? `№ ${inv.number}` : "без номера"} · поставка {fmtDate(inv.deliveryDate)} ·{" "}
+            {formatMoney(inv.amount)}
+            {inv.crmRef ? ` · ${inv.crmRef}` : ""}
+            {inv.note ? ` · ${inv.note}` : ""}
+          </p>
+          {inv.matchNote && <p className="text-xs text-[#FBBF24] mt-0.5">{inv.matchNote}</p>}
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0">
+          <a
+            href={esfApi.portalPdfUrl(inv.uuid)}
+            target="_blank"
+            rel="noreferrer"
+            title="Открыть PDF на портале"
+            className="p-1.5 rounded-lg text-[var(--color-text-muted)] hover:text-[var(--color-accent)] transition-colors"
+          >
+            <ExternalLink className="w-4 h-4" />
+          </a>
+          <div className="w-72">
+            <Select
+              value={selected}
+              onChange={setChoice}
+              options={[
+                {
+                  value: "",
+                  label: options.length
+                    ? inv.counterpartyId
+                      ? "— расчёт партнёра —"
+                      : "— расчёт за этот месяц —"
+                    : "— расчётов нет —",
+                },
+                ...options,
+              ]}
+            />
+          </div>
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={!selected || attach.isPending}
+            onClick={() => attach.mutate(selected)}
+          >
+            <Link2 className="w-3.5 h-3.5" />
+            Привязать
+          </Button>
+          <button
+            onClick={() => hide.mutate()}
+            disabled={hide.isPending}
+            title="Скрыть — не наша, розница и т.п."
+            className="p-1.5 rounded-lg text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] transition-colors"
+          >
+            <EyeOff className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+/** ЭСФ без расчёта за месяц дашборда. */
 function MonthList({
   year,
   month,
@@ -45,139 +188,27 @@ function MonthList({
   items: EsfInvoice[];
   onError: (msg: string) => void;
 }) {
-  const qc = useQueryClient();
-  const [choice, setChoice] = useState<Record<string, string>>({});
-
   const { data: board } = useQuery({
     queryKey: ["settlements", year, month],
     queryFn: () => settlementsApi.board(year, month),
   });
-  const attach = useMutation({
-    mutationFn: ({ id, settlementId }: { id: string; settlementId: string }) =>
-      esfApi.attach(id, settlementId),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["esf"] });
-      void qc.invalidateQueries({ queryKey: ["settlements"] });
-      onError("");
-    },
-    onError: (err) => onError(err instanceof ApiError ? err.message : "Не удалось привязать"),
-  });
-
-  const hide = useMutation({
-    mutationFn: (id: string) => esfApi.hide(id),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["esf"] });
-      onError("");
-    },
-    onError: (err) => onError(err instanceof ApiError ? err.message : "Не удалось скрыть"),
-  });
-
-  const settlements = (board?.settlements ?? []).filter((s) =>
+  const monthSettlements = (board?.settlements ?? []).filter((s) =>
     s.steps.some((st) => st.type === "ISSUE_ESF"),
   );
-  const hasEsf = (s: Settlement) => !!s.steps.find((st) => st.type === "ISSUE_ESF")?.doneAt;
 
-  /**
-   * Партнёра знаем по ИНН — его расчёт ставим первым и подставляем сразу.
-   * Расчёты, где ЭСФ уже есть, оставляем в списке, но помечаем.
-   */
-  function optionsFor(inv: EsfInvoice) {
-    const own = settlements.filter((s) => s.counterpartyId === inv.counterpartyId);
-    const rest = settlements.filter((s) => s.counterpartyId !== inv.counterpartyId);
-    const toOption = (s: Settlement) => ({
-      value: s.id,
-      label: `${s.counterpartyName} · ${formatMoney(s.amount, s.currency)}${hasEsf(s) ? " · ЭСФ уже есть" : ""}`,
-    });
-    const preselected = own.find((s) => !hasEsf(s)) ?? own[0];
-    return { options: [...own.map(toOption), ...rest.map(toOption)], preselected: preselected?.id ?? "" };
+  if (items.length === 0) {
+    return (
+      <p className="text-xs text-[var(--color-text-muted)] py-2">
+        За {MONTH_NAMES[month - 1]?.toLowerCase()} {year} все ЭСФ привязаны
+      </p>
+    );
   }
 
-
   return (
-    <div>
-      {items.length === 0 ? (
-        <p className="text-xs text-[var(--color-text-muted)] py-2">
-          За {MONTH_NAMES[month - 1]?.toLowerCase()} {year} все ЭСФ привязаны
-        </p>
-      ) : (
-        <div className="flex flex-col gap-2">
-          {items.map((inv) => {
-            const { options, preselected } = optionsFor(inv);
-            const selected = choice[inv.id] ?? preselected;
-            return (
-            <Card key={inv.id} className="px-4 py-3">
-              <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
-                <div className="flex-1 min-w-[220px]">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-[var(--color-text-primary)] truncate">
-                      {inv.counterpartyName ?? inv.buyerName}
-                    </span>
-                    <span className={cn("text-xs shrink-0", STATUS_CLASS[inv.status])}>
-                      {ESF_STATUS_LABELS[inv.status]}
-                    </span>
-                  </div>
-                  {inv.counterpartyName && (
-                    <p className="text-[11px] text-[var(--color-text-muted)] truncate" title={inv.buyerName}>
-                      {inv.buyerName}
-                      {inv.buyerInn ? ` · ИНН ${inv.buyerInn}` : ""}
-                    </p>
-                  )}
-                  <p className="text-xs text-[var(--color-text-muted)]">
-                    {inv.number ? `№ ${inv.number}` : "без номера"} · поставка {fmtDate(inv.deliveryDate)} ·{" "}
-                    {formatMoney(inv.amount)}
-                    {inv.crmRef ? ` · ${inv.crmRef}` : ""}
-                    {inv.note ? ` · ${inv.note}` : ""}
-                  </p>
-                  {inv.matchNote && <p className="text-xs text-[#FBBF24] mt-0.5">{inv.matchNote}</p>}
-                </div>
-
-                <div className="flex items-center gap-2 shrink-0">
-                  <a
-                    href={esfApi.portalPdfUrl(inv.uuid)}
-                    target="_blank"
-                    rel="noreferrer"
-                    title="Открыть PDF на портале"
-                    className="p-1.5 rounded-lg text-[var(--color-text-muted)] hover:text-[var(--color-accent)] transition-colors"
-                  >
-                    <ExternalLink className="w-4 h-4" />
-                  </a>
-                  <div className="w-64">
-                    <Select
-                      value={selected}
-                      onChange={(v) => setChoice((c) => ({ ...c, [inv.id]: v }))}
-                      options={[
-                        {
-                          value: "",
-                          label: options.length ? "— расчёт за этот месяц —" : "— расчётов за месяц нет —",
-                        },
-                        ...options,
-                      ]}
-                    />
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    disabled={!selected || attach.isPending}
-                    onClick={() => attach.mutate({ id: inv.id, settlementId: selected })}
-                  >
-                    <Link2 className="w-3.5 h-3.5" />
-                    Привязать
-                  </Button>
-                  <button
-                    onClick={() => hide.mutate(inv.id)}
-                    disabled={hide.isPending}
-                    title="Скрыть — не наша, розница и т.п."
-                    className="p-1.5 rounded-lg text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] transition-colors"
-                  >
-                    <EyeOff className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            </Card>
-            );
-          })}
-        </div>
-      )}
+    <div className="flex flex-col gap-2">
+      {items.map((inv) => (
+        <EsfCard key={inv.id} inv={inv} monthSettlements={monthSettlements} onError={onError} />
+      ))}
     </div>
   );
 }

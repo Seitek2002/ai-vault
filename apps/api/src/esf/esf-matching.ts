@@ -58,7 +58,7 @@ export interface MatchInput {
 }
 
 export type MatchResult =
-  | { kind: 'matched'; settlementId: string; how: 'crmRef' | 'month+amount' | 'month' }
+  | { kind: 'matched'; settlementId: string; how: 'crmRef' | 'month+amount' }
   | { kind: 'ambiguous'; note: string }
   | { kind: 'none'; note: string };
 
@@ -76,7 +76,14 @@ export function matchSettlement(input: MatchInput, candidates: SettlementCandida
     const byRef = candidates.filter((c) =>
       c.documentNumbers.some((n) => n.trim().toLowerCase() === ref),
     );
-    if (byRef.length === 1) return { kind: 'matched', settlementId: byRef[0]!.id, how: 'crmRef' };
+    if (byRef.length === 1) {
+      const c = byRef[0]!;
+      if (Math.abs(c.amount - input.amount) < 0.01) return { kind: 'matched', settlementId: c.id, how: 'crmRef' };
+      return {
+        kind: 'none',
+        note: `Номер акта совпал, но сумма ЭСФ ${fmt(input.amount)} ≠ сумме расчёта ${fmt(c.amount)}`,
+      };
+    }
   }
 
   if (!input.deliveryDate) {
@@ -105,10 +112,19 @@ export function matchSettlement(input: MatchInput, candidates: SettlementCandida
     return { kind: 'ambiguous', note: 'Несколько расчётов за месяц с такой же суммой' };
   }
 
+  // Сумма ЭСФ обязана совпадать с суммой расчёта: без этого не привязываем
+  // даже единственный расчёт месяца — пусть решает человек.
   if (inMonth.length === 1) {
-    return { kind: 'matched', settlementId: inMonth[0]!.id, how: 'month' };
+    return {
+      kind: 'none',
+      note: `Сумма ЭСФ ${fmt(input.amount)} ≠ сумме расчёта ${fmt(inMonth[0]!.amount)}`,
+    };
   }
   return { kind: 'ambiguous', note: 'Несколько расчётов за месяц, сумма ни с одним не совпала' };
+}
+
+function fmt(n: number): string {
+  return n.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 /**

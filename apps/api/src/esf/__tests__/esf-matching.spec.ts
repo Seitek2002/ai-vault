@@ -76,16 +76,25 @@ const sept = (over: Partial<SettlementCandidate> = {}): SettlementCandidate => (
 const D = (iso: string) => new Date(iso);
 
 describe('matchSettlement', () => {
-  it('crmRef с номером нашего акта — точное совпадение, месяц и сумма не важны', () => {
+  it('crmRef с номером нашего акта — точное совпадение, месяц не важен, сумма обязана сойтись', () => {
     const r = matchSettlement(
-      { crmRef: 'АВР-2026-003', deliveryDate: D('2026-11-05'), amount: 999 },
+      { crmRef: 'АВР-2026-003', deliveryDate: D('2026-11-05'), amount: 30000 },
       [sept()],
     );
     expect(r).toEqual({ kind: 'matched', settlementId: 'sep', how: 'crmRef' });
   });
 
+  it('crmRef совпал, но сумма другая — не привязываем и объясняем', () => {
+    const r = matchSettlement(
+      { crmRef: 'АВР-2026-003', deliveryDate: D('2026-09-17'), amount: 999 },
+      [sept()],
+    );
+    expect(r.kind).toBe('none');
+    expect((r as { note: string }).note).toContain('Номер акта совпал');
+  });
+
   it('crmRef сравнивается без учёта регистра и пробелов', () => {
-    const r = matchSettlement({ crmRef: ' авр-2026-003 ', deliveryDate: null, amount: 0 }, [sept()]);
+    const r = matchSettlement({ crmRef: ' авр-2026-003 ', deliveryDate: null, amount: 30000 }, [sept()]);
     expect(r.kind).toBe('matched');
   });
 
@@ -105,9 +114,10 @@ describe('matchSettlement', () => {
     expect(r).toEqual({ kind: 'matched', settlementId: 'aug', how: 'month+amount' });
   });
 
-  it('один расчёт за месяц с другой суммой — берём его, но помечаем «month»', () => {
+  it('один расчёт за месяц, но сумма другая — не привязываем: сумма ЭСФ должна совпасть с расчётом', () => {
     const r = matchSettlement({ crmRef: null, deliveryDate: D('2026-09-17'), amount: 45000 }, [sept()]);
-    expect(r).toEqual({ kind: 'matched', settlementId: 'sep', how: 'month' });
+    expect(r.kind).toBe('none');
+    expect((r as { note: string }).note).toContain('≠');
   });
 
   it('расчёт, на котором уже есть ЭСФ, кандидатом не считается', () => {

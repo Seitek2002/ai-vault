@@ -108,8 +108,9 @@ export function StepActionModal({ settlement, step, onClose }: Props) {
           <h3 className="text-sm font-semibold text-[var(--color-text-primary)]">
             {STEP_FULL_LABELS[step.type]}
           </h3>
-          <span className="text-xs text-[var(--color-text-muted)] shrink-0">
+          <span className="text-xs text-[var(--color-text-muted)] shrink-0 text-right">
             {settlement.counterpartyName}
+            <span className="block">{settlement.contractTitle}</span>
           </span>
         </div>
         <p className="text-xs text-[var(--color-text-muted)] mb-4">

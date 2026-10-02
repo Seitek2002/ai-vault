@@ -68,6 +68,7 @@ const sept = (over: Partial<SettlementCandidate> = {}): SettlementCandidate => (
   year: 2026,
   month: 9,
   amount: 30000,
+  contractTitle: 'Абонентское обслуживание',
   documentNumbers: ['АВР-2026-003', 'СЧ-2026-003'],
   hasEsf: false,
   ...over,
@@ -118,6 +119,23 @@ describe('matchSettlement', () => {
     const r = matchSettlement({ crmRef: null, deliveryDate: D('2026-09-17'), amount: 45000 }, [sept()]);
     expect(r.kind).toBe('none');
     expect((r as { note: string }).note).toContain('≠');
+  });
+
+  it('два договора с одним партнёром: привязываем к тому, у кого сошлась сумма', () => {
+    const r = matchSettlement({ crmRef: null, deliveryDate: D('2026-09-17'), amount: 45000 }, [
+      sept(),
+      sept({ id: 'sep2', amount: 45000, contractTitle: 'Разработка', documentNumbers: ['АВР-2026-004'] }),
+    ]);
+    expect(r).toEqual({ kind: 'matched', settlementId: 'sep2', how: 'month+amount' });
+  });
+
+  it('два договора с одинаковой суммой — называем их и ждём человека', () => {
+    const r = matchSettlement({ crmRef: null, deliveryDate: D('2026-09-17'), amount: 30000 }, [
+      sept(),
+      sept({ id: 'sep2', contractTitle: 'Разработка', documentNumbers: ['АВР-2026-004'] }),
+    ]);
+    expect(r.kind).toBe('ambiguous');
+    expect((r as { note: string }).note).toContain('Разработка');
   });
 
   it('расчёт, на котором уже есть ЭСФ, кандидатом не считается', () => {

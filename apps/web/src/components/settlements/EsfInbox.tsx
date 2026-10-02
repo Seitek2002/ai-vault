@@ -80,23 +80,27 @@ function EsfCard({
     .sort((x, y) => y.year - x.year || y.month - x.month);
   const rest = monthSettlements.filter((s) => s.counterpartyId !== inv.counterpartyId);
 
+  // У партнёра может быть несколько договоров — название договора в подписи
+  // единственное, что их различает.
   const options = [
     ...ownSorted.map((s) => ({
       value: s.id,
-      label: `${monthLabel(s)} · ${formatMoney(s.amount, s.currency)}${hasEsf(s) ? " · ЭСФ уже есть" : ""}`,
+      label: `${monthLabel(s)} · ${s.contractTitle} · ${formatMoney(s.amount, s.currency)}${hasEsf(s) ? " · ЭСФ уже есть" : ""}`,
     })),
     ...rest.map((s) => ({
       value: s.id,
-      label: `${s.counterpartyName} · ${monthLabel(s)} · ${formatMoney(s.amount, s.currency)}${hasEsf(s) ? " · ЭСФ уже есть" : ""}`,
+      label: `${s.counterpartyName} · ${s.contractTitle} · ${monthLabel(s)} · ${formatMoney(s.amount, s.currency)}${hasEsf(s) ? " · ЭСФ уже есть" : ""}`,
     })),
   ];
 
-  // Подставляем расчёт партнёра за месяц поставки без ЭСФ; иначе — самый свежий без ЭСФ.
+  // Подставляем расчёт за месяц поставки, где сошлась сумма: при двух договорах
+  // одного партнёра сумма — единственный надёжный признак.
   const esfMonth = monthKey(inv);
+  const open = ownSorted.filter((s) => !hasEsf(s));
+  const sameMonth = open.filter((s) => s.year === esfMonth.year && s.month === esfMonth.month);
+  const sameAmount = (list: Settlement[]) => list.filter((s) => Math.abs(s.amount - inv.amount) < 0.01);
   const preselected =
-    ownSorted.find((s) => !hasEsf(s) && s.year === esfMonth.year && s.month === esfMonth.month) ??
-    ownSorted.find((s) => !hasEsf(s)) ??
-    ownSorted[0];
+    sameAmount(sameMonth)[0] ?? sameAmount(open)[0] ?? (sameMonth.length === 1 ? sameMonth[0] : undefined);
   const selected = choice ?? preselected?.id ?? "";
 
   return (

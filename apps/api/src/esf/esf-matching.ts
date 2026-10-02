@@ -45,6 +45,8 @@ export interface SettlementCandidate {
   year: number;
   month: number;
   amount: number;
+  /** Название договора — у партнёра их может быть несколько */
+  contractTitle: string;
   /** Номера документов расчёта (акт, счёт) — для точного совпадения по crmRef */
   documentNumbers: string[];
   /** Уже ли на этом расчёте висит другая ЭСФ */
@@ -109,7 +111,11 @@ export function matchSettlement(input: MatchInput, candidates: SettlementCandida
     return { kind: 'matched', settlementId: sameAmount[0]!.id, how: 'month+amount' };
   }
   if (sameAmount.length > 1) {
-    return { kind: 'ambiguous', note: 'Несколько расчётов за месяц с такой же суммой' };
+    // У партнёра несколько договоров с одинаковой суммой — выбрать может только человек.
+    return {
+      kind: 'ambiguous',
+      note: `Несколько договоров с суммой ${fmt(input.amount)}: ${sameAmount.map((c) => c.contractTitle).join(', ')}`,
+    };
   }
 
   // Сумма ЭСФ обязана совпадать с суммой расчёта: без этого не привязываем
@@ -120,7 +126,12 @@ export function matchSettlement(input: MatchInput, candidates: SettlementCandida
       note: `Сумма ЭСФ ${fmt(input.amount)} ≠ сумме расчёта ${fmt(inMonth[0]!.amount)}`,
     };
   }
-  return { kind: 'ambiguous', note: 'Несколько расчётов за месяц, сумма ни с одним не совпала' };
+  return {
+    kind: 'ambiguous',
+    note: `Сумма ЭСФ ${fmt(input.amount)} не совпала ни с одним расчётом месяца: ${inMonth
+      .map((c) => `${c.contractTitle} ${fmt(c.amount)}`)
+      .join(', ')}`,
+  };
 }
 
 function fmt(n: number): string {

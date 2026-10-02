@@ -97,11 +97,23 @@ export class EsfService {
       throw new BadRequestException(`К расчёту уже привязана ЭСФ ${existing.number ?? '(черновик)'}`);
     }
 
-    // Образец — последняя отправленная/принятая ЭСФ этого партнёра.
-    const source = await this.prisma.esfInvoice.findFirst({
-      where: { organizationId, counterpartyId: settlement.counterpartyId, status: { in: ['SENT', 'ACCEPTED'] } },
-      orderBy: [{ issuedOn: 'desc' }, { importedAt: 'desc' }],
-    });
+    // Образец — последняя отправленная ЭСФ по ЭТОМУ ЖЕ договору: у партнёра
+    // может быть несколько договоров с разными услугами, и копировать нужно
+    // ЭСФ своей услуги. Если по договору ЭСФ ещё не было — берём любую ЭСФ партнёра.
+    const sentStatuses: Prisma.EnumEsfStatusFilter = { in: [EsfStatus.SENT, EsfStatus.ACCEPTED] };
+    const source =
+      (await this.prisma.esfInvoice.findFirst({
+        where: {
+          organizationId,
+          status: sentStatuses,
+          settlement: { contractId: settlement.contractId },
+        },
+        orderBy: [{ issuedOn: 'desc' }, { importedAt: 'desc' }],
+      })) ??
+      (await this.prisma.esfInvoice.findFirst({
+        where: { organizationId, counterpartyId: settlement.counterpartyId, status: sentStatuses },
+        orderBy: [{ issuedOn: 'desc' }, { importedAt: 'desc' }],
+      }));
     if (!source) {
       throw new BadRequestException(
         `У партнёра «${settlement.counterparty.name}» нет ни одной отправленной ЭСФ — первую выставьте на портале вручную, дальше Vault будет её копировать`,
@@ -530,6 +542,7 @@ export class EsfService {
         year: true,
         month: true,
         amount: true,
+        contract: { select: { title: true } },
         documents: { select: { number: true } },
         esfInvoices: { select: { id: true } },
       },
@@ -539,6 +552,7 @@ export class EsfService {
       year: s.year,
       month: s.month,
       amount: s.amount.toNumber(),
+      contractTitle: s.contract.title,
       documentNumbers: s.documents.map((d) => d.number).filter((n): n is string => !!n),
       hasEsf: s.esfInvoices.length > 0,
     }));

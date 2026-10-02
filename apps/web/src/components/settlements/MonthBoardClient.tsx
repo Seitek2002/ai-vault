@@ -302,6 +302,9 @@ export function MonthBoardClient() {
                     className="text-sm font-medium text-[var(--color-text-primary)]"
                   >
                     {s.counterpartyName}
+                    <span className="block text-xs font-normal text-[var(--color-text-muted)]">
+                      {s.contractTitle}
+                    </span>
                   </Link>
                   <span
                     className={cn(

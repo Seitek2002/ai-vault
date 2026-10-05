@@ -4,11 +4,12 @@ import { useMemo, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ExternalLink, Eye, EyeOff, Link2, Link2Off, Lock } from "lucide-react";
 import { ApiError } from "@/lib/api/client";
-import { Button, Card, Input, Select } from "@/components/ui";
+import { Button, Card, Input } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import { ESF_STATUS_LABELS, esfApi, type EsfInvoice } from "@/lib/api/esf";
 import { settingsApi } from "@/lib/api/settings";
-import { MONTH_NAMES, formatMoney, settlementsApi, settlementSetLabel, type Settlement } from "@/lib/api/settlements";
+import { MONTH_NAMES, formatMoney } from "@/lib/api/settlements";
+import { EsfLinkModal } from "./EsfLinkModal";
 
 const STATUS_CLASS: Record<EsfInvoice["status"], string> = {
   ACCEPTED: "text-[#4ADE80]",
@@ -30,41 +31,16 @@ function monthKey(inv: EsfInvoice): { year: number; month: number } {
   return { year: d.getUTCFullYear(), month: d.getUTCMonth() + 1 };
 }
 
-const hasEsf = (s: Settlement) => !!s.steps.find((st) => st.type === "ISSUE_ESF")?.doneAt;
-const monthLabel = (s: Settlement) => `${MONTH_NAMES[s.month - 1]} ${s.year}`;
-
-/**
- * Одна ЭСФ без расчёта. Партнёра знаем по ИНН, поэтому предлагаем его расчёты
- * за все месяцы — ЭСФ нередко выставляют позже, чем оказана услуга; следом идут
- * остальные расчёты месяца дашборда. Расчёты, где ЭСФ уже есть, помечены.
- */
+/** Выбор договора и периода не ограничен уже сформированными расчётами. */
 function EsfCard({
   inv,
-  monthSettlements,
   onError,
 }: {
   inv: EsfInvoice;
-  monthSettlements: Settlement[];
   onError: (msg: string) => void;
 }) {
   const qc = useQueryClient();
-  const [choice, setChoice] = useState<string | null>(null);
-
-  const { data: own } = useQuery({
-    queryKey: ["settlements", "by-counterparty", inv.counterpartyId],
-    queryFn: () => settlementsApi.byCounterparty(inv.counterpartyId!),
-    enabled: !!inv.counterpartyId,
-  });
-
-  const attach = useMutation({
-    mutationFn: (settlementId: string) => esfApi.attach(inv.id, settlementId),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["esf"] });
-      void qc.invalidateQueries({ queryKey: ["settlements"] });
-      onError("");
-    },
-    onError: (err) => onError(err instanceof ApiError ? err.message : "Не удалось привязать"),
-  });
+  const [linkOpen, setLinkOpen] = useState(false);
 
   const hide = useMutation({
     mutationFn: () => esfApi.hide(inv.id),
@@ -75,39 +51,8 @@ function EsfCard({
     onError: (err) => onError(err instanceof ApiError ? err.message : "Не удалось скрыть"),
   });
 
-  const ownSorted = [...(own ?? [])]
-    .filter((s) => s.steps.some((st) => st.type === "ISSUE_ESF"))
-    .sort((x, y) => y.year - x.year || y.month - x.month);
-  const rest = monthSettlements.filter((s) => s.counterpartyId !== inv.counterpartyId);
-
-  // Номер и назначение различают несколько комплектов одного договора за месяц.
-  const options = [
-    ...ownSorted.map((s) => ({
-      value: s.id,
-      label: `${monthLabel(s)} · ${s.contractTitle} · ${settlementSetLabel(s)} · ${formatMoney(s.amount, s.currency)}${hasEsf(s) ? " · ЭСФ уже есть" : ""}`,
-    })),
-    ...rest.map((s) => ({
-      value: s.id,
-      label: `${s.counterpartyName} · ${s.contractTitle} · ${settlementSetLabel(s)} · ${monthLabel(s)} · ${formatMoney(s.amount, s.currency)}${hasEsf(s) ? " · ЭСФ уже есть" : ""}`,
-    })),
-  ];
-
-  // Подставляем расчёт за месяц поставки, где сошлась сумма: при двух договорах
-  // одного партнёра сумма — единственный надёжный признак.
-  const esfMonth = monthKey(inv);
-  const open = ownSorted.filter((s) => !hasEsf(s));
-  const sameMonth = open.filter((s) => s.year === esfMonth.year && s.month === esfMonth.month);
-  const sameAmount = (list: Settlement[]) => list.filter((s) => Math.abs(s.amount - inv.amount) < 0.01);
-  const inMonthMatches = sameAmount(sameMonth);
-  const allMatches = sameAmount(open);
-  const preselected = inMonthMatches.length === 1 ? inMonthMatches[0]
-    : inMonthMatches.length > 1 ? undefined
-      : allMatches.length === 1 ? allMatches[0]
-        : allMatches.length > 1 ? undefined
-          : sameMonth.length === 1 ? sameMonth[0] : undefined;
-  const selected = choice ?? preselected?.id ?? "";
-
   return (
+    <>
     <Card className="px-4 py-3">
       <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
         <div className="flex-1 min-w-[220px]">
@@ -134,7 +79,7 @@ function EsfCard({
           {inv.matchNote && <p className="text-xs text-[#FBBF24] mt-0.5">{inv.matchNote}</p>}
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex flex-wrap items-center gap-2">
           <a
             href={esfApi.portalPdfUrl(inv.uuid)}
             target="_blank"
@@ -144,31 +89,13 @@ function EsfCard({
           >
             <ExternalLink className="w-4 h-4" />
           </a>
-          <div className="w-72">
-            <Select
-              value={selected}
-              onChange={setChoice}
-              options={[
-                {
-                  value: "",
-                  label: options.length
-                    ? inv.counterpartyId
-                      ? "— расчёт партнёра —"
-                      : "— расчёт за этот месяц —"
-                    : "— расчётов нет —",
-                },
-                ...options,
-              ]}
-            />
-          </div>
           <Button
             size="sm"
             variant="secondary"
-            disabled={!selected || attach.isPending}
-            onClick={() => attach.mutate(selected)}
+            onClick={() => { onError(""); setLinkOpen(true); }}
           >
             <Link2 className="w-3.5 h-3.5" />
-            Привязать
+            Выбрать договор и месяц
           </Button>
           <button
             onClick={() => hide.mutate()}
@@ -181,6 +108,8 @@ function EsfCard({
         </div>
       </div>
     </Card>
+    {linkOpen && <EsfLinkModal inv={inv} onClose={() => setLinkOpen(false)} />}
+    </>
   );
 }
 
@@ -196,14 +125,6 @@ function MonthList({
   items: EsfInvoice[];
   onError: (msg: string) => void;
 }) {
-  const { data: board } = useQuery({
-    queryKey: ["settlements", year, month],
-    queryFn: () => settlementsApi.board(year, month),
-  });
-  const monthSettlements = (board?.settlements ?? []).filter((s) =>
-    s.steps.some((st) => st.type === "ISSUE_ESF"),
-  );
-
   if (items.length === 0) {
     return (
       <p className="text-xs text-[var(--color-text-muted)] py-2">
@@ -215,7 +136,7 @@ function MonthList({
   return (
     <div className="flex flex-col gap-2">
       {items.map((inv) => (
-        <EsfCard key={inv.id} inv={inv} monthSettlements={monthSettlements} onError={onError} />
+        <EsfCard key={inv.id} inv={inv} onError={onError} />
       ))}
     </div>
   );
@@ -402,7 +323,7 @@ export function EsfInbox({
 
       {others.length > 0 && (
         <div className="mt-3 flex flex-wrap items-center gap-1.5">
-          <span className="text-xs text-[var(--color-text-muted)] mr-1">В других месяцах:</span>
+          <span className="text-xs text-[var(--color-text-muted)] mr-1">Непривязанные ЭСФ в других месяцах:</span>
           {others.map((g) => (
             <button
               key={`${g.year}-${g.month}`}

@@ -83,8 +83,9 @@ export function EsfLinkModal({ inv, onClose }: { inv: EsfInvoice; onClose: () =>
 
   return (
     <Modal onClose={() => { if (!link.isPending) onClose(); }}>
-      <form onSubmit={submit} className="max-h-[85dvh] overflow-y-auto p-5 sm:p-6">
-        <h2 className="text-base font-semibold text-[var(--color-text-primary)]">Привязать ЭСФ</h2>
+      <form onSubmit={submit} role="dialog" aria-modal="true" aria-labelledby="esf-link-title" className="flex max-h-[85dvh] flex-col">
+        <div className="min-h-0 overflow-y-auto p-5 sm:p-6">
+        <h2 id="esf-link-title" className="text-base font-semibold text-[var(--color-text-primary)]">Привязать ЭСФ</h2>
         <p className="mt-1 text-sm text-[var(--color-text-secondary)]">{inv.counterpartyName ?? inv.buyerName}</p>
         <p className="mt-1 text-sm text-[var(--color-text-secondary)]">№ {inv.number ?? "—"} · {formatMoney(inv.amount)}</p>
         <fieldset disabled={link.isPending} className="mt-5 space-y-4 disabled:opacity-70">
@@ -151,7 +152,8 @@ export function EsfLinkModal({ inv, onClose }: { inv: EsfInvoice; onClose: () =>
           <Button type="button" variant="ghost" onClick={() => { void contractsQuery.refetch(); void setsQuery.refetch(); void invoicesQuery.refetch(); }}>Повторить</Button>
         </div>}
         {error && <p role="alert" className="mt-3 text-sm text-[var(--color-danger)]">{error}{created && " Расчёт уже создан; повторная попытка привяжет ЭСФ к нему."}</p>}
-        <div className="mt-5 flex flex-wrap justify-end gap-2">
+        </div>
+        <div className="flex shrink-0 flex-col-reverse gap-2 border-t border-[var(--color-border)] px-5 py-4 sm:flex-row sm:justify-end sm:px-6">
           <Button type="button" variant="ghost" disabled={link.isPending} onClick={onClose}>Отмена</Button>
           <Button type="submit" loading={link.isPending} loadingText="Привязываю…"
             disabled={!contract || !selected || loading || loadError || (selected !== "new" && (!selectedSet || taken.has(selected)))}>

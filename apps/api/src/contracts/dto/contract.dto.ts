@@ -1,9 +1,13 @@
 import { PartialType } from '@nestjs/mapped-types';
+import { ContractTermUnit } from '@prisma/client';
 import { Transform } from 'class-transformer';
 import {
+  IsArray,
+  ArrayUnique,
   IsBoolean,
   IsDateString,
   IsInt,
+  IsEnum,
   IsNumber,
   IsOptional,
   IsString,
@@ -14,7 +18,14 @@ import {
 } from 'class-validator';
 
 export class CreateContractDto {
+  @IsOptional()
+  @Transform(({ value }) => typeof value === 'string' ? value.trim() : value)
   @IsString()
+  @MaxLength(100)
+  number?: string;
+
+  @IsString()
+  @MinLength(1)
   declare counterpartyId: string;
 
   @IsString()
@@ -24,6 +35,7 @@ export class CreateContractDto {
 
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
+  @Max(999999999999.99)
   declare defaultAmount: number;
 
   @IsOptional()
@@ -60,11 +72,38 @@ export class CreateContractDto {
 
   @IsOptional()
   @IsDateString()
-  startDate?: string;
+  startDate?: string | null;
 
   @IsOptional()
   @IsDateString()
-  endDate?: string;
+  endDate?: string | null;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(1200)
+  termValue?: number | null;
+
+  @IsOptional()
+  @IsEnum(ContractTermUnit)
+  termUnit?: ContractTermUnit | null;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  contractPdfId?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  ndaPdfId?: string | null;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @IsString({ each: true })
+  @MinLength(1, { each: true })
+  additionalPdfIds?: string[];
 
   /** Документ с текстом договора. */
   @IsOptional()
@@ -72,7 +111,7 @@ export class CreateContractDto {
   documentId?: string;
 }
 
-export class UpdateContractDto extends PartialType(CreateContractDto) {}
+export class UpdateContractDto extends PartialType(CreateContractDto, { skipNullProperties: false }) {}
 
 export class ListContractsDto {
   @IsOptional()

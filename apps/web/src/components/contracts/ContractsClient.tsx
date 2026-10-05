@@ -2,10 +2,12 @@
 
 import { useState, type FormEvent } from "react";
 import Link from "next/link";
+import { calculateContractEndDate, parseMoneyInput } from "@ai-vault/doc-placeholders";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Handshake, Trash2 } from "lucide-react";
 import { ApiError } from "@/lib/api/client";
-import { contractsApi, type Contract, type ContractFormData } from "@/lib/api/contracts";
+import { contractsApi, type Contract, type ContractFormData, type ContractAttachment } from "@/lib/api/contracts";
+import { openFile, uploadFile } from "@/lib/api/files";
 import { counterpartiesApi } from "@/lib/api/counterparties";
 import { formatMoney } from "@/lib/api/settlements";
 import { Button, Card, EmptyState, Input, Modal, PageHeader, Select, Spinner } from "@/components/ui";
@@ -13,8 +15,17 @@ import { Button, Card, EmptyState, Input, Modal, PageHeader, Select, Spinner } f
 const labelClass = "block text-xs text-[var(--color-text-secondary)] mb-1";
 const hintClass = "block mt-1 text-[11px] text-[var(--color-text-muted)]";
 
+function isContractPdf(file: File): boolean {
+  return file.size > 0 && (file.type === "application/pdf" || (!file.type && /\.pdf$/i.test(file.name)));
+}
+
+function pdfUpload(file: File): File {
+  return file.type ? file : new File([file], file.name, { type: "application/pdf" });
+}
+
 const EMPTY: ContractFormData = {
   counterpartyId: "",
+  number: "",
   title: "Абонентское обслуживание",
   defaultAmount: 0,
   vatRate: 12,
@@ -23,10 +34,16 @@ const EMPTY: ContractFormData = {
   paymentDueDays: 10,
   esfRequired: true,
   active: true,
+  termValue: null,
+  termUnit: null,
 };
 
 function toForm(c: Contract): ContractFormData {
   return {
+    contractPdfId: c.contractPdf?.id ?? null,
+    ndaPdfId: c.ndaPdf?.id ?? null,
+    additionalPdfIds: (c.additionalPdfs ?? []).map((file) => file.id),
+    number: c.number,
     counterpartyId: c.counterpartyId,
     title: c.title,
     defaultAmount: c.defaultAmount,
@@ -36,6 +53,7 @@ function toForm(c: Contract): ContractFormData {
     paymentDueDays: c.paymentDueDays,
     esfRequired: c.esfRequired,
     active: c.active,
+    ...(c.termValue && c.termUnit ? { termValue: c.termValue, termUnit: c.termUnit } : {}),
     ...(c.startDate ? { startDate: c.startDate.slice(0, 10) } : {}),
     ...(c.endDate ? { endDate: c.endDate.slice(0, 10) } : {}),
   };
@@ -44,7 +62,20 @@ function toForm(c: Contract): ContractFormData {
 function ContractModal({ editing, onClose }: { editing: Contract | null; onClose: () => void }) {
   const qc = useQueryClient();
   const [form, setForm] = useState<ContractFormData>(editing ? toForm(editing) : EMPTY);
+  const [amount, setAmount] = useState(String(editing?.defaultAmount ?? 0));
   const [error, setError] = useState("");
+  const [files, setFiles] = useState<Partial<Record<"contractPdfId" | "ndaPdfId", File>>>({});
+  const [extraFiles, setExtraFiles] = useState<{ key: string; file: File }[]>([]);
+  const [extraAttachments, setExtraAttachments] = useState<ContractAttachment[]>(editing?.additionalPdfs ?? []);
+  const [attachments, setAttachments] = useState({
+    contractPdfId: editing?.contractPdf ?? null,
+    ndaPdfId: editing?.ndaPdf ?? null,
+  });
+
+  const termMode = form.termUnit ?? (form.endDate ? "LEGACY" : "NONE");
+  const calculatedEndDate = form.termUnit && form.termValue && form.startDate
+    ? calculateContractEndDate(form.startDate, form.termValue, form.termUnit)
+    : termMode === "LEGACY" ? form.endDate ?? null : null;
 
   const { data: counterparties } = useQuery({
     queryKey: ["companies"],
@@ -52,13 +83,33 @@ function ContractModal({ editing, onClose }: { editing: Contract | null; onClose
   });
 
   const mutation = useMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
+      const defaultAmount = parseMoneyInput(amount);
+      if (defaultAmount === null) throw new Error("Некорректная сумма договора");
       const payload: ContractFormData = {
         ...form,
-        defaultAmount: Number(String(form.defaultAmount).replace(",", ".")),
-        ...(form.startDate ? { startDate: new Date(form.startDate).toISOString() } : {}),
-        ...(form.endDate ? { endDate: new Date(form.endDate).toISOString() } : {}),
+        defaultAmount,
+        startDate: form.startDate ? new Date(form.startDate).toISOString() : null,
+        endDate: calculatedEndDate ? new Date(calculatedEndDate).toISOString() : null,
       };
+      for (const key of ["contractPdfId", "ndaPdfId"] as const) {
+        const file = files[key];
+        if (!file) continue;
+        const uploaded = await uploadFile(pdfUpload(file));
+        payload[key] = uploaded.id;
+        setForm((current) => ({ ...current, [key]: uploaded.id }));
+        setAttachments((current) => ({ ...current, [key]: uploaded }));
+        setFiles((current) => ({ ...current, [key]: undefined }));
+      }
+      const additionalPdfIds = [...(form.additionalPdfIds ?? [])];
+      for (const pending of extraFiles) {
+        const uploaded = await uploadFile(pdfUpload(pending.file));
+        additionalPdfIds.push(uploaded.id);
+        setForm((current) => ({ ...current, additionalPdfIds: [...additionalPdfIds] }));
+        setExtraAttachments((current) => [...current, uploaded]);
+        setExtraFiles((current) => current.filter((item) => item.key !== pending.key));
+      }
+      payload.additionalPdfIds = additionalPdfIds;
       return editing ? contractsApi.update(editing.id, payload) : contractsApi.create(payload);
     },
     onSuccess: () => {
@@ -75,23 +126,52 @@ function ContractModal({ editing, onClose }: { editing: Contract | null; onClose
     setForm((f) => ({ ...f, [key]: value }));
   }
 
+  async function openAttachment(attachment: ContractAttachment) {
+    try {
+      await openFile(attachment.id);
+    } catch {
+      setError("Не удалось открыть файл");
+    }
+  }
+
   function onSubmit(e: FormEvent) {
     e.preventDefault();
+    if (mutation.isPending) return;
     setError("");
     if (!form.counterpartyId) {
       setError("Выберите партнёра");
+      return;
+    }
+    if (parseMoneyInput(amount) === null) {
+      setError("Введите сумму от 0 до 999 999 999 999,99, не более двух знаков после запятой");
+      return;
+    }
+    if (form.termUnit && !form.startDate) {
+      setError("Укажите дату начала договора");
+      return;
+    }
+    if (form.termUnit && !calculatedEndDate) {
+      setError("Укажите целый срок от 1 до 1200 месяцев или от 1 до 100 лет");
       return;
     }
     mutation.mutate();
   }
 
   return (
-    <Modal onClose={onClose} size="lg">
+    <Modal onClose={() => { if (!mutation.isPending) onClose(); }} size="lg">
       <form onSubmit={onSubmit} className="p-5 max-h-[80vh] overflow-y-auto">
         <h3 className="text-sm font-semibold text-[var(--color-text-primary)] mb-4">
           {editing ? "Договор" : "Новый договор"}
         </h3>
 
+        <fieldset disabled={mutation.isPending}>
+        <label className="block mb-3">
+          <span className={labelClass}>Номер договора</span>
+          <Input value={form.number ?? ""} maxLength={100}
+            placeholder="Будет присвоен автоматически"
+            onChange={(e) => set("number", e.target.value)} />
+          <span className={hintClass}>{editing ? "Можно изменить номер вручную" : "Оставьте пустым для автоматической нумерации или введите свой номер"}</span>
+        </label>
         <label className="block mb-3">
           <span className={labelClass}>Партнёр</span>
           <Select
@@ -119,9 +199,11 @@ function ContractModal({ editing, onClose }: { editing: Contract | null; onClose
           <label className="block">
             <span className={labelClass}>Сумма в месяц</span>
             <Input
-              value={String(form.defaultAmount)}
-              onChange={(e) => set("defaultAmount", e.target.value as unknown as number)}
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
               inputMode="decimal"
+              required
+              onFocus={(e) => e.target.select()}
             />
           </label>
           <label className="block">
@@ -168,15 +250,137 @@ function ContractModal({ editing, onClose }: { editing: Contract | null; onClose
               onChange={(e) => set("startDate", e.target.value)}
             />
           </label>
-          <label className="block">
-            <span className={labelClass}>Окончание</span>
-            <Input
-              type="date"
-              value={form.endDate ?? ""}
-              onChange={(e) => set("endDate", e.target.value)}
-            />
-          </label>
+          <div>
+            <span className={labelClass}>Срок договора</span>
+            <div className="flex gap-2">
+              {form.termUnit && (
+                <Input type="number" min={1} max={form.termUnit === "YEARS" ? 100 : 1200} step={1}
+                  required aria-label="Количество месяцев или лет" className="w-20 shrink-0"
+                  value={form.termValue || ""}
+                  onChange={(e) => set("termValue", Number(e.target.value))} />
+              )}
+              <div className="flex-1 min-w-0">
+                <Select value={termMode} disabled={mutation.isPending}
+                  onChange={(value) => {
+                    if (value === "MONTHS" || value === "YEARS") {
+                      setForm((current) => ({ ...current, termUnit: value, termValue: current.termValue || 1, endDate: null }));
+                    } else if (value === "LEGACY") {
+                      setForm((current) => {
+                        const updated = { ...current, endDate: editing?.endDate?.slice(0, 10) ?? null };
+                        delete updated.termValue;
+                        delete updated.termUnit;
+                        return updated;
+                      });
+                    } else {
+                      setForm((current) => ({ ...current, termUnit: null, termValue: null, endDate: null }));
+                    }
+                  }}
+                  options={[
+                    { value: "NONE", label: "Без срока окончания" },
+                    { value: "MONTHS", label: "Месяцы" },
+                    { value: "YEARS", label: "Годы" },
+                    ...(editing?.endDate && !editing.termUnit ? [{ value: "LEGACY", label: "Сохранить текущую дату" }] : []),
+                  ]} />
+              </div>
+            </div>
+          </div>
         </div>
+
+        <p className="text-xs text-[var(--color-text-secondary)] mb-4">
+          {calculatedEndDate
+            ? `Окончание: ${calculatedEndDate.slice(0, 10).split("-").reverse().join(".")}`
+            : form.termUnit ? "Выберите дату начала и срок — окончание рассчитается автоматически" : "Дата окончания не установлена"}
+        </p>
+
+        <fieldset disabled={mutation.isPending} className="mb-4 space-y-3">
+          <legend className="text-sm font-medium mb-2">Вложения</legend>
+          {(["contractPdfId", "ndaPdfId"] as const).map((key) => {
+            const attachment = attachments[key];
+            const file = files[key];
+            return (
+              <div key={key} className="rounded-lg border border-[var(--color-border)] p-3">
+                <label className="block">
+                  <span className={labelClass}>{key === "contractPdfId" ? "PDF договора" : "NDA (PDF)"}</span>
+                  <input
+                    type="file"
+                    accept="application/pdf,.pdf"
+                    className="block w-full text-xs text-[var(--color-text-secondary)]"
+                    onChange={(event) => {
+                      const selected = event.target.files?.[0];
+                      event.target.value = "";
+                      if (!selected) return;
+                      if (!isContractPdf(selected)) {
+                        setError("Выберите непустой файл в формате PDF");
+                        return;
+                      }
+                      if (selected.size > 20 * 1024 * 1024) {
+                        setError("Размер PDF не должен превышать 20 МБ");
+                        return;
+                      }
+                      setError("");
+                      setFiles((current) => ({ ...current, [key]: selected }));
+                    }}
+                  />
+                </label>
+                {(file || attachment) && (
+                  <div className="flex items-center gap-2 mt-2 text-xs">
+                    <span className="truncate flex-1">{file?.name ?? attachment?.originalName}</span>
+                    {!file && attachment && (
+                      <Button type="button" size="sm" variant="ghost" onClick={() => void openAttachment(attachment)}>
+                        Открыть
+                      </Button>
+                    )}
+                    <Button type="button" size="sm" variant="ghost" onClick={() => {
+                      setFiles((current) => ({ ...current, [key]: undefined }));
+                      setAttachments((current) => ({ ...current, [key]: null }));
+                      set(key, null);
+                    }}>
+                      Убрать
+                    </Button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          <div className="rounded-lg border border-[var(--color-border)] p-3">
+            <label className="block">
+              <span className={labelClass}>Дополнительные соглашения, приложения и другие документы (PDF)</span>
+              <input type="file" multiple accept="application/pdf,.pdf"
+                className="block w-full text-xs text-[var(--color-text-secondary)]"
+                onChange={(event) => {
+                  const selected = Array.from(event.target.files ?? []);
+                  event.target.value = "";
+                  if (selected.some((file) => !isContractPdf(file))) {
+                    setError("Выберите непустые файлы в формате PDF");
+                    return;
+                  }
+                  if (selected.some((file) => file.size > 20 * 1024 * 1024)) {
+                    setError("Размер каждого PDF не должен превышать 20 МБ");
+                    return;
+                  }
+                  setError("");
+                  setExtraFiles((current) => [...current, ...selected.map((file) => ({ key: crypto.randomUUID(), file }))]);
+                }} />
+            </label>
+            {extraAttachments.map((attachment) => (
+              <div key={attachment.id} className="flex items-center gap-2 mt-2 text-xs">
+                <span className="truncate flex-1">{attachment.originalName}</span>
+                <Button type="button" size="sm" variant="ghost" onClick={() => void openAttachment(attachment)}>Открыть</Button>
+                <Button type="button" size="sm" variant="ghost" onClick={() => {
+                  setExtraAttachments((current) => current.filter((file) => file.id !== attachment.id));
+                  setForm((current) => ({ ...current, additionalPdfIds: (current.additionalPdfIds ?? []).filter((id) => id !== attachment.id) }));
+                }}>Убрать</Button>
+              </div>
+            ))}
+            {extraFiles.map((pending) => (
+              <div key={pending.key} className="flex items-center gap-2 mt-2 text-xs">
+                <span className="truncate flex-1">{pending.file.name}</span>
+                <Button type="button" size="sm" variant="ghost" onClick={() => setExtraFiles((current) => current.filter((item) => item.key !== pending.key))}>Убрать</Button>
+              </div>
+            ))}
+          </div>
+          <p className={hintClass}>Необязательно. PDF до 20 МБ каждый. Файлы сохраняются вместе с договором.</p>
+        </fieldset>
 
         <label className="flex items-center gap-2 mb-1 cursor-pointer">
           <input
@@ -203,10 +407,12 @@ function ContractModal({ editing, onClose }: { editing: Contract | null; onClose
           </span>
         </label>
 
+        </fieldset>
+
         {error && <p className="text-xs text-[var(--color-danger)] mb-2">{error}</p>}
 
         <div className="flex justify-end gap-2">
-          <Button type="button" variant="ghost" onClick={onClose}>
+          <Button type="button" variant="ghost" disabled={mutation.isPending} onClick={onClose}>
             Отмена
           </Button>
           <Button type="submit" loading={mutation.isPending} loadingText="Сохраняю…">
@@ -275,7 +481,7 @@ export function ContractsClient() {
                     )}
                   </div>
                   <p className="text-xs text-[var(--color-text-muted)] truncate">
-                    {c.title} · выставление {c.billingDay}-го · оплата +{c.paymentDueDays} дн.
+                    № {c.number} · {c.title} · выставление {c.billingDay}-го · оплата +{c.paymentDueDays} дн.
                   </p>
                 </div>
 

@@ -146,6 +146,32 @@ describe('matchSettlement', () => {
     expect((r as { note: string }).note).toContain('уже есть ЭСФ');
   });
 
+  it('различает комплекты одного договора по номеру акта при одинаковой сумме', () => {
+    const r = matchSettlement({ crmRef: 'АВР-ВТОРОЙ', deliveryDate: D('2026-09-17'), amount: 30000 }, [
+      sept({ contractTitle: 'Обслуживание · Комплект №1', documentNumbers: ['АВР-ПЕРВЫЙ'] }),
+      sept({ id: 'sep2', contractTitle: 'Обслуживание · Комплект №2', documentNumbers: ['АВР-ВТОРОЙ'] }),
+    ]);
+    expect(r).toEqual({ kind: 'matched', settlementId: 'sep2', how: 'crmRef' });
+  });
+
+  it('не выбирает произвольно из двух одинаковых комплектов и показывает их номера', () => {
+    const r = matchSettlement({ crmRef: null, deliveryDate: D('2026-09-17'), amount: 30000 }, [
+      sept({ contractTitle: 'Обслуживание · Комплект №1' }),
+      sept({ id: 'sep2', contractTitle: 'Обслуживание · Комплект №2' }),
+    ]);
+    expect(r.kind).toBe('ambiguous');
+    expect((r as { note: string }).note).toContain('Комплект №1');
+    expect((r as { note: string }).note).toContain('Комплект №2');
+  });
+
+  it('привязывает вторую ЭСФ к свободному комплекту, сохраняя первую привязку', () => {
+    const r = matchSettlement({ crmRef: null, deliveryDate: D('2026-09-17'), amount: 30000 }, [
+      sept({ hasEsf: true, contractTitle: 'Обслуживание · Комплект №1' }),
+      sept({ id: 'sep2', contractTitle: 'Обслуживание · Комплект №2' }),
+    ]);
+    expect(r).toEqual({ kind: 'matched', settlementId: 'sep2', how: 'month+amount' });
+  });
+
   it('нет расчёта за месяц — понятная причина', () => {
     const r = matchSettlement({ crmRef: null, deliveryDate: D('2026-03-12'), amount: 30000 }, [sept()]);
     expect(r).toEqual({ kind: 'none', note: 'Нет расчёта за 03.2026 по этому партнёру' });

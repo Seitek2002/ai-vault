@@ -1,13 +1,14 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, ExternalLink, FileText, Trash2 } from "lucide-react";
+import { ArrowRight, ExternalLink, FileText, Link2, Paperclip, Trash2 } from "lucide-react";
 import { ApiError } from "@/lib/api/client";
-import { esfApi } from "@/lib/api/esf";
+import { esfApi, ESF_STATUS_LABELS } from "@/lib/api/esf";
 import { openFile, uploadFile } from "@/lib/api/files";
 import { Button, Input, Modal } from "@/components/ui";
+import { fieldClassName } from "@/components/ui/Input";
 import {
   formatMoney,
   settlementsApi,
@@ -23,9 +24,43 @@ interface Props {
 }
 
 const labelClass = "block text-xs text-[var(--color-text-secondary)] mb-1";
+const stepFileLabels: Partial<Record<SettlementStep["type"], string>> = {
+  ISSUE_ACT: "Открыть PDF акта",
+  ISSUE_INVOICE: "Открыть PDF счёта",
+  ISSUE_ESF: "Открыть скан ЭСФ",
+};
+
+type EsfEvidenceMode = "portal" | "url" | "scan";
+const scanMimeByExtension: Record<string, string> = {
+  pdf: "application/pdf", jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png",
+  webp: "image/webp", heic: "image/heic", heif: "image/heif",
+};
+
+function scanMime(file: File): string {
+  return file.type || scanMimeByExtension[file.name.split(".").pop()?.toLowerCase() ?? ""] || "";
+}
+
+function isEsfScan(file: File): boolean {
+  return file.size > 0 && Object.values(scanMimeByExtension).includes(scanMime(file));
+}
+
+function isEvidenceUrl(value: string): boolean {
+  try {
+    const url = new URL(value.trim());
+    return ["http:", "https:"].includes(url.protocol) && !url.username && !url.password;
+  } catch {
+    return false;
+  }
+}
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
+}
+
+function isPdfScan(file: File): boolean {
+  return file.size > 0 && (
+    file.type === "application/pdf" || (!file.type && /\.pdf$/i.test(file.name))
+  );
 }
 
 export function StepActionModal({ settlement, step, onClose }: Props) {
@@ -35,14 +70,35 @@ export function StepActionModal({ settlement, step, onClose }: Props) {
   // Поля разных шагов; каждый использует только своё.
   const [note, setNote] = useState(step.note ?? "");
   const [file, setFile] = useState<File | null>(null);
+  const uploadedFile = useRef<{ file: File; id: string } | null>(null);
   const [amount, setAmount] = useState(String(settlement.dueAmount || settlement.amount));
   const [paidAt, setPaidAt] = useState(todayIso());
   const [reference, setReference] = useState("");
+  const isEsfStep = step.type === "ISSUE_ESF";
+  const [esfMode, setEsfMode] = useState<EsfEvidenceMode>(step.evidenceUrl ? "url" : "portal");
+  const [evidenceUrl, setEvidenceUrl] = useState(step.evidenceUrl ?? "");
+  const [esfInvoiceId, setEsfInvoiceId] = useState("");
+  const esfQuery = useQuery({
+    queryKey: ["esf", "all"],
+    queryFn: () => esfApi.list(),
+    enabled: isEsfStep && !step.doneAt,
+  });
+  const esfCandidates = (esfQuery.data ?? []).filter((invoice) =>
+    !invoice.hiddenAt && invoice.counterpartyId === settlement.counterpartyId &&
+    (!invoice.settlementId || invoice.settlementId === settlement.id) &&
+    (invoice.status === "SENT" || invoice.status === "ACCEPTED"),
+  ).sort((a, b) => (b.deliveryDate ?? "").localeCompare(a.deliveryDate ?? ""));
+  const linkedInvoice = esfQuery.data?.find((invoice) => invoice.settlementId === settlement.id);
+  const selectedInvoiceId = esfInvoiceId || esfCandidates.find((invoice) => invoice.settlementId === settlement.id)?.id || "";
+  const selectedInvoice = esfCandidates.find((invoice) => invoice.id === selectedInvoiceId);
+  const requiresPdfScan = step.type === "ISSUE_ACT" || step.type === "ISSUE_INVOICE";
+  const scanDocument = step.type === "ISSUE_ACT" ? "акта" : "счёта на оплату";
 
   function invalidate() {
     void qc.invalidateQueries({ queryKey: ["settlements"] });
     void qc.invalidateQueries({ queryKey: ["settlement", settlement.id] });
     void qc.invalidateQueries({ queryKey: ["documents"] });
+    if (isEsfStep) void qc.invalidateQueries({ queryKey: ["esf"] });
   }
 
   function handleError(err: unknown) {
@@ -51,17 +107,48 @@ export function StepActionModal({ settlement, step, onClose }: Props) {
     setError(Array.isArray(message) ? String(message[0]) : message);
   }
 
+  async function uploadEvidence(chosen: File): Promise<string> {
+    if (uploadedFile.current?.file === chosen) return uploadedFile.current.id;
+    const upload = !chosen.type && (requiresPdfScan || isEsfStep)
+      ? new File([chosen], chosen.name, { type: requiresPdfScan ? "application/pdf" : scanMime(chosen) })
+      : chosen;
+    const { id } = await uploadFile(upload);
+    uploadedFile.current = { file: chosen, id };
+    return id;
+  }
+
   const complete = useMutation({
     mutationFn: async () => {
+      if (isEsfStep && esfMode === "portal") {
+        if (!selectedInvoice) throw new Error("Выберите отправленную или принятую ЭСФ этого партнёра.");
+        if (selectedInvoice.settlementId !== settlement.id) {
+          await esfApi.attach(selectedInvoice.id, settlement.id);
+        }
+      }
+      if (isEsfStep && esfMode === "url" && !isEvidenceUrl(evidenceUrl)) {
+        throw new Error("Укажите корректную ссылку на ЭСФ, начинающуюся с https:// или http://.");
+      }
+      if (isEsfStep && esfMode === "scan" && (!file || !isEsfScan(file))) {
+        throw new Error("Прикрепите непустой скан ЭСФ в PDF или фото (JPEG, PNG, WebP, HEIC, HEIF).");
+      }
+      if (requiresPdfScan && !file) {
+        throw new Error(`Прикрепите скан ${scanDocument} в формате PDF, чтобы завершить шаг.`);
+      }
+      if (requiresPdfScan && file && !isPdfScan(file)) {
+        throw new Error(`Выберите непустой файл PDF со сканом ${scanDocument}.`);
+      }
       let fileAssetId: string | undefined;
-      if (file) fileAssetId = (await uploadFile(file)).id;
+      if (file && (!isEsfStep || esfMode === "scan")) {
+        fileAssetId = await uploadEvidence(file);
+      }
       return settlementsApi.completeStep(settlement.id, step.id, {
         ...(note.trim() ? { note: note.trim() } : {}),
         ...(fileAssetId ? { fileAssetId } : {}),
+        ...(isEsfStep && esfMode === "url" ? { evidenceUrl: evidenceUrl.trim() } : {}),
       });
     },
     onSuccess: () => { invalidate(); onClose(); },
-    onError: handleError,
+    onError: (err) => { invalidate(); handleError(err); },
   });
 
   const reopen = useMutation({
@@ -73,7 +160,7 @@ export function StepActionModal({ settlement, step, onClose }: Props) {
   const addPayment = useMutation({
     mutationFn: async () => {
       let fileAssetId: string | undefined;
-      if (file) fileAssetId = (await uploadFile(file)).id;
+      if (file) fileAssetId = await uploadEvidence(file);
       return settlementsApi.addPayment(settlement.id, {
         amount: Number(amount.replace(",", ".")),
         paidAt: new Date(paidAt).toISOString(),
@@ -93,24 +180,28 @@ export function StepActionModal({ settlement, step, onClose }: Props) {
 
   const busy = complete.isPending || reopen.isPending || addPayment.isPending;
   const isPaymentStep = step.type === "RECEIVE_PAYMENT";
+  const hasEsfEvidence = esfMode === "portal" ? !!selectedInvoice
+    : esfMode === "url" ? !!evidenceUrl.trim() : !!file;
 
   function onSubmit(e: FormEvent) {
     e.preventDefault();
+    if (busy) return;
     setError("");
     if (isPaymentStep) addPayment.mutate();
     else complete.mutate();
   }
 
   return (
-    <Modal onClose={onClose} size="md">
+    <Modal onClose={() => { if (!busy) onClose(); }} size="md">
       <div className="p-5 max-h-[80vh] overflow-y-auto">
-        <div className="mb-1 flex items-baseline justify-between gap-3">
+        <div className="mb-1 flex flex-wrap items-baseline justify-between gap-3">
           <h3 className="text-sm font-semibold text-[var(--color-text-primary)]">
             {STEP_FULL_LABELS[step.type]}
           </h3>
-          <span className="text-xs text-[var(--color-text-muted)] shrink-0 text-right">
+          <span className="text-xs text-[var(--color-text-muted)] min-w-0 text-right">
             {settlement.counterpartyName}
             <span className="block">{settlement.contractTitle}</span>
+            <span className="block">Комплект №{settlement.sequence ?? 1}{settlement.label ? ` · ${settlement.label}` : ""}</span>
           </span>
         </div>
         <p className="text-xs text-[var(--color-text-muted)] mb-4">
@@ -150,15 +241,98 @@ export function StepActionModal({ settlement, step, onClose }: Props) {
           </div>
         ) : (
           <form onSubmit={onSubmit}>
-            {step.type === "ISSUE_ESF" && (
+            {isEsfStep && (
               <>
-                <EsfDraftPanel settlementId={settlement.id} stepNote={step.note} />
+                <fieldset className="mb-4" disabled={busy}>
+                  <legend className="text-sm text-[var(--color-text-secondary)] mb-2">Подтверждение ЭСФ</legend>
+                  <div className="grid grid-cols-3 gap-2">
+                    {([
+                      { value: "portal", label: "Кабинет", icon: FileText },
+                      { value: "url", label: "Ссылка", icon: Link2 },
+                      { value: "scan", label: "Скан", icon: Paperclip },
+                    ] as const).map(({ value, label, icon: Icon }) => (
+                      <label key={value} className={`flex flex-col items-center gap-2 rounded-lg border px-2 py-3 cursor-pointer text-xs transition-colors has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-[var(--color-accent)] ${esfMode === value ? "border-[var(--color-accent)] bg-[var(--color-accent-dim)] text-[var(--color-accent)]" : "border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-elevated)]"}`}>
+                        <Icon className="w-4 h-4" aria-hidden="true" />
+                        <span className="flex items-center gap-1.5">
+                          <input type="radio" name="esf-evidence" value={value} checked={esfMode === value} onChange={() => { setEsfMode(value); setFile(null); setError(""); }} className="accent-[var(--color-accent)]" />
+                          {label}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
+
+                {esfMode === "portal" && (
+                  <div className="mb-4">
+                    <label className="block">
+                      <span className={labelClass}>ЭСФ партнёра из кабинета</span>
+                      <select className={fieldClassName} required disabled={busy || esfQuery.isPending || esfQuery.isError} value={selectedInvoiceId} onChange={(e) => { setEsfInvoiceId(e.target.value); setError(""); }}>
+                        <option value="">{esfQuery.isPending ? "Загружаю ЭСФ…" : "Выберите ЭСФ"}</option>
+                        {esfCandidates.map((invoice) => (
+                          <option key={invoice.id} value={invoice.id}>
+                            № {invoice.number ?? "—"} · {invoice.deliveryDate ? new Date(invoice.deliveryDate).toLocaleDateString("ru-RU") : "без даты"} · {formatMoney(invoice.amount, settlement.currency)} · {ESF_STATUS_LABELS[invoice.status]}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    {selectedInvoice && (
+                      <div className="mt-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elevated)] px-3 py-2 text-xs">
+                        <p className="text-[var(--color-text-primary)] break-words">ЭСФ № {selectedInvoice.number ?? "—"}</p>
+                        <p className="mt-1 text-[var(--color-text-secondary)]">{selectedInvoice.deliveryDate ? new Date(selectedInvoice.deliveryDate).toLocaleDateString("ru-RU") : "Без даты"} · {formatMoney(selectedInvoice.amount, settlement.currency)} · {ESF_STATUS_LABELS[selectedInvoice.status]}</p>
+                      </div>
+                    )}
+                    {esfQuery.isError ? (
+                      <div role="alert" className="mt-2 text-xs text-[var(--color-danger)]">
+                        Не удалось загрузить ЭСФ.
+                        <button type="button" onClick={() => void esfQuery.refetch()} className="ml-2 underline">Повторить</button>
+                      </div>
+                    ) : (
+                      <p className="mt-1.5 text-xs text-[var(--color-text-secondary)]">
+                        {selectedInvoice ? "Проверьте дату и сумму: выбранная ЭСФ будет связана с этим расчётом." : !esfQuery.isPending && esfCandidates.length === 0 ? "Нет доступных отправленных или принятых ЭСФ этого партнёра. Синхронизируйте кабинет или добавьте ссылку / скан." : "Показаны отправленные и принятые ЭСФ этого партнёра, свободные или связанные с этим расчётом."}
+                      </p>
+                    )}
+                    {linkedInvoice?.status === "NEW" ? <EsfDraftPanel settlementId={settlement.id} stepNote={step.note} /> : !linkedInvoice && (
+                      <details className="mt-3 text-xs text-[var(--color-text-secondary)]">
+                        <summary className="cursor-pointer py-1">Создать новую ЭСФ на портале</summary>
+                        <div className="mt-2"><EsfDraftPanel settlementId={settlement.id} stepNote={step.note} /></div>
+                      </details>
+                    )}
+                  </div>
+                )}
+
+                {esfMode === "url" && (
+                  <label className="block mb-4">
+                    <span className={labelClass}>Ссылка на ЭСФ — обязательно</span>
+                    <Input type="url" required maxLength={2048} disabled={busy} value={evidenceUrl} onChange={(e) => { setEvidenceUrl(e.target.value); setError(""); }} placeholder="https://esf.salyk.kg/…" />
+                    <span className="block mt-1.5 text-xs text-[var(--color-text-secondary)]">Ссылка сохранится в расчёте и будет доступна после завершения шага.</span>
+                  </label>
+                )}
+
+                {esfMode === "scan" && (
+                  <label className="block mb-4">
+                    <span className={labelClass}>Скан ЭСФ (PDF или фото) — обязательно</span>
+                    <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.heic,.heif,application/pdf,image/jpeg,image/png,image/webp,image/heic,image/heif" required disabled={busy} onChange={(e) => {
+                      const chosen = e.target.files?.[0] ?? null;
+                      setError("");
+                      if (chosen && !isEsfScan(chosen)) {
+                        setFile(null);
+                        e.target.value = "";
+                        setError("Выберите непустой PDF или фото (JPEG, PNG, WebP, HEIC, HEIF).");
+                        return;
+                      }
+                      setFile(chosen);
+                    }} className="block w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elevated)] p-3 text-xs text-[var(--color-text-secondary)] file:mr-3 file:min-h-10 file:px-3 file:rounded-lg file:border-0 file:bg-[var(--color-accent-dim)] file:text-[var(--color-accent)] file:text-xs file:font-medium focus-visible:outline-2 focus-visible:outline-[var(--color-accent)] disabled:opacity-50" />
+                    <span className="block mt-1.5 text-xs text-[var(--color-text-secondary)] break-words">{file ? `Прикреплён: ${file.name}` : "Подойдёт PDF или фото с телефона."}</span>
+                  </label>
+                )}
                 <label className="block mb-3">
-                  <span className={labelClass}>Номер и дата ЭСФ</span>
+                  <span className={labelClass}>Номер и дата ЭСФ (необязательно)</span>
                   <Input
                     value={note}
                     onChange={(e) => setNote(e.target.value)}
                     placeholder="ЭСФ № 4417 от 05.10.2026"
+                    maxLength={500}
+                    disabled={busy}
                   />
                 </label>
               </>
@@ -250,19 +424,45 @@ export function StepActionModal({ settlement, step, onClose }: Props) {
               </p>
             )}
 
-            {(step.type === "ISSUE_ACT" || step.type === "ISSUE_INVOICE") && (
-              <p className="text-sm text-[var(--color-text-secondary)] mb-3">
-                {step.documentId
-                  ? "Черновик уже создан. Проверьте его и отметьте выставленным — документ получит статус «Финальный»."
-                  : "Шаблона этого типа в Конструкторе не нашлось, поэтому черновик не создан. Создайте документ вручную и отметьте шаг."}
-              </p>
+            {requiresPdfScan && (
+              <div className="mb-4">
+                <p className="text-sm text-[var(--color-text-secondary)] mb-3">
+                  {step.documentId
+                    ? `Проверьте черновик и прикрепите скан выставленного ${scanDocument} в PDF. После завершения шага документ получит статус «Финальный».`
+                    : `Прикрепите скан выставленного ${scanDocument} в PDF, чтобы завершить шаг.`}
+                </p>
+                <label className="block">
+                  <span className={labelClass}>Скан {scanDocument} (PDF) — обязательно</span>
+                  <input
+                    type="file"
+                    accept=".pdf,application/pdf"
+                    required
+                    disabled={busy}
+                    onChange={(e) => {
+                      const chosen = e.target.files?.[0] ?? null;
+                      setError("");
+                      if (chosen && !isPdfScan(chosen)) {
+                        setFile(null);
+                        e.target.value = "";
+                        setError(`Выберите непустой файл PDF со сканом ${scanDocument}.`);
+                        return;
+                      }
+                      setFile(chosen);
+                    }}
+                    className="block w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elevated)] p-3 text-xs text-[var(--color-text-secondary)] file:mr-3 file:min-h-10 file:px-3 file:rounded-lg file:border-0 file:bg-[var(--color-accent-dim)] file:text-[var(--color-accent)] file:text-xs file:font-medium focus-visible:outline-2 focus-visible:outline-[var(--color-accent)] disabled:opacity-50"
+                  />
+                </label>
+                <p className="mt-1.5 text-xs text-[var(--color-text-secondary)] break-words">
+                  {file ? `Прикреплён: ${file.name}` : `Без PDF ${scanDocument} шаг завершить нельзя.`}
+                </p>
+              </div>
             )}
 
-            {error && <p className="text-xs text-[var(--color-danger)] mb-2">{error}</p>}
+            {error && <p role="alert" className="text-xs text-[var(--color-danger)] mb-2">{error}</p>}
 
             <div className="flex justify-end gap-2">
-              <Button type="button" variant="ghost" onClick={onClose}>Отмена</Button>
-              <Button type="submit" loading={busy} loadingText="Сохраняю…">
+              <Button type="button" variant="ghost" disabled={busy} onClick={onClose}>Отмена</Button>
+              <Button type="submit" disabled={(requiresPdfScan && !file) || (isEsfStep && !hasEsfEvidence)} loading={busy} loadingText="Сохраняю…">
                 {isPaymentStep ? "Внести платёж" : "Готово"}
               </Button>
             </div>
@@ -279,6 +479,7 @@ export function StepActionModal({ settlement, step, onClose }: Props) {
  */
 function DoneStepFiles({ step, settlementId }: { step: SettlementStep; settlementId: string }) {
   const [opening, setOpening] = useState(false);
+  const [error, setError] = useState("");
   const { data: esf } = useQuery({
     queryKey: ["esf", "settlement", settlementId],
     queryFn: () => esfApi.list().then((all) => all.filter((i) => i.settlementId === settlementId)),
@@ -286,7 +487,8 @@ function DoneStepFiles({ step, settlementId }: { step: SettlementStep; settlemen
   });
   const portal = esf?.find((i) => i.fileAssetId === step.fileAssetId) ?? esf?.[0];
 
-  if (!step.fileAssetId && !portal) return null;
+  const savedUrl = step.evidenceUrl && isEvidenceUrl(step.evidenceUrl) ? step.evidenceUrl : null;
+  if (!step.fileAssetId && !portal && !savedUrl) return null;
 
   return (
     <div className="flex flex-wrap gap-2 mb-1">
@@ -297,15 +499,18 @@ function DoneStepFiles({ step, settlementId }: { step: SettlementStep; settlemen
           disabled={opening}
           onClick={async () => {
             setOpening(true);
+            setError("");
             try {
               await openFile(step.fileAssetId!);
+            } catch (err) {
+              setError(err instanceof Error ? err.message : "Не удалось открыть файл. Попробуйте ещё раз.");
             } finally {
               setOpening(false);
             }
           }}
         >
           <FileText className="w-3.5 h-3.5" />
-          {step.type === "ISSUE_ESF" ? "Открыть PDF" : "Открыть файл"}
+          {stepFileLabels[step.type] ?? "Открыть файл"}
         </Button>
       )}
       {portal && (
@@ -319,6 +524,13 @@ function DoneStepFiles({ step, settlementId }: { step: SettlementStep; settlemen
           На портале
         </a>
       )}
+      {savedUrl && (
+        <a href={savedUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-sm text-[var(--color-accent)] hover:underline px-2 py-1.5">
+          <ExternalLink className="w-3.5 h-3.5" />
+          Открыть ссылку ЭСФ
+        </a>
+      )}
+      {error && <p role="alert" className="w-full text-xs text-[var(--color-danger)]">{error}</p>}
     </div>
   );
 }

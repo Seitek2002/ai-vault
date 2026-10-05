@@ -3,6 +3,7 @@ import { SettlementsService } from './settlements.service';
 import {
   CompleteStepDto,
   CreatePaymentDto,
+  CreateSettlementDto,
   GenerateSettlementsDto,
   ListSettlementsDto,
   UpdateSettlementDto,
@@ -41,6 +42,16 @@ export class SettlementsController {
   @Get(':id')
   findOne(@Param('id') id: string, @CurrentOrgId() organizationId: string) {
     return this.service.findOne(id, organizationId);
+  }
+
+  @Post()
+  @RequirePermission(Permission.MANAGE_DOCUMENTS)
+  create(
+    @Body() dto: CreateSettlementDto,
+    @CurrentOrgId() organizationId: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.service.create(organizationId, user.sub, dto);
   }
 
   @Patch(':id')

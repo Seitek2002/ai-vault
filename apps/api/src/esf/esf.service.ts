@@ -186,7 +186,7 @@ export class EsfService {
       (
         await this.prisma.esfInvoice.findMany({
           where: { organizationId },
-          select: { id: true, uuid: true, status: true, settlementId: true, hiddenAt: true },
+          select: { id: true, uuid: true, status: true, settlementId: true, hiddenAt: true, fileAssetId: true },
         })
       ).map((r) => [r.uuid, r]),
     );
@@ -306,7 +306,7 @@ export class EsfService {
 
   /** Статус на портале меняется (Отправлен → Принят → иногда Отозван). Ведём его в ногу. */
   private async refreshExisting(
-    existing: { id: string; uuid: string; status: EsfStatus; settlementId: string | null; hiddenAt: Date | null },
+    existing: { id: string; uuid: string; status: EsfStatus; settlementId: string | null; hiddenAt: Date | null; fileAssetId: string | null },
     row: EsfListRow,
     organizationId: string,
     userId: string,
@@ -332,11 +332,11 @@ export class EsfService {
 
     if (existing.settlementId) {
       const step = await this.esfStep(existing.settlementId);
-      if (!step) return 'status';
+      if (!step || this.hasManualEvidence(step, existing.fileAssetId)) return 'status';
       if (statusClosesStep(status) && !step.doneAt) {
         await this.prisma.settlementStep.update({
           where: { id: step.id },
-          data: { doneAt: new Date(), note: this.stepNote(row.number, row.issuedOn) },
+          data: { doneAt: new Date(), note: this.stepNote(row.number, row.issuedOn), evidenceUrl: null, fileAssetId: existing.fileAssetId },
         });
       } else if (!statusClosesStep(status) && step.doneAt) {
         // ЭСФ отозвали или отклонили после того, как мы её зачли — шаг снова открыт.
@@ -421,7 +421,7 @@ export class EsfService {
     if (!invoice) throw new NotFoundException('ЭСФ не найдена');
     if (invoice.settlementId) {
       const step = await this.esfStep(invoice.settlementId);
-      if (step?.fileAssetId === invoice.fileAssetId) {
+      if (step && !this.hasManualEvidence(step, invoice.fileAssetId) && step.fileAssetId === invoice.fileAssetId) {
         await this.prisma.settlementStep.update({
           where: { id: step.id },
           data: { doneAt: null, doneById: null, fileAssetId: null, note: null },
@@ -542,6 +542,8 @@ export class EsfService {
         year: true,
         month: true,
         amount: true,
+        sequence: true,
+        label: true,
         contract: { select: { title: true } },
         documents: { select: { number: true } },
         esfInvoices: { select: { id: true } },
@@ -552,7 +554,7 @@ export class EsfService {
       year: s.year,
       month: s.month,
       amount: s.amount.toNumber(),
-      contractTitle: s.contract.title,
+      contractTitle: `${s.contract.title} · Комплект №${s.sequence}${s.label ? ` · ${s.label}` : ''}`,
       documentNumbers: s.documents.map((d) => d.number).filter((n): n is string => !!n),
       hasEsf: s.esfInvoices.length > 0,
     }));
@@ -570,7 +572,7 @@ export class EsfService {
       await this.prisma.fileAsset.update({ where: { id: fileAssetId }, data: { settlementId } });
     }
     const step = await this.esfStep(settlementId);
-    if (!step) return;
+    if (!step || this.hasManualEvidence(step, fileAssetId)) return;
 
     if (statusClosesStep(status)) {
       await this.prisma.settlementStep.update({
@@ -579,7 +581,8 @@ export class EsfService {
           doneAt: step.doneAt ?? new Date(),
           doneById: step.doneById ?? userId,
           note: this.stepNote(number, issuedOn),
-          ...(fileAssetId ? { fileAssetId } : {}),
+          evidenceUrl: null,
+          fileAssetId,
         },
       });
     } else {
@@ -595,6 +598,14 @@ export class EsfService {
     return this.prisma.settlementStep.findUnique({
       where: { settlementId_type: { settlementId, type: SettlementStepType.ISSUE_ESF } },
     });
+  }
+
+  /** Ручная ссылка / отдельный скан остаются подтверждением при синхронизации кабинета. */
+  private hasManualEvidence(
+    step: { doneAt: Date | null; evidenceUrl: string | null; fileAssetId: string | null },
+    invoiceFileAssetId: string | null,
+  ): boolean {
+    return !!step.doneAt && !!(step.evidenceUrl || (step.fileAssetId && step.fileAssetId !== invoiceFileAssetId));
   }
 
   private async refreshClosedAt(settlementId: string) {

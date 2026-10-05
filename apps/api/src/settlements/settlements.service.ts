@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import {
   DocumentStatus,
+  EsfStatus,
   Prisma,
   SettlementStepType,
   type Contract,
@@ -16,6 +17,7 @@ import {
 import type {
   CompleteStepDto,
   CreatePaymentDto,
+  CreateSettlementDto,
   GenerateSettlementsDto,
   ListSettlementsDto,
   UpdateSettlementDto,
@@ -43,6 +45,7 @@ export interface SettlementStepDto {
   documentId: string | null;
   fileAssetId: string | null;
   paymentId: string | null;
+  evidenceUrl: string | null;
   note: string | null;
   overdue: boolean;
 }
@@ -63,6 +66,8 @@ export interface SettlementDto {
   counterpartyName: string;
   year: number;
   month: number;
+  sequence: number;
+  label: string | null;
   amount: number;
   vatAmount: number;
   currency: string;
@@ -106,7 +111,7 @@ export class SettlementsService {
         ...(query.counterpartyId ? { counterpartyId: query.counterpartyId } : {}),
       },
       include: SETTLEMENT_INCLUDE,
-      orderBy: { counterparty: { name: 'asc' } },
+      orderBy: [{ counterparty: { name: 'asc' } }, { contractId: 'asc' }, { sequence: 'asc' }],
     });
 
     const now = new Date();
@@ -125,7 +130,7 @@ export class SettlementsService {
     const rows = await this.prisma.settlement.findMany({
       where: { organizationId, counterpartyId },
       include: SETTLEMENT_INCLUDE,
-      orderBy: [{ year: 'desc' }, { month: 'desc' }],
+      orderBy: [{ year: 'desc' }, { month: 'desc' }, { contractId: 'asc' }, { sequence: 'asc' }],
     });
     const now = new Date();
     return rows.map((row) => this.toDto(row, now));
@@ -164,8 +169,8 @@ export class SettlementsService {
   // ── Генерация месяца ──────────────────────────────────────────────────────
 
   /**
-   * Идемпотентно: расчёт уникален по (contractId, year, month), существующие
-   * пропускаются. Поэтому и cron, и кнопка «Сформировать месяц» безопасны.
+   * Идемпотентно: автоматически создаётся только комплект №1 по договору за месяц.
+   * Дополнительные комплекты создаются вручную и не затрагиваются генерацией.
    */
   async generate(organizationId: string, userId: string, dto: GenerateSettlementsDto) {
     const periodStart = new Date(Date.UTC(dto.year, dto.month - 1, 1));
@@ -200,84 +205,75 @@ export class SettlementsService {
     return { created, skipped, settlementIds: ids };
   }
 
-  /** Возвращает id созданного расчёта или null, если он уже существовал. */
-  async generateOne(
-    contract: Contract,
-    year: number,
-    month: number,
-    userId: string,
-  ): Promise<string | null> {
-    const existing = await this.prisma.settlement.findUnique({
-      where: { contractId_year_month: { contractId: contract.id, year, month } },
-      select: { id: true },
-    });
-    if (existing) return null;
-
-    const vatAmount = new Prisma.Decimal(
-      extractVat(contract.defaultAmount.toNumber(), contract.vatRate, contract.esfRequired),
-    );
-
-    try {
-      return await this.prisma.$transaction(async (tx) => {
-        const settlement = await tx.settlement.create({
-          data: {
-            organizationId: contract.organizationId,
-            contractId: contract.id,
-            counterpartyId: contract.counterpartyId,
-            year,
-            month,
-            amount: contract.defaultAmount,
-            vatAmount,
-            currency: contract.currency,
-            steps: {
-              create: buildStepPlans(year, month, {
-                esfRequired: contract.esfRequired,
-                paymentDueDays: contract.paymentDueDays,
-              }),
-            },
-          },
-        });
-
-        const counterparty = await tx.counterparty.findUniqueOrThrow({
-          where: { id: contract.counterpartyId },
-        });
-        const settings = await tx.companySettings.findUnique({
-          where: { organizationId: contract.organizationId },
-        });
-
-        const drafts = await this.docs.createDraftsForSettlement(tx, {
-          settlement,
-          counterparty,
-          settings,
-          userId,
-          organizationId: contract.organizationId,
-        });
-
-        // Черновик сразу привязывается к своему шагу — чтобы из ячейки
-        // дашборда открывался нужный документ ещё до его проверки.
-        for (const draft of drafts) {
-          const stepType =
-            draft.type === 'AVR'
-              ? SettlementStepType.ISSUE_ACT
-              : SettlementStepType.ISSUE_INVOICE;
-          await tx.settlementStep.update({
-            where: { settlementId_type: { settlementId: settlement.id, type: stepType } },
-            data: { documentId: draft.id },
-          });
-        }
-
-        return settlement.id;
+  /** Возвращает id первого комплекта или null, если он уже существует. */
+  async generateOne(contract: Contract, year: number, month: number, userId: string): Promise<string | null> {
+    return this.prisma.$transaction(async (tx) => {
+      await this.lockPeriod(tx, contract, year, month);
+      const existing = await tx.settlement.findUnique({
+        where: { contractId_year_month_sequence: { contractId: contract.id, year, month, sequence: 1 } },
+        select: { id: true },
       });
-    } catch (error) {
-      // Гонка между cron и ручной генерацией — уникальный индекс отработал.
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === 'P2002'
-      ) {
-        return null;
-      }
-      throw error;
+      if (existing) return null;
+      return this.createSet(tx, contract, year, month, 1, contract.defaultAmount, null, userId);
+    });
+  }
+
+  /** Ещё один комплект акта и счёта с отдельной суммой и собственными шагами. */
+  async create(organizationId: string, userId: string, dto: CreateSettlementDto) {
+    const id = await this.prisma.$transaction(async (tx) => {
+      const contract = await tx.contract.findFirst({
+        where: { id: dto.contractId, organizationId },
+      });
+      if (!contract) throw new NotFoundException('Договор не найден');
+      await this.lockPeriod(tx, contract, dto.year, dto.month);
+      const last = await tx.settlement.findFirst({
+        where: { contractId: contract.id, year: dto.year, month: dto.month },
+        orderBy: { sequence: 'desc' },
+        select: { sequence: true },
+      });
+      return this.createSet(
+        tx, contract, dto.year, dto.month, (last?.sequence ?? 0) + 1,
+        new Prisma.Decimal(dto.amount), dto.label?.trim() || null, userId,
+      );
+    });
+    return this.findOne(id, organizationId);
+  }
+
+  private async lockPeriod(tx: Prisma.TransactionClient, contract: Contract, year: number, month: number) {
+    const key = `settlement:${contract.organizationId}:${contract.id}:${year}:${month}`;
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${key}))`;
+  }
+
+  private async createSet(
+    tx: Prisma.TransactionClient, contract: Contract, year: number, month: number,
+    sequence: number, amount: Prisma.Decimal, label: string | null, userId: string,
+  ): Promise<string> {
+    const settlement = await tx.settlement.create({
+      data: {
+        organizationId: contract.organizationId,
+        contractId: contract.id,
+        counterpartyId: contract.counterpartyId,
+        year, month, sequence, label, amount,
+        vatAmount: new Prisma.Decimal(extractVat(amount.toNumber(), contract.vatRate, contract.esfRequired)),
+        currency: contract.currency,
+        steps: { create: buildStepPlans(year, month, {
+          esfRequired: contract.esfRequired, paymentDueDays: contract.paymentDueDays,
+        }) },
+      },
+    });
+    const counterparty = await tx.counterparty.findUniqueOrThrow({ where: { id: contract.counterpartyId } });
+    const settings = await tx.companySettings.findUnique({ where: { organizationId: contract.organizationId } });
+    const drafts = await this.docs.createDraftsForSettlement(tx, {
+      settlement, counterparty, settings, userId, organizationId: contract.organizationId,
+    });
+    for (const draft of drafts) {
+      const type = draft.type === 'AVR' ? SettlementStepType.ISSUE_ACT : SettlementStepType.ISSUE_INVOICE;
+      await tx.settlementStep.update({
+        where: { settlementId_type: { settlementId: settlement.id, type } },
+        data: { documentId: draft.id },
+      });
     }
+    return settlement.id;
   }
 
   // ── Правки расчёта ────────────────────────────────────────────────────────
@@ -290,11 +286,16 @@ export class SettlementsService {
   ) {
     const settlement = await this.getEntity(id, organizationId);
 
-    if (dto.amount !== undefined) {
-      const finalized = await this.prisma.document.count({
-        where: { settlementId: id, status: { not: DocumentStatus.DRAFT } },
-      });
-      if (finalized > 0) {
+    if (dto.amount !== undefined || dto.vatAmount !== undefined) {
+      const [finalized, issuedSteps] = await Promise.all([
+        this.prisma.document.count({ where: { settlementId: id, status: { not: DocumentStatus.DRAFT } } }),
+        this.prisma.settlementStep.count({ where: {
+          settlementId: id,
+          type: { in: [SettlementStepType.ISSUE_ACT, SettlementStepType.ISSUE_INVOICE, SettlementStepType.ISSUE_ESF] },
+          doneAt: { not: null },
+        } }),
+      ]);
+      if (finalized > 0 || issuedSteps > 0) {
         throw new BadRequestException(
           'Документы расчёта уже выставлены — сумму менять нельзя. Отмените шаг выставления.',
         );
@@ -364,8 +365,24 @@ export class SettlementsService {
     });
     if (!step) throw new NotFoundException('Шаг не найден');
 
+    const requiresPdfScan = step.type === SettlementStepType.ISSUE_ACT ||
+      step.type === SettlementStepType.ISSUE_INVOICE;
+    const scanDocument = step.type === SettlementStepType.ISSUE_ACT ? 'акта' : 'счёта на оплату';
+    if (requiresPdfScan && !dto.fileAssetId) {
+      throw new BadRequestException(`Прикрепите скан ${scanDocument} в формате PDF, чтобы завершить шаг.`);
+    }
     if (dto.documentId) await this.assertDocument(dto.documentId, organizationId);
-    if (dto.fileAssetId) await this.assertFileAsset(dto.fileAssetId, organizationId);
+    const fileAsset = dto.fileAssetId
+      ? await this.assertFileAsset(dto.fileAssetId, organizationId)
+      : null;
+    if (requiresPdfScan && fileAsset) {
+      if (fileAsset.mimeType !== 'application/pdf' || fileAsset.size === 0) {
+        throw new BadRequestException(`Скан ${scanDocument} должен быть непустым файлом PDF.`);
+      }
+      if (fileAsset.settlementId && fileAsset.settlementId !== settlementId) {
+        throw new BadRequestException(`Этот скан уже прикреплён к другому расчёту. Загрузите PDF ${scanDocument} для текущего расчёта.`);
+      }
+    }
 
     if (step.type === SettlementStepType.RECEIVE_PAYMENT) {
       throw new BadRequestException(
@@ -375,8 +392,44 @@ export class SettlementsService {
     if (step.type === SettlementStepType.RECEIVE_SIGNED && !dto.fileAssetId) {
       throw new BadRequestException('Приложите скан подписанного документа.');
     }
-    if (step.type === SettlementStepType.ISSUE_ESF && !dto.note?.trim()) {
-      throw new BadRequestException('Укажите номер и дату ЭСФ.');
+    const isEsfStep = step.type === SettlementStepType.ISSUE_ESF;
+    if (!isEsfStep && dto.evidenceUrl !== undefined) {
+      throw new BadRequestException('Ссылку можно прикрепить только к шагу ЭСФ.');
+    }
+    let evidenceUrl: string | null = null;
+    let esfFileAssetId: string | null = null;
+    if (isEsfStep) {
+      if (dto.evidenceUrl !== undefined) {
+        try {
+          const url = new URL(dto.evidenceUrl.trim());
+          if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || dto.evidenceUrl.length > 2048) {
+            throw new Error('Invalid URL');
+          }
+          evidenceUrl = url.href;
+        } catch {
+          throw new BadRequestException('Укажите корректную ссылку на ЭСФ, начинающуюся с https:// или http://.');
+        }
+      }
+      if (fileAsset) {
+        const scanTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'];
+        if (!scanTypes.includes(fileAsset.mimeType) || fileAsset.size <= 0) {
+          throw new BadRequestException('Скан ЭСФ должен быть непустым PDF или фото (JPEG, PNG, WebP, HEIC, HEIF).');
+        }
+        if (fileAsset.settlementId && fileAsset.settlementId !== settlementId) {
+          throw new BadRequestException('Этот скан уже прикреплён к другому расчёту. Загрузите скан ЭСФ для текущего расчёта.');
+        }
+        esfFileAssetId = fileAsset.id;
+      }
+      if (!evidenceUrl && !fileAsset) {
+        const invoice = await this.prisma.esfInvoice.findFirst({
+          where: { organizationId, settlementId, status: { in: [EsfStatus.SENT, EsfStatus.ACCEPTED] } },
+          select: { fileAssetId: true },
+        });
+        if (!invoice) {
+          throw new BadRequestException('Свяжите отправленную или принятую ЭСФ из кабинета, прикрепите ссылку или добавьте скан.');
+        }
+        esfFileAssetId = invoice.fileAssetId;
+      }
     }
 
     await this.prisma.$transaction(async (tx) => {
@@ -388,6 +441,7 @@ export class SettlementsService {
           ...(dto.note !== undefined ? { note: dto.note } : {}),
           ...(dto.documentId ? { documentId: dto.documentId } : {}),
           ...(dto.fileAssetId ? { fileAssetId: dto.fileAssetId } : {}),
+          ...(isEsfStep ? { evidenceUrl, fileAssetId: esfFileAssetId } : {}),
         },
       });
       await this.applyStepSideEffects(tx, settlementId, step.type, dto);
@@ -426,7 +480,17 @@ export class SettlementsService {
     type: SettlementStepType,
     dto: CompleteStepDto,
   ) {
+    if (type === SettlementStepType.ISSUE_ESF && dto.fileAssetId) {
+      await tx.fileAsset.update({ where: { id: dto.fileAssetId }, data: { settlementId } });
+      return;
+    }
     if (type === SettlementStepType.ISSUE_ACT || type === SettlementStepType.ISSUE_INVOICE) {
+      if (dto.fileAssetId) {
+        await tx.fileAsset.update({
+          where: { id: dto.fileAssetId },
+          data: { settlementId },
+        });
+      }
       const documentType = type === SettlementStepType.ISSUE_ACT ? 'AVR' : 'INVOICE_PAYMENT';
       await tx.document.updateMany({
         where: { settlementId, type: documentType, status: DocumentStatus.DRAFT },
@@ -583,6 +647,8 @@ export class SettlementsService {
       counterpartyName: row.counterparty.name,
       year: row.year,
       month: row.month,
+      sequence: row.sequence,
+      label: row.label,
       amount,
       vatAmount: row.vatAmount.toNumber(),
       currency: row.currency,
@@ -600,6 +666,7 @@ export class SettlementsService {
         documentId: step.documentId,
         fileAssetId: step.fileAssetId,
         paymentId: step.paymentId,
+        evidenceUrl: step.evidenceUrl,
         note: step.note,
         overdue:
           step.doneAt === null &&
@@ -657,8 +724,9 @@ export class SettlementsService {
   private async assertFileAsset(fileAssetId: string, organizationId: string) {
     const found = await this.prisma.fileAsset.findFirst({
       where: { id: fileAssetId, organizationId },
-      select: { id: true },
+      select: { id: true, mimeType: true, size: true, settlementId: true },
     });
     if (!found) throw new NotFoundException('Файл не найден');
+    return found;
   }
 }

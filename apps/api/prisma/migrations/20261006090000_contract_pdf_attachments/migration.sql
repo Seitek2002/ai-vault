@@ -1,0 +1,3 @@
+ALTER TABLE "Contract" ADD COLUMN "contractPdfId" TEXT, ADD COLUMN "ndaPdfId" TEXT;
+ALTER TABLE "Contract" ADD CONSTRAINT "Contract_contractPdfId_fkey" FOREIGN KEY ("contractPdfId") REFERENCES "FileAsset"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "Contract" ADD CONSTRAINT "Contract_ndaPdfId_fkey" FOREIGN KEY ("ndaPdfId") REFERENCES "FileAsset"("id") ON DELETE SET NULL ON UPDATE CASCADE;

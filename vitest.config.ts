@@ -5,7 +5,7 @@ export default defineConfig({
     // Тесты покрывают чистую логику: сроки шагов, выводимый статус расчёта,
     // подстановку плейсхолдеров, очистку тела документа. Сценарии с БД
     // проверяются на запущенном стенде.
-    include: ['packages/*/src/**/*.test.ts', 'apps/api/src/**/*.spec.ts'],
+    include: ['packages/*/src/**/*.test.ts', 'apps/api/src/**/*.spec.ts', 'apps/web/src/**/*.test.ts'],
     environment: 'node',
   },
 });

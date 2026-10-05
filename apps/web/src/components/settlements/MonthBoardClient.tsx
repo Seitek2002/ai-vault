@@ -3,9 +3,9 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarDays, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight, RefreshCw, Plus } from "lucide-react";
 import { ApiError } from "@/lib/api/client";
-import { Button, Card, EmptyState, PageHeader, Spinner } from "@/components/ui";
+import { Button, Card, EmptyState, Spinner } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import {
   MONTH_NAMES,
@@ -13,6 +13,7 @@ import {
   STEP_ORDER,
   formatMoney,
   settlementsApi,
+  settlementSetLabel,
   type Settlement,
   type SettlementStep,
 } from "@/lib/api/settlements";
@@ -21,6 +22,8 @@ import { settingsApi } from "@/lib/api/settings";
 import { EsfInbox } from "./EsfInbox";
 import { StepActionModal } from "./StepActionModal";
 import { StepCell, StepChip } from "./StepBadge";
+import { AmountEditor } from "./AmountEditor";
+import { AddSettlementModal } from "./AddSettlementModal";
 
 const STATUS_META: Record<Settlement["status"], { label: string; className: string }> = {
   closed: { label: "Закрыт", className: "bg-[rgba(74,222,128,0.12)] text-[#4ADE80]" },
@@ -63,6 +66,7 @@ export function MonthBoardClient() {
     null,
   );
   const [notice, setNotice] = useState("");
+  const [adding, setAdding] = useState<{ contractId?: string } | null>(null);
 
   const qc = useQueryClient();
 
@@ -120,52 +124,57 @@ export function MonthBoardClient() {
 
   return (
     <div className="p-6 lg:p-8 h-full flex flex-col overflow-y-auto">
-      <PageHeader
-        title="Этот месяц"
-        subtitle="Расчёты с партнёрами: акты, счета, ЭСФ, оплаты"
-        actions={
-          <>
-            <div className="flex items-center rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-surface)]">
-              <button
-                onClick={() => shiftMonth(-1)}
-                aria-label="Предыдущий месяц"
-                className="px-2 py-2 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors"
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-              <span className="px-2 text-sm font-medium text-[var(--color-text-primary)] min-w-[130px] text-center">
-                {MONTH_NAMES[month - 1]} {year}
-              </span>
-              <button
-                onClick={() => shiftMonth(1)}
-                aria-label="Следующий месяц"
-                className="px-2 py-2 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors"
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
-            {settings?.esfConfigured && (
-              <Button
-                variant="secondary"
-                onClick={() => syncEsf.mutate()}
-                loading={syncEsf.isPending}
-                loadingText="Тяну ЭСФ…"
-                title="Забрать выставленные ЭСФ из кабинета esf.salyk.kg"
-              >
-                <RefreshCw className="w-4 h-4" />
-                ЭСФ
-              </Button>
-            )}
-            <Button
-              onClick={() => generate.mutate()}
-              loading={generate.isPending}
-              loadingText="Формирую…"
+      <div className="mb-6 flex flex-col gap-4 shrink-0 xl:flex-row xl:items-center xl:justify-between">
+        <div>
+          <h1 className="text-xl font-semibold text-[var(--color-text-primary)]">Этот месяц</h1>
+          <p className="mt-0.5 text-sm text-[var(--color-text-secondary)]">
+            Расчёты с партнёрами: акты, счета, ЭСФ, оплаты
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-surface)]">
+            <button
+              onClick={() => shiftMonth(-1)}
+              aria-label="Предыдущий месяц"
+              className="px-2 py-2 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors"
             >
-              Сформировать месяц
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <span className="px-2 text-sm font-medium text-[var(--color-text-primary)] min-w-[130px] text-center">
+              {MONTH_NAMES[month - 1]} {year}
+            </span>
+            <button
+              onClick={() => shiftMonth(1)}
+              aria-label="Следующий месяц"
+              className="px-2 py-2 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+          {settings?.esfConfigured && (
+            <Button
+              variant="secondary"
+              onClick={() => syncEsf.mutate()}
+              loading={syncEsf.isPending}
+              loadingText="Тяну ЭСФ…"
+              title="Забрать выставленные ЭСФ из кабинета esf.salyk.kg"
+            >
+              <RefreshCw className="w-4 h-4" />
+              ЭСФ
             </Button>
-          </>
-        }
-      />
+          )}
+          <Button variant="secondary" onClick={() => setAdding({})}>
+            <Plus className="w-4 h-4" /> Добавить акт и счёт
+          </Button>
+          <Button
+            onClick={() => generate.mutate()}
+            loading={generate.isPending}
+            loadingText="Формирую…"
+          >
+            Сформировать месяц
+          </Button>
+        </div>
+      </div>
 
       {notice && (
         <p className="mb-4 text-sm text-[var(--color-text-secondary)] shrink-0">{notice}</p>
@@ -206,7 +215,7 @@ export function MonthBoardClient() {
       ) : (
         <>
           {/* Десктоп: таблица «партнёр × шаги» */}
-          <Card className="hidden lg:block shrink-0 overflow-hidden p-0">
+          <Card className="hidden lg:block shrink-0 overflow-x-auto p-0">
             <table className="w-full border-collapse">
               <thead>
                 <tr className="bg-[var(--color-bg-elevated)]">
@@ -245,16 +254,13 @@ export function MonthBoardClient() {
                       <p className="text-xs text-[var(--color-text-muted)] truncate max-w-[220px]">
                         {s.contractTitle}
                       </p>
+                      <p className="text-xs text-[var(--color-text-secondary)] max-w-[250px] break-words">{settlementSetLabel(s)}</p>
+                      <button type="button" onClick={() => setAdding({ contractId: s.contractId })}
+                        aria-label={`Добавить акт и счёт: ${s.counterpartyName}`}
+                        className="mt-1 text-xs text-[var(--color-accent)] hover:underline focus-visible:outline-2">+ Ещё акт и счёт</button>
                     </td>
                     <td className="px-3 py-2 text-right">
-                      <p className="text-sm text-[var(--color-text-primary)] whitespace-nowrap">
-                        {formatMoney(s.amount, s.currency)}
-                      </p>
-                      {s.dueAmount > 0 && s.paidAmount > 0 && (
-                        <p className="text-xs text-[#FBBF24] whitespace-nowrap">
-                          остаток {formatMoney(s.dueAmount, s.currency)}
-                        </p>
-                      )}
+                      <AmountEditor settlement={s} compact />
                     </td>
                     {STEP_ORDER.map((type) => {
                       const step = s.steps.find((x) => x.type === type);
@@ -305,6 +311,7 @@ export function MonthBoardClient() {
                     <span className="block text-xs font-normal text-[var(--color-text-muted)]">
                       {s.contractTitle}
                     </span>
+                    <span className="block text-xs font-normal text-[var(--color-text-secondary)]">{settlementSetLabel(s)}</span>
                   </Link>
                   <span
                     className={cn(
@@ -315,12 +322,12 @@ export function MonthBoardClient() {
                     {STATUS_META[s.status].label}
                   </span>
                 </div>
-                <p className="text-xs text-[var(--color-text-muted)] mb-3">
-                  {formatMoney(s.amount, s.currency)}
-                  {s.dueAmount > 0 && s.paidAmount > 0 && (
-                    <> · остаток {formatMoney(s.dueAmount, s.currency)}</>
-                  )}
-                </p>
+                <div className="mb-3">
+                  <AmountEditor settlement={s} compact />
+                </div>
+                <button type="button" onClick={() => setAdding({ contractId: s.contractId })}
+                  aria-label={`Добавить акт и счёт: ${s.counterpartyName}`}
+                  className="mb-3 min-h-9 text-xs text-[var(--color-accent)] hover:underline focus-visible:outline-2">+ Ещё акт и счёт</button>
                 <div className="flex flex-wrap gap-1.5">
                   {s.steps.map((step) => (
                     <StepChip
@@ -346,6 +353,9 @@ export function MonthBoardClient() {
           }}
         />
       )}
+
+      {adding && <AddSettlementModal year={year} month={month} {...adding} onClose={() => setAdding(null)}
+        onCreated={(created) => { setAdding(null); setNotice(`${settlementSetLabel(created)} добавлен: ${created.counterpartyName}`); }} />}
 
       {selected && (
         <StepActionModal

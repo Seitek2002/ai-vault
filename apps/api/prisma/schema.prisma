@@ -72,6 +72,7 @@ model Organization {
   categories     DocumentCategory[]
   positions      Position[]
   settings       CompanySettings?
+  contractNumberCounter ContractNumberCounter?
   contracts      Contract[]
   settlements    Settlement[]
   payments       Payment[]
@@ -255,6 +256,9 @@ model FileAsset {
   createdBy    User             @relation(fields: [createdById], references: [id])
   steps        SettlementStep[]
   payments     Payment[]
+  contractPdfs   Contract[]       @relation("ContractPdf")
+  contractExtras Contract[]       @relation("ContractExtras")
+  contractNdas   Contract[]       @relation("ContractNda")
   esfInvoice   EsfInvoice?
 
   @@index([organizationId])
@@ -355,11 +359,27 @@ model DocumentCategory {
 
 /// Договор как бизнес-объект: с кем, на сколько, с какой периодичностью.
 /// Текст договора — отдельный Document типа CONTRACT, ссылка опциональна.
+model ContractNumberCounter {
+  organizationId String       @id
+  lastNumber     Int          @default(0)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+}
+
+enum ContractTermUnit {
+  MONTHS
+  YEARS
+}
+
 model Contract {
   id             String  @id @default(cuid())
   organizationId String
   counterpartyId String
   documentId     String? @unique
+  contractPdfId  String?
+  ndaPdfId       String?
+  number         String
+  termValue      Int?
+  termUnit       ContractTermUnit?
 
   title          String
   defaultAmount  Decimal  @db.Decimal(14, 2)
@@ -379,14 +399,18 @@ model Contract {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   counterparty Counterparty @relation(fields: [counterpartyId], references: [id], onDelete: Cascade)
   document     Document?    @relation("ContractDocument", fields: [documentId], references: [id], onDelete: SetNull)
+  contractPdf    FileAsset?   @relation("ContractPdf", fields: [contractPdfId], references: [id], onDelete: SetNull)
+  ndaPdf         FileAsset?   @relation("ContractNda", fields: [ndaPdfId], references: [id], onDelete: SetNull)
+  additionalPdfs FileAsset[]  @relation("ContractExtras")
   settlements  Settlement[]
 
+  @@unique([organizationId, number])
   @@index([organizationId])
   @@index([organizationId, active])
   @@index([counterpartyId])
 }
 
-/// Расчёт за один месяц по одному договору.
+/// Комплект акта и счёта за месяц по договору. За месяц может быть несколько комплектов.
 /// Статус не хранится — выводится из шагов и платежей.
 model Settlement {
   id             String @id @default(cuid())
@@ -396,6 +420,8 @@ model Settlement {
 
   year      Int
   month     Int
+  sequence  Int     @default(1)
+  label     String?
   amount    Decimal @db.Decimal(14, 2)
   vatAmount Decimal @default(0) @db.Decimal(14, 2)
   currency  String  @default("KGS")
@@ -413,7 +439,7 @@ model Settlement {
   fileAssets   FileAsset[]
   esfInvoices  EsfInvoice[]
 
-  @@unique([contractId, year, month])
+  @@unique([contractId, year, month, sequence])
   @@index([organizationId, year, month])
   @@index([counterpartyId])
 }
@@ -430,6 +456,7 @@ model SettlementStep {
   documentId   String?
   fileAssetId  String?
   paymentId    String?
+  evidenceUrl  String?
   note         String?
   createdAt    DateTime           @default(now())
 

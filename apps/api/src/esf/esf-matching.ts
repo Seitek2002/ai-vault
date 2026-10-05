@@ -111,10 +111,10 @@ export function matchSettlement(input: MatchInput, candidates: SettlementCandida
     return { kind: 'matched', settlementId: sameAmount[0]!.id, how: 'month+amount' };
   }
   if (sameAmount.length > 1) {
-    // У партнёра несколько договоров с одинаковой суммой — выбрать может только человек.
+    // Несколько комплектов с одинаковой суммой — выбрать может только человек.
     return {
       kind: 'ambiguous',
-      note: `Несколько договоров с суммой ${fmt(input.amount)}: ${sameAmount.map((c) => c.contractTitle).join(', ')}`,
+      note: `Несколько расчётов с суммой ${fmt(input.amount)}: ${sameAmount.map((c) => c.contractTitle).join(', ')}`,
     };
   }
 

@@ -1,4 +1,8 @@
 import { IsString, IsEmail, IsOptional, MinLength, MaxLength, ValidateIf } from 'class-validator';
+import { Transform } from 'class-transformer';
+
+const optionalContact = ({ value }: { value: unknown }) =>
+  typeof value === 'string' ? value.trim() || null : value;
 
 export class CreateCounterpartyDto {
   @IsString()
@@ -21,12 +25,14 @@ export class CreateCounterpartyDto {
   address?: string;
 
   @IsOptional()
+  @Transform(optionalContact)
   @IsString()
-  phone?: string;
+  phone?: string | null;
 
   @IsOptional()
+  @Transform(optionalContact)
   @IsEmail()
-  email?: string;
+  email?: string | null;
 
   @IsOptional()
   @IsString()

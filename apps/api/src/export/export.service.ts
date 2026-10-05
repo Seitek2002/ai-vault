@@ -70,15 +70,28 @@ export class ExportService {
 
   // ── Original file ─────────────────────────────────────────────────────────
 
-  async getOriginalFileUrl(documentId: string, organizationId: string): Promise<string> {
+  private async getOriginalAsset(documentId: string, organizationId: string) {
     const doc = await this.getDoc(documentId, organizationId);
 
     const asset = await this.prisma.fileAsset.findFirst({
       where: { documentId: doc.id, organizationId },
       orderBy: { createdAt: 'desc' },
     });
-    if (!asset) throw new NotFoundException('No original file for this document');
+    if (!asset) throw new NotFoundException('Оригинал документа не найден');
+    return asset;
+  }
 
+  async getOriginalFileUrl(documentId: string, organizationId: string): Promise<string> {
+    const asset = await this.getOriginalAsset(documentId, organizationId);
     return this.storage.presignedUrl(asset.s3Key, 3600);
+  }
+
+  async getOriginalFile(documentId: string, organizationId: string) {
+    const asset = await this.getOriginalAsset(documentId, organizationId);
+    return {
+      buffer: await this.storage.download(asset.s3Key),
+      filename: asset.originalName,
+      mimeType: asset.mimeType,
+    };
   }
 }

@@ -43,4 +43,19 @@ export class ExportController {
     const url = await this.service.getOriginalFileUrl(id, organizationId);
     return { url };
   }
+
+  @Get(':id/export/original-file')
+  async downloadOriginal(
+    @Param('id') id: string,
+    @CurrentOrgId() organizationId: string,
+    @Res() reply: FastifyReply,
+  ) {
+    const { buffer, filename, mimeType } = await this.service.getOriginalFile(id, organizationId);
+    void reply
+      .header('Content-Type', mimeType)
+      .header('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`)
+      .header('Cache-Control', 'private, no-store')
+      .header('X-Content-Type-Options', 'nosniff')
+      .send(buffer);
+  }
 }

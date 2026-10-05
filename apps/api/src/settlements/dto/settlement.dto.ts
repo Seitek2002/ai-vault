@@ -1,13 +1,16 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsDateString,
   IsInt,
   IsNumber,
   IsOptional,
   IsString,
+  IsUrl,
   Max,
   MaxLength,
   Min,
+  MinLength,
+  ValidateIf,
 } from 'class-validator';
 
 const MIN_YEAR = 2000;
@@ -48,15 +51,44 @@ export class GenerateSettlementsDto {
   contractId?: string;
 }
 
-export class UpdateSettlementDto {
-  @IsOptional()
+export class CreateSettlementDto {
+  @IsString()
+  @MinLength(1)
+  declare contractId: string;
+
+  @IsInt()
+  @Min(MIN_YEAR)
+  @Max(MAX_YEAR)
+  declare year: number;
+
+  @IsInt()
+  @Min(1)
+  @Max(12)
+  declare month: number;
+
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
-  amount?: number;
+  @Max(999999999999.99)
+  declare amount: number;
 
   @IsOptional()
+  @Transform(({ value }) => typeof value === 'string' ? value.trim() : value)
+  @IsString()
+  @MaxLength(200)
+  label?: string;
+}
+
+export class UpdateSettlementDto {
+  @ValidateIf((_object, value) => value !== undefined)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
+  @Max(999999999999.99)
+  amount?: number;
+
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(999999999999.99)
   vatAmount?: number;
 }
 
@@ -73,6 +105,12 @@ export class CompleteStepDto {
   @IsOptional()
   @IsString()
   documentId?: string;
+
+  @IsOptional()
+  @Transform(({ value }) => typeof value === 'string' ? value.trim() : value)
+  @IsUrl({ protocols: ['http', 'https'], require_protocol: true, disallow_auth: true })
+  @MaxLength(2048)
+  evidenceUrl?: string;
 }
 
 export class CreatePaymentDto {

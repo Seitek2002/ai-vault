@@ -178,38 +178,60 @@ export class DocumentsService {
    * original file remains available via the existing "original file" export.
    */
   async importFromFile(organizationId: string, userId: string, dto: ImportDocumentDto) {
-    const fileAsset = await this.files.findOne(dto.fileId, organizationId);
-    if (fileAsset.mimeType !== 'application/pdf') {
-      throw new BadRequestException('Import accepts PDF files only');
-    }
-    const emptyBody: Prisma.InputJsonValue = { type: 'doc', content: [{ type: 'paragraph' }] };
-    const title = fileAsset.originalName.replace(/\.[^.]+$/, '');
-
-    const doc = await this.prisma.document.create({
-      data: {
-        organizationId,
-        type: dto.type,
-        title,
-        counterpartyId: dto.counterpartyId,
-        ...(dto.categoryId ? { categoryId: dto.categoryId } : {}),
-        meta: {} as Prisma.InputJsonValue,
-        bodyJson: emptyBody,
-        isArchived: true,
-        createdById: userId,
-        fileAssets: { connect: { id: dto.fileId } },
-      },
+    return this.prisma.$transaction(async (tx) => {
+      // A retry after a lost response must not create another archive entry.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`archive:${organizationId}:${dto.fileId}`}))`;
+      const company = await tx.counterparty.findFirst({
+        where: { id: dto.counterpartyId, organizationId }, select: { id: true },
+      });
+      if (!company) throw new NotFoundException('Компания не найдена');
+      if (dto.categoryId) {
+        const category = await tx.documentCategory.findFirst({
+          where: { id: dto.categoryId, organizationId }, select: { id: true },
+        });
+        if (!category) throw new NotFoundException('Категория не найдена');
+      }
+      const fileAsset = await tx.fileAsset.findFirst({
+        where: { id: dto.fileId, organizationId },
+      });
+      if (!fileAsset) throw new NotFoundException('Файл не найден');
+      if (fileAsset.mimeType !== 'application/pdf' || fileAsset.size <= 0) {
+        throw new BadRequestException('Прикрепите непустой файл PDF');
+      }
+      if (fileAsset.size > 20 * 1024 * 1024) {
+        throw new BadRequestException('Максимальный размер PDF — 20 МБ');
+      }
+      if (fileAsset.documentId) {
+        const existing = await tx.document.findFirst({
+          where: {
+            id: fileAsset.documentId, organizationId, isArchived: true,
+            counterpartyId: dto.counterpartyId, type: dto.type,
+            categoryId: dto.categoryId ?? null,
+          },
+        });
+        if (existing) return existing;
+        throw new BadRequestException('Файл уже прикреплён к другому документу');
+      }
+      const emptyBody: Prisma.InputJsonValue = { type: 'doc', content: [{ type: 'paragraph' }] };
+      const doc = await tx.document.create({
+        data: {
+          organizationId,
+          type: dto.type,
+          title: fileAsset.originalName.replace(/\.[^.]+$/, '').trim() || 'Документ PDF',
+          counterpartyId: dto.counterpartyId,
+          ...(dto.categoryId ? { categoryId: dto.categoryId } : {}),
+          meta: {} as Prisma.InputJsonValue,
+          bodyJson: emptyBody,
+          isArchived: true,
+          createdById: userId,
+          fileAssets: { connect: { id: dto.fileId } },
+        },
+      });
+      await tx.documentVersion.create({
+        data: { documentId: doc.id, version: 1, bodyJson: emptyBody, createdById: userId },
+      });
+      return doc;
     });
-
-    await this.prisma.documentVersion.create({
-      data: {
-        documentId: doc.id,
-        version: 1,
-        bodyJson: emptyBody,
-        createdById: userId,
-      },
-    });
-
-    return doc;
   }
 
   /**

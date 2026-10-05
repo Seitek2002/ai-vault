@@ -9,6 +9,7 @@ import {
   STEP_FULL_LABELS,
   formatMoney,
   settlementsApi,
+  settlementSetLabel,
   type SettlementStep,
 } from '@/lib/api/settlements';
 import { AmountEditor } from './AmountEditor';
@@ -74,6 +75,7 @@ export function SettlementDetailClient({ settlementId }: { settlementId: string 
           <p className="mt-0.5 text-sm text-[var(--color-text-secondary)]">
             {data.contractTitle} · {MONTH_NAMES[data.month - 1]} {data.year}
           </p>
+          <p className="mt-1 text-sm text-[var(--color-text-secondary)]">{settlementSetLabel(data)}</p>
         </div>
         <AmountEditor settlement={data} />
       </div>

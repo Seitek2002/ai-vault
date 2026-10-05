@@ -7,6 +7,7 @@ import {
   MONTH_NAMES,
   formatMoney,
   settlementsApi,
+  settlementSetLabel,
   type Settlement,
 } from '@/lib/api/settlements';
 
@@ -67,6 +68,7 @@ export function CompanySettlements({ counterpartyId }: { counterpartyId: string 
                     <span className="block text-sm text-[var(--color-text-primary)]">
                       {MONTH_NAMES[s.month - 1]} {s.year}
                     </span>
+                    <span className="block text-xs text-[var(--color-text-secondary)]">{s.contractTitle} · {settlementSetLabel(s)}</span>
                     <span className="block text-xs text-[var(--color-text-muted)]">
                       шагов пройдено {done} из {s.steps.length}
                     </span>

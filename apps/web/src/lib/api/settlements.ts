@@ -21,6 +21,7 @@ export interface SettlementStep {
   documentId: string | null;
   fileAssetId: string | null;
   paymentId: string | null;
+  evidenceUrl: string | null;
   note: string | null;
   overdue: boolean;
 }
@@ -41,6 +42,8 @@ export interface Settlement {
   counterpartyName: string;
   year: number;
   month: number;
+  sequence: number;
+  label: string | null;
   amount: number;
   vatAmount: number;
   currency: string;
@@ -93,6 +96,7 @@ export interface CompleteStepDto {
   note?: string;
   fileAssetId?: string;
   documentId?: string;
+  evidenceUrl?: string;
 }
 
 export interface CreatePaymentDto {
@@ -102,10 +106,19 @@ export interface CreatePaymentDto {
   fileAssetId?: string;
 }
 
+export interface CreateSettlementDto {
+  contractId: string;
+  year: number;
+  month: number;
+  amount: number;
+  label?: string;
+}
+
 export const settlementsApi = {
   board: (year: number, month: number) =>
     api.get<MonthBoard>(`/settlements?year=${year}&month=${month}`),
   get: (id: string) => api.get<SettlementDetail>(`/settlements/${id}`),
+  create: (dto: CreateSettlementDto) => api.post<SettlementDetail>('/settlements', dto),
   byCounterparty: (counterpartyId: string) =>
     api.get<Settlement[]>(`/settlements/by-counterparty/${counterpartyId}`),
   generate: (year: number, month: number, contractId?: string) =>
@@ -125,6 +138,10 @@ export const settlementsApi = {
   removePayment: (id: string, paymentId: string) =>
     api.delete<SettlementDetail>(`/settlements/${id}/payments/${paymentId}`),
 };
+
+export function settlementSetLabel(s: Pick<Settlement, 'sequence' | 'label'>): string {
+  return `Комплект №${s.sequence ?? 1}${s.label ? ` · ${s.label}` : ''}`;
+}
 
 export const STEP_LABELS: Record<SettlementStepType, string> = {
   ISSUE_ACT: 'Акт',

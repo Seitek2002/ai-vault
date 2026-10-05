@@ -1,10 +1,20 @@
 import { api } from './client';
 
+export interface ContractAttachment {
+  id: string;
+  originalName: string;
+  size: number;
+}
+
 export interface Contract {
   id: string;
+  number: string;
   counterpartyId: string;
   counterpartyName: string;
   documentId: string | null;
+  contractPdf: ContractAttachment | null;
+  ndaPdf: ContractAttachment | null;
+  additionalPdfs: ContractAttachment[];
   title: string;
   defaultAmount: number;
   vatRate: number;
@@ -15,9 +25,12 @@ export interface Contract {
   active: boolean;
   startDate: string | null;
   endDate: string | null;
+  termValue: number | null;
+  termUnit: 'MONTHS' | 'YEARS' | null;
 }
 
 export interface ContractFormData {
+  number?: string;
   counterpartyId: string;
   title: string;
   defaultAmount: number;
@@ -27,9 +40,14 @@ export interface ContractFormData {
   paymentDueDays?: number;
   esfRequired?: boolean;
   active?: boolean;
-  startDate?: string;
-  endDate?: string;
+  startDate?: string | null;
+  endDate?: string | null;
+  termValue?: number | null;
+  termUnit?: 'MONTHS' | 'YEARS' | null;
   documentId?: string;
+  contractPdfId?: string | null;
+  ndaPdfId?: string | null;
+  additionalPdfIds?: string[];
 }
 
 export const contractsApi = {

@@ -8,7 +8,7 @@ import { Button, Card, Input, Select } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import { ESF_STATUS_LABELS, esfApi, type EsfInvoice } from "@/lib/api/esf";
 import { settingsApi } from "@/lib/api/settings";
-import { MONTH_NAMES, formatMoney, settlementsApi, type Settlement } from "@/lib/api/settlements";
+import { MONTH_NAMES, formatMoney, settlementsApi, settlementSetLabel, type Settlement } from "@/lib/api/settlements";
 
 const STATUS_CLASS: Record<EsfInvoice["status"], string> = {
   ACCEPTED: "text-[#4ADE80]",
@@ -80,16 +80,15 @@ function EsfCard({
     .sort((x, y) => y.year - x.year || y.month - x.month);
   const rest = monthSettlements.filter((s) => s.counterpartyId !== inv.counterpartyId);
 
-  // У партнёра может быть несколько договоров — название договора в подписи
-  // единственное, что их различает.
+  // Номер и назначение различают несколько комплектов одного договора за месяц.
   const options = [
     ...ownSorted.map((s) => ({
       value: s.id,
-      label: `${monthLabel(s)} · ${s.contractTitle} · ${formatMoney(s.amount, s.currency)}${hasEsf(s) ? " · ЭСФ уже есть" : ""}`,
+      label: `${monthLabel(s)} · ${s.contractTitle} · ${settlementSetLabel(s)} · ${formatMoney(s.amount, s.currency)}${hasEsf(s) ? " · ЭСФ уже есть" : ""}`,
     })),
     ...rest.map((s) => ({
       value: s.id,
-      label: `${s.counterpartyName} · ${s.contractTitle} · ${monthLabel(s)} · ${formatMoney(s.amount, s.currency)}${hasEsf(s) ? " · ЭСФ уже есть" : ""}`,
+      label: `${s.counterpartyName} · ${s.contractTitle} · ${settlementSetLabel(s)} · ${monthLabel(s)} · ${formatMoney(s.amount, s.currency)}${hasEsf(s) ? " · ЭСФ уже есть" : ""}`,
     })),
   ];
 
@@ -99,8 +98,13 @@ function EsfCard({
   const open = ownSorted.filter((s) => !hasEsf(s));
   const sameMonth = open.filter((s) => s.year === esfMonth.year && s.month === esfMonth.month);
   const sameAmount = (list: Settlement[]) => list.filter((s) => Math.abs(s.amount - inv.amount) < 0.01);
-  const preselected =
-    sameAmount(sameMonth)[0] ?? sameAmount(open)[0] ?? (sameMonth.length === 1 ? sameMonth[0] : undefined);
+  const inMonthMatches = sameAmount(sameMonth);
+  const allMatches = sameAmount(open);
+  const preselected = inMonthMatches.length === 1 ? inMonthMatches[0]
+    : inMonthMatches.length > 1 ? undefined
+      : allMatches.length === 1 ? allMatches[0]
+        : allMatches.length > 1 ? undefined
+          : sameMonth.length === 1 ? sameMonth[0] : undefined;
   const selected = choice ?? preselected?.id ?? "";
 
   return (

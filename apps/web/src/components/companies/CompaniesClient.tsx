@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, useCallback, FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useRouter } from 'next/navigation';
-import { Plus, Search, X, Pencil, Trash2, Building2 } from 'lucide-react';
-import { Button, Input, Modal, Card, EmptyState, PageHeader } from '@/components/ui';
+import Link from 'next/link';
+import { Plus, Search, X, Pencil, Trash2, Building2, Phone, Mail, ChevronDown, Copy, Check, ArrowUpDown } from 'lucide-react';
+import { Button, Input, Modal, EmptyState } from '@/components/ui';
 import { counterpartiesApi, type CounterpartyFormData } from '@/lib/api/counterparties';
 import type { CounterpartyDto } from '@ai-vault/types';
 import { ApiError } from '@/lib/api/client';
@@ -73,6 +73,7 @@ function CompanyModal({ editing, onClose, onSaved }: ModalProps) {
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
+    if (mutation.isPending) return;
     setError('');
     mutation.mutate();
   }
@@ -80,13 +81,15 @@ function CompanyModal({ editing, onClose, onSaved }: ModalProps) {
   const lbl = 'block text-xs font-medium text-[var(--color-text-secondary)] mb-1';
 
   return (
-    <Modal onClose={onClose} className="overflow-hidden">
+    <Modal onClose={() => { if (!mutation.isPending) onClose(); }} className="overflow-hidden">
       <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--color-border)]">
         <h2 className="text-base font-semibold text-[var(--color-text-primary)]">
           {editing ? 'Редактировать компанию' : 'Новая компания'}
         </h2>
         <button
           onClick={onClose}
+          aria-label="Закрыть форму компании"
+          disabled={mutation.isPending}
           className="p-1.5 rounded-lg text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-elevated)] transition-colors"
         >
           <X className="w-4 h-4" />
@@ -176,10 +179,12 @@ function CompanyModal({ editing, onClose, onSaved }: ModalProps) {
             <p className="text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-wider mb-3">
               Контакты
             </p>
+            <p className="mb-3 text-xs text-[var(--color-text-secondary)]">Телефон и email необязательны — можно заполнить позже.</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className={lbl}>Телефон</label>
+                <label className={lbl} htmlFor="company-phone">Телефон (необязательно)</label>
                 <Input
+                  id="company-phone"
                   type="tel"
                   placeholder="+996 700 000 000"
                   value={form.phone}
@@ -187,8 +192,9 @@ function CompanyModal({ editing, onClose, onSaved }: ModalProps) {
                 />
               </div>
               <div>
-                <label className={lbl}>Email</label>
+                <label className={lbl} htmlFor="company-email">Email (необязательно)</label>
                 <Input
+                  id="company-email"
                   type="email"
                   placeholder="info@company.kg"
                   value={form.email}
@@ -206,7 +212,7 @@ function CompanyModal({ editing, onClose, onSaved }: ModalProps) {
         </div>
 
         <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-[var(--color-border)] bg-[var(--color-bg-elevated)]/40">
-          <Button type="button" variant="secondary" onClick={onClose}>
+          <Button type="button" variant="secondary" disabled={mutation.isPending} onClick={onClose}>
             Отмена
           </Button>
           <Button type="submit" loading={mutation.isPending} loadingText="Сохранение…">
@@ -218,62 +224,89 @@ function CompanyModal({ editing, onClose, onSaved }: ModalProps) {
   );
 }
 
-interface CardProps {
+interface CompanyRowProps {
   cp: CounterpartyDto;
   onEdit: (cp: CounterpartyDto) => void;
   onDelete: (cp: CounterpartyDto) => void;
 }
 
-function CompanyCard({ cp, onEdit, onDelete }: CardProps) {
-  const router = useRouter();
+function CompanyRow({ cp, onEdit, onDelete }: CompanyRowProps) {
+  const [expanded, setExpanded] = useState(false);
+  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'error'>('idle');
+  const detailsId = `company-details-${cp.id}`;
+  const details = [
+    ['ИНН', cp.inn], ['ОКПО', cp.bin], ['Юридический адрес', cp.address],
+    ['Банк', cp.bankName], ['Расчётный счёт', cp.bankAccount], ['БИК', cp.bankBik],
+  ] as const;
+
+  async function copyDetails() {
+    try {
+      await navigator.clipboard.writeText([cp.name, ...details.filter(([, value]) => value).map(([label, value]) => `${label}: ${value}`)].join('\n'));
+      setCopyState('copied');
+    } catch {
+      setCopyState('error');
+    }
+  }
 
   return (
-    <Card
-      hoverable
-      onClick={() => router.push(`/companies/${cp.id}`)}
-      className="flex flex-col gap-3 p-4 cursor-pointer"
-    >
-      <div className="flex items-start justify-between gap-2">
+    <li className="group border-b border-[var(--color-border)] last:border-b-0">
+      <div className="grid grid-cols-1 gap-4 p-4 sm:p-5 md:grid-cols-[minmax(0,1fr)_minmax(0,0.7fr)] xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.7fr)_auto] xl:items-center transition-colors hover:bg-[var(--color-bg-elevated)]/40">
         <div className="min-w-0">
-          <p className="text-sm font-semibold text-[var(--color-text-primary)] truncate">{cp.name}</p>
-          {cp.inn && (
-            <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
-              ИНН: {cp.inn}{cp.bin ? ` · ОКПО: ${cp.bin}` : ''}
-            </p>
-          )}
+          <Link href={`/companies/${cp.id}`} className="inline-block text-sm sm:text-base font-semibold leading-snug text-[var(--color-text-primary)] hover:text-[var(--color-accent)] underline-offset-4 hover:underline [overflow-wrap:anywhere]">
+            {cp.name}
+          </Link>
+          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[var(--color-text-secondary)] tabular-nums">
+            {cp.inn ? <span>ИНН <span className="text-[var(--color-text-primary)]">{cp.inn}</span></span> : <span>ИНН не указан</span>}
+            {cp.bin && <span>ОКПО {cp.bin}</span>}
+          </div>
         </div>
-        <div className="flex items-center gap-1 shrink-0">
-          <button
-            onClick={(e) => { e.stopPropagation(); onEdit(cp); }}
-            title="Редактировать"
-            className="p-1.5 rounded-lg text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-elevated)] transition-colors"
-          >
-            <Pencil className="w-3.5 h-3.5" />
-          </button>
-          <button
-            onClick={(e) => { e.stopPropagation(); onDelete(cp); }}
-            title="Удалить"
-            className="p-1.5 rounded-lg text-[var(--color-text-muted)] hover:text-red-400 hover:bg-red-500/10 transition-colors"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
+
+        <div className="flex min-w-0 flex-col gap-2 text-sm text-[var(--color-text-secondary)]">
+          {cp.phone && <a href={`tel:${cp.phone.replace(/[^+\d]/g, '')}`} className="flex w-fit max-w-full items-center gap-2 hover:text-[var(--color-accent)] underline-offset-4 hover:underline">
+            <Phone className="w-3.5 h-3.5 shrink-0" aria-hidden="true" /><span className="break-all tabular-nums">{cp.phone}</span>
+          </a>}
+          {cp.email && <a href={`mailto:${cp.email}`} className="flex w-fit max-w-full items-center gap-2 hover:text-[var(--color-accent)] underline-offset-4 hover:underline">
+            <Mail className="w-3.5 h-3.5 shrink-0" aria-hidden="true" /><span className="break-all">{cp.email}</span>
+          </a>}
+          {!cp.phone && !cp.email && <span className="text-xs">Контакты не указаны</span>}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 md:col-span-2 xl:col-span-1 xl:justify-end xl:w-72">
+          <Button size="sm" variant="ghost" className="min-h-10 px-3" aria-expanded={expanded} aria-controls={detailsId}
+            onClick={() => { setExpanded(!expanded); setCopyState('idle'); }}>
+            Реквизиты <ChevronDown className={`w-4 h-4 transition-transform ${expanded ? 'rotate-180' : ''}`} aria-hidden="true" />
+          </Button>
+          <Button size="sm" variant="secondary" className="min-h-10 px-3" onClick={() => onEdit(cp)} aria-label={`Изменить ${cp.name}`}>
+            <Pencil className="w-3.5 h-3.5" aria-hidden="true" /> Изменить
+          </Button>
+          <button type="button" onClick={() => onDelete(cp)} title={`Удалить ${cp.name}`} aria-label={`Удалить ${cp.name}`}
+            className="flex h-10 w-10 items-center justify-center rounded-lg text-[var(--color-text-secondary)] hover:text-[var(--color-danger)] hover:bg-[var(--color-bg-elevated)] transition-colors">
+            <Trash2 className="w-4 h-4" aria-hidden="true" />
           </button>
         </div>
       </div>
 
-      <div className="flex flex-col gap-1 text-xs text-[var(--color-text-secondary)]">
-        {cp.address && <span className="truncate">{cp.address}</span>}
-        {cp.bankName && (
-          <span className="truncate text-[var(--color-text-muted)]">
-            {cp.bankName}{cp.bankAccount ? ` · р/с ${cp.bankAccount}` : ''}
-          </span>
-        )}
-        {(cp.phone ?? cp.email) && (
-          <span className="text-[var(--color-text-muted)]">
-            {[cp.phone, cp.email].filter(Boolean).join(' · ')}
-          </span>
-        )}
+      <div id={detailsId} hidden={!expanded} className="px-4 pb-5 sm:px-5">
+        <div className="border-t border-[var(--color-border)] pt-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+            <h3 className="text-sm font-semibold">Реквизиты компании</h3>
+            <Button size="sm" variant="secondary" className="min-h-10" onClick={() => void copyDetails()}>
+              {copyState === 'copied' ? <Check className="w-4 h-4" aria-hidden="true" /> : <Copy className="w-4 h-4" aria-hidden="true" />}
+              {copyState === 'copied' ? 'Скопировано' : 'Копировать реквизиты'}
+            </Button>
+          </div>
+          <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2 xl:grid-cols-3">
+            {details.map(([label, value]) => <div key={label}>
+              <dt className="text-xs text-[var(--color-text-secondary)] mb-1">{label}</dt>
+              <dd className="text-sm text-[var(--color-text-primary)] [overflow-wrap:anywhere] tabular-nums">{value || 'Не указано'}</dd>
+            </div>)}
+          </dl>
+          <p role="status" className="text-xs text-[var(--color-text-secondary)] mt-3">
+            {copyState === 'error' ? 'Не удалось скопировать. Выделите реквизиты и скопируйте вручную.' : copyState === 'copied' ? 'Название и реквизиты скопированы' : ''}
+          </p>
+        </div>
       </div>
-    </Card>
+    </li>
   );
 }
 
@@ -296,7 +329,7 @@ function DeleteModal({
   });
 
   return (
-    <Modal onClose={onClose} size="sm">
+    <Modal onClose={() => { if (!mutation.isPending) onClose(); }} size="sm">
       <div className="p-6">
         <h2 className="text-base font-semibold text-[var(--color-text-primary)] mb-2">
           Удалить компанию?
@@ -304,8 +337,11 @@ function DeleteModal({
         <p className="text-sm text-[var(--color-text-secondary)] mb-5">
           <span className="font-medium text-[var(--color-text-primary)]">{cp.name}</span> будет удалена. Это действие нельзя отменить.
         </p>
+        {mutation.isError && <p role="alert" className="text-sm text-[var(--color-danger)] mb-4">
+          {mutation.error instanceof ApiError ? mutation.error.message : 'Не удалось удалить компанию. Попробуйте ещё раз.'}
+        </p>}
         <div className="flex gap-2 justify-end">
-          <Button variant="secondary" onClick={onClose}>
+          <Button variant="secondary" disabled={mutation.isPending} onClick={onClose}>
             Отмена
           </Button>
           <Button variant="danger" onClick={() => mutation.mutate()} loading={mutation.isPending} loadingText="Удаление…">
@@ -319,110 +355,77 @@ function DeleteModal({
 
 export function CompaniesClient() {
   const [search, setSearch] = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [sort, setSort] = useState<'asc' | 'desc'>('asc');
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<CounterpartyDto | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<CounterpartyDto | null>(null);
 
-  const handleSearch = useCallback((value: string) => {
-    setSearch(value);
-    clearTimeout((handleSearch as { _t?: ReturnType<typeof setTimeout> })._t);
-    (handleSearch as { _t?: ReturnType<typeof setTimeout> })._t = setTimeout(
-      () => setDebouncedSearch(value),
-      300,
-    );
-  }, []);
-
-  const { data, isLoading, isError } = useQuery({
-    queryKey: ['companies', debouncedSearch],
-    queryFn: () => counterpartiesApi.list(debouncedSearch || undefined),
+  const { data, isLoading, isError, refetch } = useQuery({
+    queryKey: ['companies'],
+    queryFn: () => counterpartiesApi.list(),
   });
-
-  const companies = data ?? [];
+  const query = search.trim().toLocaleLowerCase('ru');
+  const compactQuery = query.replace(/[\s()-]/g, '');
+  const companies = (data ?? []).filter((cp) => {
+    const fields = [cp.name, cp.inn, cp.bin, cp.phone, cp.email, cp.address, cp.bankName, cp.bankAccount, cp.bankBik];
+    return fields.some((value) => value?.toLocaleLowerCase('ru').includes(query) ||
+      (compactQuery && value?.replace(/[\s()-]/g, '').toLocaleLowerCase('ru').includes(compactQuery)));
+  }).sort((a, b) => (sort === 'asc' ? 1 : -1) * a.name.localeCompare(b.name, 'ru'));
 
   return (
-    <div className="p-6 lg:p-8 h-full flex flex-col">
-      <PageHeader
-        title="Компании"
-        subtitle="Организации и партнёры"
-        actions={
-          <Button onClick={() => setCreateOpen(true)}>
-            <Plus className="w-4 h-4" strokeWidth={2.5} />
-            Добавить
+    <div className="p-4 sm:p-6 lg:p-8 h-full min-h-0 flex flex-col">
+      <header className="mb-6 flex flex-col gap-4 shrink-0 sm:flex-row sm:items-center sm:justify-between">
+        <div><h1 className="text-xl font-semibold">Компании</h1><p className="mt-1 text-sm text-[var(--color-text-secondary)]">Организации и партнёры</p></div>
+        <Button className="min-h-11 w-full sm:w-auto" onClick={() => setCreateOpen(true)}><Plus className="w-4 h-4" aria-hidden="true" />Добавить компанию</Button>
+      </header>
+
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-5 shrink-0">
+        <div className="relative w-full sm:max-w-lg">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-text-secondary)]" aria-hidden="true" />
+          <Input type="search" aria-label="Поиск компаний" placeholder="Название, ИНН, телефон или email" value={search}
+            onChange={(e) => setSearch(e.target.value)} className="pl-9 pr-10 min-h-11 placeholder:text-[var(--color-text-secondary)] caret-[var(--color-accent)]" />
+          {search && <button type="button" onClick={() => setSearch('')} aria-label="Очистить поиск"
+            className="absolute right-1 top-1/2 -translate-y-1/2 h-9 w-9 flex items-center justify-center rounded-md text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]">
+            <X className="w-4 h-4" aria-hidden="true" />
+          </button>}
+        </div>
+        <div className="flex items-center justify-between gap-4 shrink-0">
+          <p className="text-sm text-[var(--color-text-secondary)] tabular-nums" role="status">
+            {isLoading ? 'Загрузка…' : isError ? 'Данные недоступны' : query ? `Найдено ${companies.length} из ${data?.length ?? 0}` : `Всего ${companies.length}`}
+          </p>
+          <Button size="sm" variant="secondary" className="min-h-10" onClick={() => setSort(sort === 'asc' ? 'desc' : 'asc')}
+            aria-label={sort === 'asc' ? 'Сортировать от Я до А' : 'Сортировать от А до Я'}>
+            <ArrowUpDown className="w-4 h-4" aria-hidden="true" />{sort === 'asc' ? 'А → Я' : 'Я → А'}
           </Button>
-        }
-      />
-
-      <div className="relative max-w-sm mb-5 shrink-0">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-text-muted)]" />
-        <Input
-          type="text"
-          placeholder="Поиск по названию…"
-          value={search}
-          onChange={(e) => handleSearch(e.target.value)}
-          className="pl-9"
-        />
+        </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto -mx-6 px-6 lg:-mx-8 lg:px-8">
-        {isLoading && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="h-28 rounded-xl bg-[var(--color-bg-elevated)] animate-pulse" />
-            ))}
+      <div className="flex-1 min-h-0 overflow-y-auto pb-4">
+        {isLoading && <div aria-label="Загрузка компаний" className="divide-y divide-[var(--color-border)] rounded-xl bg-[var(--color-bg-surface)] border border-[var(--color-border)]">
+          {Array.from({ length: 5 }).map((_, i) => <div key={i} className="p-5 space-y-3 motion-safe:animate-pulse">
+            <div className="h-4 w-2/5 rounded bg-[var(--color-bg-elevated)]" /><div className="h-3 w-1/3 rounded bg-[var(--color-bg-elevated)]" />
+          </div>)}
+        </div>}
+        {isError && <EmptyState icon={<Building2 className="w-6 h-6" />} title="Не удалось загрузить компании"
+          description="Проверьте соединение и попробуйте снова" action={<Button variant="secondary" onClick={() => void refetch()}>Повторить загрузку</Button>} />}
+        {!isLoading && !isError && companies.length === 0 && <EmptyState icon={<Building2 className="w-6 h-6" />}
+          title={query ? 'Компании не найдены' : 'Нет компаний'}
+          description={query ? 'Попробуйте название, ИНН или контакт компании' : 'Добавьте компанию, чтобы создавать для неё договоры и документы'}
+          action={query ? <Button variant="secondary" onClick={() => setSearch('')}>Сбросить поиск</Button> : <Button onClick={() => setCreateOpen(true)}>Добавить компанию</Button>} />}
+        {!isLoading && !isError && companies.length > 0 && <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-surface)]">
+          <div aria-hidden="true" className="hidden xl:grid grid-cols-[minmax(0,1.1fr)_minmax(0,0.7fr)_auto] gap-4 px-5 py-3 border-b border-[var(--color-border)] text-xs font-medium text-[var(--color-text-secondary)]">
+            <span>Компания / ИНН</span><span>Контакты</span><span className="w-72 text-right">Действия</span>
           </div>
-        )}
-
-        {isError && (
-          <div className="flex items-center justify-center h-48">
-            <p className="text-sm text-[var(--color-text-muted)]">Не удалось загрузить компании</p>
-          </div>
-        )}
-
-        {!isLoading && !isError && companies.length === 0 && (
-          <EmptyState
-            icon={<Building2 className="w-6 h-6" strokeWidth={1.5} />}
-            title={debouncedSearch ? 'Компании не найдены' : 'Нет компаний'}
-            description={debouncedSearch ? 'Попробуйте изменить поисковый запрос' : 'Добавьте первую компанию'}
-            action={
-              !debouncedSearch && (
-                <Button onClick={() => setCreateOpen(true)}>
-                  Добавить компанию
-                </Button>
-              )
-            }
-          />
-        )}
-
-        {!isLoading && !isError && companies.length > 0 && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {companies.map((cp) => (
-              <CompanyCard
-                key={cp.id}
-                cp={cp}
-                onEdit={setEditTarget}
-                onDelete={setDeleteTarget}
-              />
-            ))}
-          </div>
-        )}
+          <ul aria-label="Компании и партнёры">
+            {companies.map((cp) => <CompanyRow key={cp.id} cp={cp} onEdit={setEditTarget} onDelete={setDeleteTarget} />)}
+          </ul>
+        </div>}
       </div>
 
-      {(createOpen || editTarget) && (
-        <CompanyModal
-          editing={editTarget}
-          onClose={() => { setCreateOpen(false); setEditTarget(null); }}
-          onSaved={() => { setCreateOpen(false); setEditTarget(null); }}
-        />
-      )}
-
-      {deleteTarget && (
-        <DeleteModal
-          cp={deleteTarget}
-          onClose={() => setDeleteTarget(null)}
-          onDeleted={() => setDeleteTarget(null)}
-        />
-      )}
+      {(createOpen || editTarget) && <CompanyModal editing={editTarget}
+        onClose={() => { setCreateOpen(false); setEditTarget(null); }}
+        onSaved={() => { setCreateOpen(false); setEditTarget(null); }} />}
+      {deleteTarget && <DeleteModal cp={deleteTarget} onClose={() => setDeleteTarget(null)} onDeleted={() => setDeleteTarget(null)} />}
     </div>
   );
 }

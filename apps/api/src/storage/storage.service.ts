@@ -15,14 +15,18 @@ import { Readable } from 'stream';
 export class StorageService implements OnModuleInit {
   private readonly logger = new Logger(StorageService.name);
   private readonly s3: S3Client;
+  private readonly publicS3: S3Client;
   private readonly bucket: string;
   private readonly publicUrl: string;
+  private readonly publicPathPrefix: string;
 
   constructor(private config: ConfigService) {
     const endpoint = this.config.get<string>('MINIO_ENDPOINT') ?? 'http://localhost:9000';
     this.bucket = this.config.get<string>('MINIO_BUCKET') ?? 'ai-vault';
     const publicUrlConfigured = this.config.get<string>('MINIO_PUBLIC_URL');
     this.publicUrl = publicUrlConfigured ?? endpoint;
+    const browserEndpoint = new URL(this.publicUrl);
+    this.publicPathPrefix = browserEndpoint.pathname.replace(/\/+$/, '');
 
     // Every stored file's URL is built from this value and saved permanently
     // (avatarUrl, logoUrl, backgroundImageUrl, exported PDFs, ...) — if it
@@ -37,15 +41,21 @@ export class StorageService implements OnModuleInit {
       );
     }
 
-    this.s3 = new S3Client({
-      endpoint,
+    const clientOptions = {
       region: 'us-east-1', // MinIO ignores region but S3Client requires it
       credentials: {
         accessKeyId: this.config.get<string>('MINIO_ACCESS_KEY') ?? 'minioadmin',
         secretAccessKey: this.config.get<string>('MINIO_SECRET_KEY') ?? 'minioadmin',
       },
       forcePathStyle: true, // required for MinIO
-    });
+    };
+    this.s3 = new S3Client({ ...clientOptions, endpoint });
+    // The proxy preserves the public Host but strips /s3/ before forwarding
+    // to MinIO. Sign the host and the path MinIO receives, then add the
+    // browser-only routing prefix to the returned URL.
+    this.publicS3 = browserEndpoint.origin === endpoint
+      ? this.s3
+      : new S3Client({ ...clientOptions, endpoint: browserEndpoint.origin });
   }
 
   async onModuleInit() {
@@ -118,10 +128,14 @@ export class StorageService implements OnModuleInit {
   }
 
   async presignedUrl(key: string, expiresIn = 3600): Promise<string> {
-    return getSignedUrl(
-      this.s3,
+    const signed = await getSignedUrl(
+      this.publicS3,
       new GetObjectCommand({ Bucket: this.bucket, Key: key }),
       { expiresIn },
     );
+    if (!this.publicPathPrefix) return signed;
+    const browserUrl = new URL(signed);
+    browserUrl.pathname = `${this.publicPathPrefix}${browserUrl.pathname}`;
+    return browserUrl.toString();
   }
 }

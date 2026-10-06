@@ -10,6 +10,7 @@ import { EsfPdfService } from './esf-pdf';
 import { EsfLinksService, invoiceSettlementIds } from './esf-links.service';
 import {
   RETAIL_INN,
+  esfAccountingRef,
   mapPortalStatus,
   matchSettlement,
   normalizeCompanyName,
@@ -131,9 +132,8 @@ export class EsfService {
       );
     }
 
-    // Номер учётной системы — номер акта: по нему синхронизация узнаёт свою ЭСФ.
-    const act = settlement.documents.find((d) => d.type === 'AVR' && d.number);
-    const crmRef = act?.number ?? `VAULT-${settlement.year}${String(settlement.month).padStart(2, '0')}-${settlement.id.slice(-6)}`;
+    // Стабильный номер ErkinAI.Docs: не зависит от номера акта или ЭСФ-образца.
+    const crmRef = esfAccountingRef(settlement.id);
 
     // Дата поставки — конец месяца, но не позже сегодня.
     const periodEnd = new Date(Date.UTC(settlement.year, settlement.month, 0));

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { EsfDraftClient } from '../esf-draft.client';
 import { EsfPortalClient } from '../esf-portal.client';
 
@@ -75,5 +75,34 @@ describe('EsfDraftClient — строки списка с действиями',
     expect(rows[0]!.actions['Редактировать']).toBe('form:table:0:j_idt162');
     expect(rows[1]!.actions['Создать копию']).toBe('form:table:1:j_idt163');
     expect(rows[1]!.actions).not.toHaveProperty('Редактировать');
+  });
+});
+
+
+describe('EsfDraftClient — сохранение номера учётной системы', () => {
+  it('заменяет CRM из скопированного документа на ErkinAI.Docs в запросе сохранения портала', async () => {
+    const sourceUuid = '6903fd2e-d41b-4a41-a0a2-fffc4142fd72';
+    const draftUuid = 'ad1fe473-8309-460b-8d33-9710a9369e63';
+    const listUrl = 'https://esf.salyk.kg/esf/view/document/realization_list.xhtml';
+    const formUrl = 'https://esf.salyk.kg/esf/view/document/realization_form.xhtml?cid=123';
+    const row = (uuid: string, status: string, action: string) => `<tr data-rk="${uuid}">${['', uuid, '20.09.2026', '20.09.2026', '', 'CRM-15-a81a719d', 'Services', status, 'Test company', '', '35 000,00', ''].map((c) => `<td>${c}</td>`).join('')}<td><input type="submit" name="action-${uuid}" value="${action}"></td></tr>`;
+    const source = row(sourceUuid, 'Принят', 'Создать копию');
+    const copied = row(draftUuid, 'Новый', 'Редактировать');
+    const session = {
+      get: vi.fn().mockResolvedValueOnce(source).mockResolvedValueOnce(source + copied),
+      post: vi.fn().mockResolvedValueOnce(new Response('', { status: 200 })).mockResolvedValueOnce({ url: formUrl, text: async () => FORM })
+        .mockResolvedValueOnce({ url: listUrl, text: async () => '' }),
+    };
+    const portal = new EsfPortalClient();
+    vi.spyOn(portal, 'openSession').mockResolvedValue(session as never);
+    vi.spyOn(portal, 'viewStateOf').mockReturnValue('view-state');
+    const draft = new EsfDraftClient(portal);
+    const ref = 'ErkinAI.Docs-cmup4kfzx003rp520mmvcigam';
+    expect(await draft.createByCopy({ login: 'test', password: 'test', sourceUuid, amount: 35000, deliveryDate: '30-09-2026', crmRef: ref, note: 'Services — September 2026' })).toEqual({ uuid: draftUuid });
+    const saved = session.post.mock.calls[2]![1] as URLSearchParams;
+    expect(saved.get('ownedCrmReceiptCode')).toBe(ref);
+    expect(saved.get('deliveryDate_input')).toBe('30-09-2026');
+    expect(saved.get('detailTable:0:j_idt263_hinput')).toBe('35000.00');
+    expect(saved.get('j_idt300')).toBe('Сохранить');
   });
 });

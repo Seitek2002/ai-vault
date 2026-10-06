@@ -77,6 +77,30 @@ const sept = (over: Partial<SettlementCandidate> = {}): SettlementCandidate => (
 const D = (iso: string) => new Date(iso);
 
 describe('matchSettlement', () => {
+  it('узнаёт ID ErkinAI.Docs среди комплектов с одинаковой суммой, даже без номера акта и даты', () => {
+    const r = matchSettlement({ crmRef: 'ErkinAI.Docs-set-second', deliveryDate: null, amount: 30000 },
+      [sept({ id: 'set-first', documentNumbers: [] }), sept({ id: 'set-second', documentNumbers: [] })]);
+    expect(r).toEqual({ kind: 'matched', settlementId: 'set-second', how: 'crmRef' });
+  });
+  it('сравнивает брендированный номер без учёта регистра и внешних пробелов', () => {
+    expect(matchSettlement({ crmRef: ' erkinai.docs-SEP ', deliveryDate: D('2026-10-07'), amount: 30000 }, [sept()]).kind).toBe('matched');
+  });
+  it('не заменяет отсутствующий брендированный ID другим расчётом с той же суммой и месяцем', () => {
+    const r = matchSettlement({ crmRef: 'ErkinAI.Docs-other-settlement', deliveryDate: D('2026-09-17'), amount: 30000 }, [sept()]);
+    expect(r.kind).toBe('none');
+    expect((r as { note: string }).note).toContain('не найден');
+  });
+  it('не привязывает брендированный номер при разнице сумм', () => {
+    const r = matchSettlement({ crmRef: 'ErkinAI.Docs-sep', deliveryDate: D('2026-09-17'), amount: 999 }, [sept()]);
+    expect(r.kind).toBe('none');
+    expect((r as { note: string }).note).toContain('Номер учётной системы совпал');
+  });
+  it('не занимает расчёт, уже связанный с другой ЭСФ, даже при точном ID', () => {
+    const r = matchSettlement({ crmRef: 'ErkinAI.Docs-sep', deliveryDate: null, amount: 30000 }, [sept({ hasEsf: true })]);
+    expect(r.kind).toBe('none');
+    expect((r as { note: string }).note).toContain('другая ЭСФ');
+  });
+
   it('crmRef с номером нашего акта — точное совпадение, месяц не важен, сумма обязана сойтись', () => {
     const r = matchSettlement(
       { crmRef: 'АВР-2026-003', deliveryDate: D('2026-11-05'), amount: 30000 },

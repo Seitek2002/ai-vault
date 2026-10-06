@@ -40,6 +40,13 @@ export function parsePortalDate(raw: string | null | undefined): Date | null {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
+const ACCOUNTING_REF_PREFIX = 'ErkinAI.Docs-';
+
+/** Full settlement ID distinguishes contracts and multiple sets in the same month. */
+export function esfAccountingRef(settlementId: string): string {
+  return `${ACCOUNTING_REF_PREFIX}${settlementId}`;
+}
+
 export interface SettlementCandidate {
   id: string;
   year: number;
@@ -66,24 +73,28 @@ export type MatchResult =
 
 /**
  * Приоритет совпадений:
- *  1. crmRef равен номеру нашего документа — однозначно, месяц и сумма не важны;
+ *  1. crmRef содержит наш ID расчёта или прежний номер документа + точная сумма;
  *  2. месяц поставки + точная сумма — обычный случай;
- *  3. месяц поставки и в нём ровно один расчёт без ЭСФ — сумма расходится,
- *     но выбирать не из чего; отмечаем «how: month», менеджер увидит.
+ *  3. при разнице сумм или неоднозначном совпадении выбирает менеджер.
  * Расчёты, на которых уже есть ЭСФ, кандидатами не считаются.
  */
 export function matchSettlement(input: MatchInput, candidates: SettlementCandidate[]): MatchResult {
   if (input.crmRef) {
     const ref = input.crmRef.trim().toLowerCase();
-    const byRef = candidates.filter((c) =>
-      c.documentNumbers.some((n) => n.trim().toLowerCase() === ref),
-    );
+    const systemRef = ref.startsWith(ACCOUNTING_REF_PREFIX.toLowerCase());
+    const byRef = candidates.filter((c) => systemRef
+      ? esfAccountingRef(c.id).toLowerCase() === ref
+      : c.documentNumbers.some((n) => n.trim().toLowerCase() === ref));
+    if (systemRef && byRef.length === 0) {
+      return { kind: 'none', note: 'Расчёт из номера учётной системы ErkinAI.Docs не найден у этого партнёра' };
+    }
     if (byRef.length === 1) {
       const c = byRef[0]!;
+      if (c.hasEsf) return { kind: 'none', note: 'К расчёту из номера учётной системы уже привязана другая ЭСФ' };
       if (Math.abs(c.amount - input.amount) < 0.01) return { kind: 'matched', settlementId: c.id, how: 'crmRef' };
       return {
         kind: 'none',
-        note: `Номер акта совпал, но сумма ЭСФ ${fmt(input.amount)} ≠ сумме расчёта ${fmt(c.amount)}`,
+        note: `${systemRef ? 'Номер учётной системы' : 'Номер акта'} совпал, но сумма ЭСФ ${fmt(input.amount)} ≠ сумме расчёта ${fmt(c.amount)}`,
       };
     }
   }

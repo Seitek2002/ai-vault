@@ -101,6 +101,16 @@ export class EsfService {
     const step = settlement.steps.find((s) => s.type === SettlementStepType.ISSUE_ESF);
     if (!step) throw new BadRequestException('В этом расчёте нет шага «Выставить ЭСФ»');
     if (step.doneAt) throw new BadRequestException('Шаг «Выставить ЭСФ» уже закрыт');
+    const actStep = settlement.steps.find((s) => s.type === SettlementStepType.ISSUE_ACT);
+    const actPdf = actStep?.fileAssetId
+      ? await this.prisma.fileAsset.findFirst({
+        where: { id: actStep.fileAssetId, organizationId, settlementId },
+        select: { mimeType: true, size: true },
+      })
+      : null;
+    if (!actPdf || actPdf.mimeType !== 'application/pdf' || actPdf.size <= 0) {
+      throw new BadRequestException('Сначала прикрепите PDF акта к этому расчёту в шаге «Выставить акт», затем создайте ЭСФ.');
+    }
     const existing = await this.prisma.esfInvoice.findFirst({ where: {
       organizationId, OR: [{ settlementId }, { settlementLinks: { some: { settlementId } } }],
     } });

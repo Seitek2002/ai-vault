@@ -12,8 +12,10 @@ describe('Номер учётной системы новых ЭСФ', () => {
     const prisma = {
       companySettings: { findUnique: vi.fn().mockResolvedValue({ esfLogin: 'test-login', esfPasswordEnc: seal('test-password') }) },
       settlement: { findFirst: vi.fn().mockResolvedValue({ id, contractId: 'contract', counterpartyId: 'company', year: 2026, month: 9, amount: new Prisma.Decimal(35000),
-        contract: { title: 'Services' }, counterparty: { name: 'Test company' }, steps: [{ type: SettlementStepType.ISSUE_ESF, doneAt: null }],
+        contract: { title: 'Services' }, counterparty: { name: 'Test company' }, steps: [{ type: SettlementStepType.ISSUE_ESF, doneAt: null },
+          { type: SettlementStepType.ISSUE_ACT, fileAssetId: 'act-pdf' }],
         documents: actNumber ? [{ type: 'AVR', number: actNumber }] : [] }) },
+      fileAsset: { findFirst: vi.fn().mockResolvedValue({ mimeType: 'application/pdf', size: 100 }) },
       esfInvoice: { findFirst: vi.fn().mockResolvedValueOnce(null).mockResolvedValueOnce({ uuid: 'source-uuid', crmRef: 'CRM-15-a81a719d' })
         .mockResolvedValueOnce({ id: 'new-esf', uuid: 'new-uuid', settlementId: id, settlementLinks: [{ settlementId: id }] }) },
     };

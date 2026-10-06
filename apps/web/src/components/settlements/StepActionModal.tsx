@@ -90,6 +90,7 @@ export function StepActionModal({ settlement, step, onClose }: Props) {
   const linkedInvoice = esfQuery.data?.find((invoice) => esfCoversSettlement(invoice, settlement.id));
   const selectedInvoiceId = esfInvoiceId || esfCandidates.find((invoice) => esfCoversSettlement(invoice, settlement.id))?.id || "";
   const selectedInvoice = esfCandidates.find((invoice) => invoice.id === selectedInvoiceId);
+  const actPdfId = settlement.steps.find((s) => s.type === "ISSUE_ACT")?.fileAssetId ?? null;
   const requiresPdfScan = step.type === "ISSUE_ACT" || step.type === "ISSUE_INVOICE";
   const scanDocument = step.type === "ISSUE_ACT" ? "акта" : "счёта на оплату";
 
@@ -291,10 +292,10 @@ export function StepActionModal({ settlement, step, onClose }: Props) {
                         {selectedInvoice ? "Проверьте дату и сумму: выбранная ЭСФ будет связана с этим расчётом." : !esfQuery.isPending && esfCandidates.length === 0 ? "Нет доступных отправленных или принятых ЭСФ этого партнёра. Синхронизируйте кабинет или добавьте ссылку / скан." : "Показаны отправленные и принятые ЭСФ этого партнёра, свободные или связанные с этим расчётом."}
                       </p>
                     )}
-                    {linkedInvoice?.status === "NEW" ? <EsfDraftPanel settlementId={settlement.id} stepNote={step.note} /> : !linkedInvoice && (
+                    {linkedInvoice?.status === "NEW" ? <EsfDraftPanel settlementId={settlement.id} stepNote={step.note} actPdfId={actPdfId} /> : !linkedInvoice && (
                       <details className="mt-3 text-xs text-[var(--color-text-secondary)]">
                         <summary className="cursor-pointer py-1">Создать новую ЭСФ на портале</summary>
-                        <div className="mt-2"><EsfDraftPanel settlementId={settlement.id} stepNote={step.note} /></div>
+                        <div className="mt-2"><EsfDraftPanel settlementId={settlement.id} stepNote={step.note} actPdfId={actPdfId} /></div>
                       </details>
                     )}
                   </div>
@@ -541,10 +542,10 @@ function DoneStepFiles({ step, settlementId }: { step: SettlementStep; settlemen
 
 /**
  * Черновик ЭСФ на портале: Vault копирует последнюю ЭСФ партнёра с новой
- * датой, суммой и номером акта. Подписать и отправить — только на портале,
+ * датой, суммой и номером учётной системы. Подписать и отправить — только на портале,
  * после этого синхронизация закроет шаг сама.
  */
-function EsfDraftPanel({ settlementId, stepNote }: { settlementId: string; stepNote: string | null }) {
+function EsfDraftPanel({ settlementId, stepNote, actPdfId }: { settlementId: string; stepNote: string | null; actPdfId: string | null }) {
   const qc = useQueryClient();
   const [error, setError] = useState("");
   const { data: esf } = useQuery({
@@ -596,17 +597,21 @@ function EsfDraftPanel({ settlementId, stepNote }: { settlementId: string; stepN
       <Button
         type="button"
         variant="secondary"
+        disabled={!actPdfId}
+        aria-describedby={`esf-draft-hint-${settlementId}`}
         onClick={() => create.mutate()}
         loading={create.isPending}
         loadingText="Создаю на портале…"
       >
-        <FileText className="w-4 h-4" />
+        <FileText className="w-4 h-4 shrink-0" aria-hidden="true" />
         Создать черновик ЭСФ на портале
       </Button>
-      <p className="text-[11px] text-[var(--color-text-muted)] mt-1.5">
-        Копия последней ЭСФ этого партнёра с датой, суммой и номером акта этого месяца. Подпись — на портале.
+      <p id={`esf-draft-hint-${settlementId}`} className="text-sm text-[var(--color-text-secondary)] mt-1.5">
+        {actPdfId
+          ? "PDF акта прикреплён. Черновик создаётся с датой, суммой и номером ErkinAI.Docs. Подпись — на портале."
+          : "Сначала загрузите PDF акта в шаге «Выставить акт» этого расчёта. После загрузки создание ЭСФ станет доступно."}
       </p>
-      {error && <p className="text-xs text-[var(--color-danger)] mt-1.5">{error}</p>}
+      {error && <p role="alert" className="text-sm text-[var(--color-danger)] mt-1.5">{error}</p>}
     </div>
   );
 }

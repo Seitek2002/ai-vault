@@ -150,7 +150,7 @@ export class SettlementsService {
         orderBy: { createdAt: 'asc' },
       }),
       this.prisma.fileAsset.findMany({
-        where: { settlementId: id },
+        where: { organizationId, OR: [{ settlementId: id }, { steps: { some: { settlementId: id } } }] },
         select: {
           id: true,
           originalName: true,
@@ -422,7 +422,7 @@ export class SettlementsService {
       }
       if (!evidenceUrl && !fileAsset) {
         const invoice = await this.prisma.esfInvoice.findFirst({
-          where: { organizationId, settlementId, status: { in: [EsfStatus.SENT, EsfStatus.ACCEPTED] } },
+          where: { organizationId, OR: [{ settlementId }, { settlementLinks: { some: { settlementId } } }], status: { in: [EsfStatus.SENT, EsfStatus.ACCEPTED] } },
           select: { fileAssetId: true },
         });
         if (!invoice) {

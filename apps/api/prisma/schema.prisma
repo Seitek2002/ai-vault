@@ -438,6 +438,7 @@ model Settlement {
   payments     Payment[]
   fileAssets   FileAsset[]
   esfInvoices  EsfInvoice[]
+  esfLinks     EsfSettlementLink[]
 
   @@unique([contractId, year, month, sequence])
   @@index([organizationId, year, month])
@@ -541,8 +542,21 @@ model EsfInvoice {
   counterparty Counterparty? @relation(fields: [counterpartyId], references: [id], onDelete: SetNull)
   settlement   Settlement?   @relation(fields: [settlementId], references: [id], onDelete: SetNull)
   fileAsset    FileAsset?    @relation(fields: [fileAssetId], references: [id], onDelete: SetNull)
+  settlementLinks EsfSettlementLink[]
 
   @@index([organizationId])
   @@index([organizationId, settlementId])
   @@index([counterpartyId])
+}
+
+/// Одна ЭСФ может покрывать несколько расчётов; у комплекта остаётся одна ЭСФ.
+model EsfSettlementLink {
+  invoiceId    String
+  settlementId String @unique
+  createdAt    DateTime @default(now())
+
+  invoice    EsfInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  settlement Settlement @relation(fields: [settlementId], references: [id], onDelete: Cascade)
+
+  @@id([invoiceId, settlementId])
 }

@@ -17,10 +17,34 @@ export interface EsfInvoice {
   counterpartyId: string | null;
   counterpartyName: string | null;
   settlementId: string | null;
+  settlementIds?: string[];
+  settlements?: EsfSettlement[];
   fileAssetId: string | null;
   matchNote: string | null;
   hiddenAt: string | null;
   importedAt: string;
+}
+
+export interface EsfSettlement {
+  id: string;
+  contractId: string;
+  contractNumber: string;
+  contractTitle: string;
+  counterpartyId: string;
+  year: number;
+  month: number;
+  sequence: number;
+  amount: number;
+  currency: string;
+}
+
+export function esfSettlementIds(invoice: EsfInvoice): string[] {
+  return [...new Set([...(invoice.settlementId ? [invoice.settlementId] : []),
+    ...(invoice.settlementIds ?? []), ...(invoice.settlements ?? []).map((s) => s.id)])];
+}
+
+export function esfCoversSettlement(invoice: EsfInvoice, settlementId: string): boolean {
+  return esfSettlementIds(invoice).includes(settlementId);
 }
 
 export interface EsfSyncReport {
@@ -64,7 +88,9 @@ export const esfApi = {
     api.post<{ ok: true }>('/esf/check-connection', { login, password }),
   attach: (id: string, settlementId: string) =>
     api.post<EsfInvoice>(`/esf/invoices/${id}/attach`, { settlementId }),
-  detach: (id: string) => api.post<EsfInvoice>(`/esf/invoices/${id}/detach`, {}),
+  attachMany: (id: string, settlementIds: string[]) =>
+    api.post<EsfInvoice>(`/esf/invoices/${id}/attach`, { settlementIds }),
+  detach: (id: string, settlementId?: string) => api.post<EsfInvoice>(`/esf/invoices/${id}/detach`, settlementId ? { settlementId } : {}),
   hide: (id: string) => api.post<EsfInvoice>(`/esf/invoices/${id}/hide`, {}),
   unhide: (id: string, pin: string) =>
     api.post<EsfInvoice>(`/esf/invoices/${id}/unhide`, {}, pinHeader(pin)),

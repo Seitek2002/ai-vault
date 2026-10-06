@@ -5,9 +5,10 @@ import { EsfPortalClient } from './esf-portal.client';
 import { EsfDraftClient } from './esf-draft.client';
 import { EsfPdfService } from './esf-pdf';
 import { EsfScheduler } from './esf.scheduler';
+import { EsfLinksService } from './esf-links.service';
 
 @Module({
-  providers: [EsfService, EsfPortalClient, EsfDraftClient, EsfPdfService, EsfScheduler],
+  providers: [EsfService, EsfLinksService, EsfPortalClient, EsfDraftClient, EsfPdfService, EsfScheduler],
   controllers: [EsfController],
   exports: [EsfService],
 })

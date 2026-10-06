@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Contract } from '../api/contracts';
 import type { Settlement } from '../api/settlements';
-import { contractsForEsf, linkEsfTarget, settlementsForEsf } from '../esf-link';
+import { contractsForEsf, linkEsfTarget, linkEsfTargets, settlementsForEsf } from '../esf-link';
 
 const contract = (id: string, counterpartyId: string, patch: Partial<Contract> = {}) => ({
   id, counterpartyId, counterpartyName: counterpartyId, number: `ДГ-${id}`, title: 'Обслуживание',
@@ -72,5 +72,39 @@ describe('ЭСФ: explicit creation and attachment', () => {
     await expect(linkEsfTarget('invoice-1', { create: dto }, ops)).rejects.toThrow('Not found');
     expect(ops.attach).not.toHaveBeenCalled();
     expect(ops.onCreated).not.toHaveBeenCalled();
+  });
+});
+
+
+describe('ЭСФ: несколько месяцев', () => {
+  it('отправляет выбранные месяцы одной привязкой', async () => {
+    const ops = { create: vi.fn(), attach: vi.fn().mockResolvedValue({}), onCreated: vi.fn() };
+    await linkEsfTargets('inv', [{ key: 's1', settlementId: 's1' }, { key: 's2', settlementId: 's2' }], ops);
+    expect(ops.attach).toHaveBeenCalledExactlyOnceWith('inv', ['s1', 's2']);
+    expect(ops.create).not.toHaveBeenCalled();
+  });
+  it('сохраняет каждый созданный расчёт и не привязывает частичный список при ошибке создания', async () => {
+    const created = set('created', 'c', 2026, 3);
+    const ops = { create: vi.fn().mockResolvedValueOnce(created).mockRejectedValueOnce(new Error('Connection lost')).mockResolvedValueOnce(set('second', 'c', 2026, 4)),
+      attach: vi.fn().mockResolvedValue({}), onCreated: vi.fn() };
+    const dto = { contractId: 'c', year: 2026, month: 3, amount: 30000 };
+    await expect(linkEsfTargets('inv', [{ key: 'march', create: dto }, { key: 'april', create: { ...dto, month: 4 } }], ops)).rejects.toThrow('Connection lost');
+    expect(ops.onCreated).toHaveBeenCalledExactlyOnceWith('march', created);
+    expect(ops.attach).not.toHaveBeenCalled();
+    await linkEsfTargets('inv', [{ key: 'created', settlementId: 'created' }, { key: 'april', create: { ...dto, month: 4 } }], ops);
+    expect(ops.attach).toHaveBeenCalledExactlyOnceWith('inv', ['created', 'second']);
+    expect(ops.create).toHaveBeenCalledTimes(3);
+  });
+  it('повторная попытка после ошибки привязки использует уже созданные месяцы', async () => {
+    const ops = { create: vi.fn().mockResolvedValue(set('new', 'c', 2026, 3)), attach: vi.fn().mockRejectedValueOnce(new Error('Busy')).mockResolvedValue({}), onCreated: vi.fn() };
+    await expect(linkEsfTargets('inv', [{ key: 'march', create: { contractId: 'c', year: 2026, month: 3, amount: 30000 } }], ops)).rejects.toThrow('Busy');
+    await linkEsfTargets('inv', [{ key: 'new', settlementId: 'new' }], ops);
+    expect(ops.create).toHaveBeenCalledOnce();
+    expect(ops.attach).toHaveBeenLastCalledWith('inv', ['new']);
+  });
+  it('отклоняет пустой список до запросов к серверу', async () => {
+    const ops = { create: vi.fn(), attach: vi.fn(), onCreated: vi.fn() };
+    await expect(linkEsfTargets('inv', [], ops)).rejects.toThrow();
+    expect(ops.attach).not.toHaveBeenCalled();
   });
 });

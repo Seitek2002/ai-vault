@@ -6,7 +6,7 @@ import { ExternalLink, Eye, EyeOff, Link2, Link2Off, Lock } from "lucide-react";
 import { ApiError } from "@/lib/api/client";
 import { Button, Card, Input } from "@/components/ui";
 import { cn } from "@/lib/cn";
-import { ESF_STATUS_LABELS, esfApi, type EsfInvoice } from "@/lib/api/esf";
+import { ESF_STATUS_LABELS, esfApi, esfCoversSettlement, type EsfInvoice } from "@/lib/api/esf";
 import { settingsApi } from "@/lib/api/settings";
 import { MONTH_NAMES, formatMoney } from "@/lib/api/settlements";
 import { EsfLinkModal } from "./EsfLinkModal";
@@ -95,7 +95,7 @@ function EsfCard({
             onClick={() => { onError(""); setLinkOpen(true); }}
           >
             <Link2 className="w-3.5 h-3.5" />
-            Выбрать договор и месяц
+            Выбрать месяцы
           </Button>
           <button
             onClick={() => hide.mutate()}
@@ -343,13 +343,14 @@ export function EsfInbox({
 
 /** Строка с ЭСФ внутри карточки расчёта. */
 export function EsfOnSettlement({ settlementId }: { settlementId: string }) {
+  const [linkOpen, setLinkOpen] = useState(false);
   const qc = useQueryClient();
   const { data } = useQuery({
     queryKey: ["esf", "settlement", settlementId],
-    queryFn: () => esfApi.list().then((all) => all.filter((i) => i.settlementId === settlementId)),
+    queryFn: () => esfApi.list().then((all) => all.filter((i) => esfCoversSettlement(i, settlementId))),
   });
   const detach = useMutation({
-    mutationFn: (id: string) => esfApi.detach(id),
+    mutationFn: (id: string) => esfApi.detach(id, settlementId),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["esf"] });
       void qc.invalidateQueries({ queryKey: ["settlement", settlementId] });
@@ -361,7 +362,8 @@ export function EsfOnSettlement({ settlementId }: { settlementId: string }) {
   if (!inv) return null;
 
   return (
-    <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-[var(--color-bg-surface)] border border-[var(--color-border)]">
+    <>
+    <div className="flex flex-wrap items-center gap-3 px-3 py-2.5 rounded-lg bg-[var(--color-bg-surface)] border border-[var(--color-border)]">
       <span className="flex-1 min-w-0">
         <span className="block text-sm text-[var(--color-text-primary)]">
           ЭСФ № {inv.number ?? "—"}{" "}
@@ -370,7 +372,12 @@ export function EsfOnSettlement({ settlementId }: { settlementId: string }) {
         <span className="block text-xs text-[var(--color-text-muted)]">
           оформлена {fmtDate(inv.issuedOn)} · {formatMoney(inv.amount)}
         </span>
+        {(inv.settlements?.length ?? 0) > 1 && <span className="mt-1 block text-xs text-[var(--color-text-secondary)]">
+          Покрывает: {inv.settlements!.map((s) => `${MONTH_NAMES[s.month - 1]} ${s.year} · № ${s.contractNumber} · комплект ${s.sequence}`).join("; ")}
+          <span className="block">Итого расчётов: {formatMoney(inv.settlements!.reduce((sum, s) => sum + s.amount, 0), inv.settlements![0]?.currency)}</span>
+        </span>}
       </span>
+      <Button size="sm" variant="secondary" disabled={detach.isPending} onClick={() => setLinkOpen(true)}>Изменить месяцы</Button>
       <a
         href={esfApi.portalPdfUrl(inv.uuid)}
         target="_blank"
@@ -382,11 +389,14 @@ export function EsfOnSettlement({ settlementId }: { settlementId: string }) {
       <button
         onClick={() => detach.mutate(inv.id)}
         disabled={detach.isPending}
-        title="Отвязать от расчёта"
+        title="Отвязать только от этого расчёта" aria-label="Отвязать ЭСФ только от этого расчёта"
         className="p-1 rounded text-[var(--color-text-muted)] hover:text-[var(--color-danger)] transition-colors shrink-0"
       >
         <Link2Off className="w-3.5 h-3.5" />
       </button>
+    {detach.isError && <p role="alert" className="w-full text-xs text-[var(--color-danger)]">{detach.error instanceof Error ? detach.error.message : "Не удалось отвязать ЭСФ."}</p>}
     </div>
+    {linkOpen && <EsfLinkModal inv={inv} onClose={() => setLinkOpen(false)} />}
+    </>
   );
 }

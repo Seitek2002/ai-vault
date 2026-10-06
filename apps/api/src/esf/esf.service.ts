@@ -7,6 +7,7 @@ import { open as openSecret } from '../common/secret-box';
 import { EsfDraftClient } from './esf-draft.client';
 import { EsfPortalClient, EsfPortalError, type EsfListRow } from './esf-portal.client';
 import { EsfPdfService } from './esf-pdf';
+import { EsfLinksService, invoiceSettlementIds } from './esf-links.service';
 import {
   RETAIL_INN,
   mapPortalStatus,
@@ -14,7 +15,6 @@ import {
   normalizeCompanyName,
   parsePortalAmount,
   parsePortalDate,
-  statusClosesStep,
   type SettlementCandidate,
 } from './esf-matching';
 
@@ -42,6 +42,9 @@ export interface EsfInvoiceDto {
   counterpartyId: string | null;
   counterpartyName: string | null;
   settlementId: string | null;
+  settlementIds: string[];
+  settlements: { id: string; contractId: string; contractNumber: string; contractTitle: string; counterpartyId: string;
+    year: number; month: number; sequence: number; amount: number; currency: string }[];
   fileAssetId: string | null;
   matchNote: string | null;
   hiddenAt: string | null;
@@ -50,6 +53,10 @@ export interface EsfInvoiceDto {
 
 const INCLUDE = {
   counterparty: { select: { id: true, name: true } },
+  settlementLinks: { include: { settlement: { select: {
+    id: true, contractId: true, counterpartyId: true, year: true, month: true, sequence: true, amount: true, currency: true,
+    contract: { select: { number: true, title: true } },
+  } } } },
 } satisfies Prisma.EsfInvoiceInclude;
 
 type Row = Prisma.EsfInvoiceGetPayload<{ include: typeof INCLUDE }>;
@@ -69,6 +76,7 @@ export class EsfService {
     private portal: EsfPortalClient,
     private draft: EsfDraftClient,
     private pdf: EsfPdfService,
+    private links: EsfLinksService,
   ) {}
 
   // ── Черновик на портале ───────────────────────────────────────────────────
@@ -92,7 +100,9 @@ export class EsfService {
     const step = settlement.steps.find((s) => s.type === SettlementStepType.ISSUE_ESF);
     if (!step) throw new BadRequestException('В этом расчёте нет шага «Выставить ЭСФ»');
     if (step.doneAt) throw new BadRequestException('Шаг «Выставить ЭСФ» уже закрыт');
-    const existing = await this.prisma.esfInvoice.findFirst({ where: { settlementId } });
+    const existing = await this.prisma.esfInvoice.findFirst({ where: {
+      organizationId, OR: [{ settlementId }, { settlementLinks: { some: { settlementId } } }],
+    } });
     if (existing) {
       throw new BadRequestException(`К расчёту уже привязана ЭСФ ${existing.number ?? '(черновик)'}`);
     }
@@ -106,7 +116,8 @@ export class EsfService {
         where: {
           organizationId,
           status: sentStatuses,
-          settlement: { contractId: settlement.contractId },
+          OR: [{ settlement: { contractId: settlement.contractId } },
+            { settlementLinks: { some: { settlement: { contractId: settlement.contractId } } } }],
         },
         orderBy: [{ issuedOn: 'desc' }, { importedAt: 'desc' }],
       })) ??
@@ -145,10 +156,9 @@ export class EsfService {
 
     // Подтягиваем черновик как обычную ЭСФ и привязываем к расчёту.
     await this.sync(organizationId, userId);
-    const invoice = await this.prisma.esfInvoice.findFirst({ where: { organizationId, uuid } });
+    const invoice = await this.prisma.esfInvoice.findFirst({ where: { organizationId, uuid }, include: { settlementLinks: true } });
     if (!invoice) throw new BadRequestException('Черновик создан на портале, но синхронизация его не нашла — нажмите «ЭСФ» на дашборде');
-    if (invoice.settlementId !== settlementId) {
-      if (invoice.settlementId) await this.detach(organizationId, invoice.id);
+    if (!invoiceSettlementIds(invoice).includes(settlementId)) {
       return this.attach(organizationId, userId, invoice.id, settlementId);
     }
     return this.findOneDto(invoice.id, organizationId);
@@ -186,7 +196,8 @@ export class EsfService {
       (
         await this.prisma.esfInvoice.findMany({
           where: { organizationId },
-          select: { id: true, uuid: true, status: true, settlementId: true, hiddenAt: true, fileAssetId: true },
+          select: { id: true, uuid: true, status: true, settlementId: true, hiddenAt: true, fileAssetId: true,
+            settlementLinks: { select: { settlementId: true } } },
         })
       ).map((r) => [r.uuid, r]),
     );
@@ -276,7 +287,7 @@ export class EsfService {
       else matchNote = result.note;
     }
 
-    await this.prisma.esfInvoice.create({
+    const invoice = await this.prisma.esfInvoice.create({
       data: {
         organizationId,
         uuid: row.uuid,
@@ -291,14 +302,14 @@ export class EsfService {
         crmRef,
         note: row.note || null,
         counterpartyId: counterparty?.id ?? null,
-        settlementId,
+        settlementId: null,
         fileAssetId: fileAsset.id,
         matchNote,
       },
     });
 
     if (settlementId) {
-      await this.attachToSettlement(settlementId, fileAsset.id, row.number || parsed.number, row.issuedOn, status, userId);
+      await this.links.attach(organizationId, userId, invoice.id, [settlementId]);
       return 'matched';
     }
     return 'unmatched';
@@ -306,54 +317,29 @@ export class EsfService {
 
   /** Статус на портале меняется (Отправлен → Принят → иногда Отозван). Ведём его в ногу. */
   private async refreshExisting(
-    existing: { id: string; uuid: string; status: EsfStatus; settlementId: string | null; hiddenAt: Date | null; fileAssetId: string | null },
+    existing: { id: string; uuid: string; status: EsfStatus; settlementId: string | null; hiddenAt: Date | null; fileAssetId: string | null;
+      settlementLinks?: { settlementId: string }[] },
     row: EsfListRow,
     organizationId: string,
     userId: string,
   ): Promise<'rematched' | 'status' | false> {
     const status = mapPortalStatus(row.status);
+    const changed = status !== existing.status;
+    if (changed) await this.links.refreshStatus(organizationId, existing.id, status, row.number, parsePortalDate(row.issuedOn), row.status, userId);
 
     // Без расчёта — пробуем снова: партнёру могли проставить ИНН, расчёт
     // могли сформировать позже. Иначе ЭСФ застряла бы «без расчёта» навсегда.
-    if (!existing.settlementId && !existing.hiddenAt && (await this.rematch(existing.id, organizationId, userId))) {
+    if (!invoiceSettlementIds(existing).length && !existing.hiddenAt && (await this.rematch(existing.id, organizationId, userId))) {
       return 'rematched';
     }
 
-    if (status === existing.status) return false;
-
-    await this.prisma.esfInvoice.update({
-      where: { id: existing.id },
-      data: {
-        status,
-        ...(row.number ? { number: row.number } : {}),
-        issuedOn: parsePortalDate(row.issuedOn),
-      },
-    });
-
-    if (existing.settlementId) {
-      const step = await this.esfStep(existing.settlementId);
-      if (!step || this.hasManualEvidence(step, existing.fileAssetId)) return 'status';
-      if (statusClosesStep(status) && !step.doneAt) {
-        await this.prisma.settlementStep.update({
-          where: { id: step.id },
-          data: { doneAt: new Date(), note: this.stepNote(row.number, row.issuedOn), evidenceUrl: null, fileAssetId: existing.fileAssetId },
-        });
-      } else if (!statusClosesStep(status) && step.doneAt) {
-        // ЭСФ отозвали или отклонили после того, как мы её зачли — шаг снова открыт.
-        await this.prisma.settlementStep.update({
-          where: { id: step.id },
-          data: { doneAt: null, doneById: null, note: `ЭСФ ${row.number} — ${row.status.toLowerCase()} на портале` },
-        });
-      }
-      await this.refreshClosedAt(existing.settlementId);
-    }
-    return 'status';
+    return changed ? 'status' : false;
   }
 
   /** Повторное сопоставление уже импортированной ЭСФ. true — привязалась. */
   private async rematch(invoiceId: string, organizationId: string, userId: string): Promise<boolean> {
-    const inv = await this.prisma.esfInvoice.findUnique({ where: { id: invoiceId } });
-    if (!inv || inv.settlementId || inv.buyerInn === RETAIL_INN) return false;
+    const inv = await this.prisma.esfInvoice.findFirst({ where: { id: invoiceId, organizationId }, include: { settlementLinks: true } });
+    if (!inv || invoiceSettlementIds(inv).length || inv.buyerInn === RETAIL_INN) return false;
 
     const counterparty =
       (inv.counterpartyId ? { id: inv.counterpartyId } : null) ??
@@ -370,72 +356,29 @@ export class EsfService {
       where: { id: inv.id },
       data: {
         counterpartyId: counterparty.id,
-        ...(result.kind === 'matched' ? { settlementId: result.settlementId } : {}),
         matchNote: note,
       },
     });
     if (result.kind !== 'matched') return false;
 
-    await this.attachToSettlement(
-      result.settlementId,
-      inv.fileAssetId,
-      inv.number,
-      inv.issuedOn ? this.formatDate(inv.issuedOn) : '',
-      inv.status,
-      userId,
-    );
+    await this.links.attach(organizationId, userId, inv.id, [result.settlementId]);
     return true;
   }
 
   // ── Ручная привязка ───────────────────────────────────────────────────────
 
   async attach(organizationId: string, userId: string, invoiceId: string, settlementId: string): Promise<EsfInvoiceDto> {
-    const invoice = await this.prisma.esfInvoice.findFirst({ where: { id: invoiceId, organizationId } });
-    if (!invoice) throw new NotFoundException('ЭСФ не найдена');
-    const settlement = await this.prisma.settlement.findFirst({ where: { id: settlementId, organizationId } });
-    if (!settlement) throw new NotFoundException('Расчёт не найден');
-
-    const taken = await this.prisma.esfInvoice.findFirst({
-      where: { settlementId, id: { not: invoiceId } },
-      select: { number: true },
-    });
-    if (taken) throw new BadRequestException(`На этом расчёте уже есть ЭСФ ${taken.number ?? ''}`);
-
-    await this.prisma.esfInvoice.update({
-      where: { id: invoiceId },
-      data: { settlementId, matchNote: null, hiddenAt: null, counterpartyId: invoice.counterpartyId ?? settlement.counterpartyId },
-    });
-    await this.attachToSettlement(
-      settlementId,
-      invoice.fileAssetId,
-      invoice.number,
-      invoice.issuedOn ? this.formatDate(invoice.issuedOn) : '',
-      invoice.status,
-      userId,
-    );
+    await this.links.attach(organizationId, userId, invoiceId, [settlementId], false);
     return this.findOneDto(invoiceId, organizationId);
   }
 
-  async detach(organizationId: string, invoiceId: string): Promise<EsfInvoiceDto> {
-    const invoice = await this.prisma.esfInvoice.findFirst({ where: { id: invoiceId, organizationId } });
-    if (!invoice) throw new NotFoundException('ЭСФ не найдена');
-    if (invoice.settlementId) {
-      const step = await this.esfStep(invoice.settlementId);
-      if (step && !this.hasManualEvidence(step, invoice.fileAssetId) && step.fileAssetId === invoice.fileAssetId) {
-        await this.prisma.settlementStep.update({
-          where: { id: step.id },
-          data: { doneAt: null, doneById: null, fileAssetId: null, note: null },
-        });
-      }
-      if (invoice.fileAssetId) {
-        await this.prisma.fileAsset.update({ where: { id: invoice.fileAssetId }, data: { settlementId: null } });
-      }
-      await this.refreshClosedAt(invoice.settlementId);
-    }
-    await this.prisma.esfInvoice.update({
-      where: { id: invoiceId },
-      data: { settlementId: null, matchNote: 'Отвязана вручную' },
-    });
+  async attachMany(organizationId: string, userId: string, invoiceId: string, settlementIds: string[]): Promise<EsfInvoiceDto> {
+    await this.links.attach(organizationId, userId, invoiceId, settlementIds);
+    return this.findOneDto(invoiceId, organizationId);
+  }
+
+  async detach(organizationId: string, invoiceId: string, settlementId?: string): Promise<EsfInvoiceDto> {
+    await this.links.detach(organizationId, invoiceId, settlementId);
     return this.findOneDto(invoiceId, organizationId);
   }
 
@@ -461,9 +404,9 @@ export class EsfService {
 
   /** Убрать из «без расчёта»: чужая, розничная и т.п. Привязанную скрывать незачем. */
   async setHidden(organizationId: string, invoiceId: string, hidden: boolean): Promise<EsfInvoiceDto> {
-    const invoice = await this.prisma.esfInvoice.findFirst({ where: { id: invoiceId, organizationId } });
+    const invoice = await this.prisma.esfInvoice.findFirst({ where: { id: invoiceId, organizationId }, include: { settlementLinks: true } });
     if (!invoice) throw new NotFoundException('ЭСФ не найдена');
-    if (hidden && invoice.settlementId) throw new BadRequestException('ЭСФ привязана к расчёту — сначала отвяжите');
+    if (hidden && invoiceSettlementIds(invoice).length > 0) throw new BadRequestException('ЭСФ привязана к расчёту — сначала отвяжите');
     await this.prisma.esfInvoice.update({
       where: { id: invoiceId },
       data: { hiddenAt: hidden ? new Date() : null },
@@ -479,7 +422,7 @@ export class EsfService {
   ): Promise<EsfInvoiceDto[]> {
     const where: Prisma.EsfInvoiceWhereInput = { organizationId };
     if (filter.hiddenOnly) where.hiddenAt = { not: null };
-    else if (filter.unmatchedOnly) Object.assign(where, { settlementId: null, hiddenAt: null });
+    else if (filter.unmatchedOnly) Object.assign(where, { settlementId: null, settlementLinks: { none: {} }, hiddenAt: null });
     if (filter.year && filter.month) {
       where.deliveryDate = {
         gte: new Date(Date.UTC(filter.year, filter.month - 1, 1)),
@@ -547,6 +490,7 @@ export class EsfService {
         contract: { select: { title: true } },
         documents: { select: { number: true } },
         esfInvoices: { select: { id: true } },
+        esfLinks: { select: { invoiceId: true } },
       },
     });
     return settlements.map((s) => ({
@@ -556,80 +500,8 @@ export class EsfService {
       amount: s.amount.toNumber(),
       contractTitle: `${s.contract.title} · Комплект №${s.sequence}${s.label ? ` · ${s.label}` : ''}`,
       documentNumbers: s.documents.map((d) => d.number).filter((n): n is string => !!n),
-      hasEsf: s.esfInvoices.length > 0,
+      hasEsf: s.esfInvoices.length > 0 || s.esfLinks.length > 0,
     }));
-  }
-
-  private async attachToSettlement(
-    settlementId: string,
-    fileAssetId: string | null,
-    number: string | null,
-    issuedOn: string,
-    status: EsfStatus,
-    userId: string,
-  ) {
-    if (fileAssetId) {
-      await this.prisma.fileAsset.update({ where: { id: fileAssetId }, data: { settlementId } });
-    }
-    const step = await this.esfStep(settlementId);
-    if (!step || this.hasManualEvidence(step, fileAssetId)) return;
-
-    if (statusClosesStep(status)) {
-      await this.prisma.settlementStep.update({
-        where: { id: step.id },
-        data: {
-          doneAt: step.doneAt ?? new Date(),
-          doneById: step.doneById ?? userId,
-          note: this.stepNote(number, issuedOn),
-          evidenceUrl: null,
-          fileAssetId,
-        },
-      });
-    } else {
-      await this.prisma.settlementStep.update({
-        where: { id: step.id },
-        data: { note: `ЭСФ ${number ?? ''} — ${this.statusLabel(status)} на портале`, ...(fileAssetId ? { fileAssetId } : {}) },
-      });
-    }
-    await this.refreshClosedAt(settlementId);
-  }
-
-  private esfStep(settlementId: string) {
-    return this.prisma.settlementStep.findUnique({
-      where: { settlementId_type: { settlementId, type: SettlementStepType.ISSUE_ESF } },
-    });
-  }
-
-  /** Ручная ссылка / отдельный скан остаются подтверждением при синхронизации кабинета. */
-  private hasManualEvidence(
-    step: { doneAt: Date | null; evidenceUrl: string | null; fileAssetId: string | null },
-    invoiceFileAssetId: string | null,
-  ): boolean {
-    return !!step.doneAt && !!(step.evidenceUrl || (step.fileAssetId && step.fileAssetId !== invoiceFileAssetId));
-  }
-
-  private async refreshClosedAt(settlementId: string) {
-    const open = await this.prisma.settlementStep.count({ where: { settlementId, doneAt: null } });
-    await this.prisma.settlement.update({
-      where: { id: settlementId },
-      data: { closedAt: open === 0 ? new Date() : null },
-    });
-  }
-
-  private stepNote(number: string | null, issuedOn: string): string {
-    return `ЭСФ № ${number ?? '—'}${issuedOn ? ` от ${issuedOn}` : ''}`;
-  }
-
-  private statusLabel(status: EsfStatus): string {
-    const labels: Record<EsfStatus, string> = {
-      NEW: 'черновик', SENT: 'отправлена', ACCEPTED: 'принята',
-      REVOKED: 'отозвана', REJECTED: 'отклонена', UNKNOWN: 'статус неизвестен',
-    };
-    return labels[status];
-  }
-
-  private formatDate(d: Date): string {
-    return `${String(d.getUTCDate()).padStart(2, '0')}.${String(d.getUTCMonth() + 1).padStart(2, '0')}.${d.getUTCFullYear()}`;
   }
 
   private toDto(r: Row): EsfInvoiceDto {
@@ -648,6 +520,12 @@ export class EsfService {
       counterpartyId: r.counterpartyId,
       counterpartyName: r.counterparty?.name ?? null,
       settlementId: r.settlementId,
+      settlementIds: invoiceSettlementIds(r),
+      settlements: r.settlementLinks.map(({ settlement: s }) => ({
+        id: s.id, contractId: s.contractId, counterpartyId: s.counterpartyId,
+        contractNumber: s.contract.number, contractTitle: s.contract.title,
+        year: s.year, month: s.month, sequence: s.sequence, amount: s.amount.toNumber(), currency: s.currency,
+      })).sort((a, b) => a.year - b.year || a.month - b.month || a.sequence - b.sequence),
       fileAssetId: r.fileAssetId,
       matchNote: r.matchNote,
       hiddenAt: r.hiddenAt?.toISOString() ?? null,

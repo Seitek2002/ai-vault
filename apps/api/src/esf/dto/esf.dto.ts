@@ -1,5 +1,5 @@
 import { Transform, Type } from 'class-transformer';
-import { IsBoolean, IsInt, IsOptional, IsString, Max, Min, MinLength } from 'class-validator';
+import { ArrayMaxSize, ArrayNotEmpty, ArrayUnique, IsArray, IsBoolean, IsInt, IsOptional, IsString, Max, Min, MinLength, ValidateIf } from 'class-validator';
 
 export class ListEsfDto {
   @IsOptional()
@@ -28,8 +28,26 @@ export class ListEsfDto {
 }
 
 export class AttachEsfDto {
+  @IsOptional()
   @IsString()
-  declare settlementId: string;
+  @MinLength(1)
+  settlementId?: string;
+
+  @ValidateIf((o) => o.settlementId == null || o.settlementIds !== undefined)
+  @IsArray()
+  @ArrayNotEmpty()
+  @ArrayMaxSize(120)
+  @ArrayUnique()
+  @IsString({ each: true })
+  @MinLength(1, { each: true })
+  settlementIds?: string[];
+}
+
+export class DetachEsfDto {
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  settlementId?: string;
 }
 
 export class CheckEsfConnectionDto {

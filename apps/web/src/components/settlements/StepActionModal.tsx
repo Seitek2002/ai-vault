@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, ExternalLink, FileText, Link2, Paperclip, Trash2 } from "lucide-react";
 import { ApiError } from "@/lib/api/client";
-import { esfApi, ESF_STATUS_LABELS } from "@/lib/api/esf";
+import { esfApi, esfCoversSettlement, esfSettlementIds, ESF_STATUS_LABELS } from "@/lib/api/esf";
 import { openFile, uploadFile } from "@/lib/api/files";
 import { Button, Input, Modal } from "@/components/ui";
 import { fieldClassName } from "@/components/ui/Input";
@@ -85,11 +85,10 @@ export function StepActionModal({ settlement, step, onClose }: Props) {
   });
   const esfCandidates = (esfQuery.data ?? []).filter((invoice) =>
     !invoice.hiddenAt && invoice.counterpartyId === settlement.counterpartyId &&
-    (!invoice.settlementId || invoice.settlementId === settlement.id) &&
     (invoice.status === "SENT" || invoice.status === "ACCEPTED"),
   ).sort((a, b) => (b.deliveryDate ?? "").localeCompare(a.deliveryDate ?? ""));
-  const linkedInvoice = esfQuery.data?.find((invoice) => invoice.settlementId === settlement.id);
-  const selectedInvoiceId = esfInvoiceId || esfCandidates.find((invoice) => invoice.settlementId === settlement.id)?.id || "";
+  const linkedInvoice = esfQuery.data?.find((invoice) => esfCoversSettlement(invoice, settlement.id));
+  const selectedInvoiceId = esfInvoiceId || esfCandidates.find((invoice) => esfCoversSettlement(invoice, settlement.id))?.id || "";
   const selectedInvoice = esfCandidates.find((invoice) => invoice.id === selectedInvoiceId);
   const requiresPdfScan = step.type === "ISSUE_ACT" || step.type === "ISSUE_INVOICE";
   const scanDocument = step.type === "ISSUE_ACT" ? "акта" : "счёта на оплату";
@@ -121,7 +120,7 @@ export function StepActionModal({ settlement, step, onClose }: Props) {
     mutationFn: async () => {
       if (isEsfStep && esfMode === "portal") {
         if (!selectedInvoice) throw new Error("Выберите отправленную или принятую ЭСФ этого партнёра.");
-        if (selectedInvoice.settlementId !== settlement.id) {
+        if (!esfCoversSettlement(selectedInvoice, settlement.id)) {
           await esfApi.attach(selectedInvoice.id, settlement.id);
         }
       }
@@ -270,7 +269,7 @@ export function StepActionModal({ settlement, step, onClose }: Props) {
                         <option value="">{esfQuery.isPending ? "Загружаю ЭСФ…" : "Выберите ЭСФ"}</option>
                         {esfCandidates.map((invoice) => (
                           <option key={invoice.id} value={invoice.id}>
-                            № {invoice.number ?? "—"} · {invoice.deliveryDate ? new Date(invoice.deliveryDate).toLocaleDateString("ru-RU") : "без даты"} · {formatMoney(invoice.amount, settlement.currency)} · {ESF_STATUS_LABELS[invoice.status]}
+                            № {invoice.number ?? "—"} · {invoice.deliveryDate ? new Date(invoice.deliveryDate).toLocaleDateString("ru-RU") : "без даты"} · {formatMoney(invoice.amount, settlement.currency)} · {ESF_STATUS_LABELS[invoice.status]}{esfSettlementIds(invoice).length ? ` · уже в расчётах: ${esfSettlementIds(invoice).length}` : ""}
                           </option>
                         ))}
                       </select>
@@ -279,6 +278,7 @@ export function StepActionModal({ settlement, step, onClose }: Props) {
                       <div className="mt-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elevated)] px-3 py-2 text-xs">
                         <p className="text-[var(--color-text-primary)] break-words">ЭСФ № {selectedInvoice.number ?? "—"}</p>
                         <p className="mt-1 text-[var(--color-text-secondary)]">{selectedInvoice.deliveryDate ? new Date(selectedInvoice.deliveryDate).toLocaleDateString("ru-RU") : "Без даты"} · {formatMoney(selectedInvoice.amount, settlement.currency)} · {ESF_STATUS_LABELS[selectedInvoice.status]}</p>
+                        {esfSettlementIds(selectedInvoice).length > 0 && !esfCoversSettlement(selectedInvoice, settlement.id) && <p className="mt-1 text-[var(--color-text-secondary)]">Эта ЭСФ уже покрывает другие расчёты. Текущий месяц будет добавлен к ним.</p>}
                       </div>
                     )}
                     {esfQuery.isError ? (
@@ -482,7 +482,7 @@ function DoneStepFiles({ step, settlementId }: { step: SettlementStep; settlemen
   const [error, setError] = useState("");
   const { data: esf } = useQuery({
     queryKey: ["esf", "settlement", settlementId],
-    queryFn: () => esfApi.list().then((all) => all.filter((i) => i.settlementId === settlementId)),
+    queryFn: () => esfApi.list().then((all) => all.filter((i) => esfCoversSettlement(i, settlementId))),
     enabled: step.type === "ISSUE_ESF",
   });
   const portal = esf?.find((i) => i.fileAssetId === step.fileAssetId) ?? esf?.[0];
@@ -524,6 +524,10 @@ function DoneStepFiles({ step, settlementId }: { step: SettlementStep; settlemen
           На портале
         </a>
       )}
+      {portal && <div className="w-full text-xs text-[var(--color-text-secondary)]">
+        {(portal.settlements?.length ?? 0) > 1 && <p>Эта ЭСФ покрывает {portal.settlements!.map((s) => `${s.month.toString().padStart(2, "0")}.${s.year}`).join(", ")}.</p>}
+        <Link href={`/settlements/${settlementId}`} className="inline-block py-1 text-[var(--color-accent)] hover:underline">Изменить месяцы в карточке расчёта</Link>
+      </div>}
       {savedUrl && (
         <a href={savedUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-sm text-[var(--color-accent)] hover:underline px-2 py-1.5">
           <ExternalLink className="w-3.5 h-3.5" />
@@ -545,7 +549,7 @@ function EsfDraftPanel({ settlementId, stepNote }: { settlementId: string; stepN
   const [error, setError] = useState("");
   const { data: esf } = useQuery({
     queryKey: ["esf", "settlement", settlementId],
-    queryFn: () => esfApi.list().then((all) => all.filter((i) => i.settlementId === settlementId)),
+    queryFn: () => esfApi.list().then((all) => all.filter((i) => esfCoversSettlement(i, settlementId))),
   });
   const draft = esf?.[0];
 

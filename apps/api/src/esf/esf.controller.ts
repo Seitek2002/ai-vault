@@ -1,9 +1,9 @@
-import { Body, Controller, Get, Headers, Param, Post, Query } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Headers, Param, Post, Query } from '@nestjs/common';
 import { Permission } from '../common/permissions';
 import { CurrentOrgId, CurrentUser, type JwtPayload } from '../common/decorators/current-user.decorator';
 import { RequirePermission } from '../common/decorators/permissions.decorator';
 import { EsfService } from './esf.service';
-import { AttachEsfDto, CheckEsfConnectionDto, ListEsfDto } from './dto/esf.dto';
+import { AttachEsfDto, CheckEsfConnectionDto, DetachEsfDto, ListEsfDto } from './dto/esf.dto';
 
 @Controller('esf')
 export class EsfController {
@@ -59,13 +59,15 @@ export class EsfController {
     @CurrentOrgId() organizationId: string,
     @CurrentUser() user: JwtPayload,
   ) {
-    return this.service.attach(organizationId, user.sub, id, dto.settlementId);
+    if (dto.settlementId !== undefined && dto.settlementIds !== undefined) throw new BadRequestException('Передайте один расчёт или список расчётов.');
+    return dto.settlementIds ? this.service.attachMany(organizationId, user.sub, id, dto.settlementIds)
+      : this.service.attach(organizationId, user.sub, id, dto.settlementId!);
   }
 
   @Post('invoices/:id/detach')
   @RequirePermission(Permission.MANAGE_DOCUMENTS)
-  detach(@Param('id') id: string, @CurrentOrgId() organizationId: string) {
-    return this.service.detach(organizationId, id);
+  detach(@Param('id') id: string, @CurrentOrgId() organizationId: string, @Body() dto: DetachEsfDto) {
+    return this.service.detach(organizationId, id, dto.settlementId);
   }
 
   @Post('invoices/:id/hide')

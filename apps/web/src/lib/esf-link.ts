@@ -15,6 +15,31 @@ export function settlementsForEsf(settlements: Settlement[], contractId: string,
 
 type Target = { settlementId: string } | { create: CreateSettlementDto };
 
+/** Create missing periods first; a failed link can reuse every already-created set. */
+export async function linkEsfTargets(
+  invoiceId: string,
+  targets: (Target & { key: string })[],
+  operations: {
+    create: (dto: CreateSettlementDto) => Promise<Settlement>;
+    attach: (invoiceId: string, settlementIds: string[]) => Promise<unknown>;
+    onCreated: (key: string, settlement: Settlement) => void;
+  },
+): Promise<void> {
+  if (!targets.length || targets.length > 120 || new Set(targets.map((t) => t.key)).size !== targets.length) {
+    throw new Error('Выберите от 1 до 120 разных расчётов.');
+  }
+  const ids: string[] = [];
+  for (const target of targets) {
+    if ('settlementId' in target) ids.push(target.settlementId);
+    else {
+      const created = await operations.create(target.create);
+      operations.onCreated(target.key, created);
+      ids.push(created.id);
+    }
+  }
+  await operations.attach(invoiceId, [...new Set(ids)]);
+}
+
 /** Preserve a created calculation when attachment fails, so retry doesn't create another set. */
 export async function linkEsfTarget(
   invoiceId: string,

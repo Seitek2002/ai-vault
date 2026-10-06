@@ -5,7 +5,7 @@ import type { CompleteStepDto } from '../dto/settlement.dto';
 import { SettlementsService } from '../settlements.service';
 
 function fixture(type: SettlementStepType = SettlementStepType.ISSUE_ESF) {
-  const invoices: Array<{ organizationId: string; settlementId: string; status: EsfStatus; fileAssetId: string | null }> = [];
+  const invoices: Array<{ organizationId: string; settlementId: string; status: EsfStatus; fileAssetId: string | null; settlementLinks?: { settlementId: string }[] }> = [];
   const tx = {
     settlementStep: { update: vi.fn().mockResolvedValue({}) },
     fileAsset: { update: vi.fn().mockResolvedValue({}) },
@@ -25,7 +25,7 @@ function fixture(type: SettlementStepType = SettlementStepType.ISSUE_ESF) {
     document: { findFirst: vi.fn().mockResolvedValue({ id: 'draft-1' }) },
     esfInvoice: {
       findFirst: vi.fn(async ({ where }) => invoices.find((invoice) =>
-        invoice.organizationId === where.organizationId && invoice.settlementId === where.settlementId && where.status.in.includes(invoice.status),
+        invoice.organizationId === where.organizationId && (invoice.settlementId === where.OR[0].settlementId || invoice.settlementLinks?.some((l) => l.settlementId === where.OR[0].settlementId)) && where.status.in.includes(invoice.status),
       ) ?? null),
     },
     $transaction: vi.fn(async (fn: (client: typeof tx) => Promise<void>) => fn(tx)),
@@ -55,11 +55,18 @@ describe('Подтверждение шага ЭСФ', () => {
     invoices.push({ organizationId: 'org-1', settlementId: 'settlement-1', status, fileAssetId: 'portal-pdf' });
     await complete();
     expect(prisma.esfInvoice.findFirst).toHaveBeenCalledWith({
-      where: { organizationId: 'org-1', settlementId: 'settlement-1', status: { in: ['SENT', 'ACCEPTED'] } }, select: { fileAssetId: true },
+      where: { organizationId: 'org-1', OR: [{ settlementId: 'settlement-1' }, { settlementLinks: { some: { settlementId: 'settlement-1' } } }], status: { in: ['SENT', 'ACCEPTED'] } }, select: { fileAssetId: true },
     });
     expect(tx.settlementStep.update).toHaveBeenCalledWith({ where: { id: 'step-1' }, data: {
       doneAt: expect.any(Date), doneById: 'user-1', evidenceUrl: null, fileAssetId: 'portal-pdf',
     } });
+  });
+
+  it('завершает вторичный месяц общей ЭСФ и использует её PDF', async () => {
+    const { invoices, tx, complete } = fixture();
+    invoices.push({ organizationId: 'org-1', settlementId: 'primary-other-month', settlementLinks: [{ settlementId: 'settlement-1' }], status: EsfStatus.ACCEPTED, fileAssetId: 'portal-pdf' });
+    await complete();
+    expect(tx.settlementStep.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ fileAssetId: 'portal-pdf', doneAt: expect.any(Date) }) }));
   });
 
   it.each([

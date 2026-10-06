@@ -3,7 +3,7 @@ import { Permission } from '../common/permissions';
 import { CurrentOrgId, CurrentUser, type JwtPayload } from '../common/decorators/current-user.decorator';
 import { RequirePermission } from '../common/decorators/permissions.decorator';
 import { EsfService } from './esf.service';
-import { AttachEsfDto, CheckEsfConnectionDto, DetachEsfDto, ListEsfDto } from './dto/esf.dto';
+import { AttachEsfDto, CheckEsfConnectionDto, CreateEsfDraftDto, DetachEsfDto, ListEsfDto } from './dto/esf.dto';
 
 @Controller('esf')
 export class EsfController {
@@ -45,10 +45,16 @@ export class EsfController {
   }
 
   /** Черновик ЭСФ на портале для расчёта — подписывает и отправляет человек. */
+  @Get('settlements/:id/draft-preview')
+  @RequirePermission(Permission.MANAGE_DOCUMENTS)
+  draftPreview(@Param('id') id: string, @CurrentOrgId() organizationId: string) {
+    return this.service.draftPreview(organizationId, id);
+  }
+
   @Post('settlements/:id/draft')
   @RequirePermission(Permission.MANAGE_DOCUMENTS)
-  createDraft(@Param('id') id: string, @CurrentOrgId() organizationId: string, @CurrentUser() user: JwtPayload) {
-    return this.service.createDraft(organizationId, user.sub, id);
+  createDraft(@Param('id') id: string, @CurrentOrgId() organizationId: string, @CurrentUser() user: JwtPayload, @Body() dto: CreateEsfDraftDto) {
+    return this.service.createDraft(organizationId, user.sub, id, dto);
   }
 
   @Post('invoices/:id/attach')

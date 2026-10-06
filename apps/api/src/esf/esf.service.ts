@@ -8,6 +8,8 @@ import { EsfDraftClient } from './esf-draft.client';
 import { EsfPortalClient, EsfPortalError, type EsfListRow } from './esf-portal.client';
 import { EsfPdfService } from './esf-pdf';
 import { EsfLinksService, invoiceSettlementIds } from './esf-links.service';
+import { esfLineAmounts, esfServiceForPeriod } from '@ai-vault/doc-placeholders';
+import type { CreateEsfDraftDto } from './dto/esf.dto';
 import {
   RETAIL_INN,
   esfAccountingRef,
@@ -70,6 +72,7 @@ const MONTH_NAMES_RU = [
 @Injectable()
 export class EsfService {
   private readonly logger = new Logger(EsfService.name);
+  private readonly creatingDrafts = new Set<string>();
 
   constructor(
     private prisma: PrismaService,
@@ -87,7 +90,7 @@ export class EsfService {
    * ЭСФ этого партнёра с новой датой, суммой и номером учётной системы.
    * Подписать и отправить черновик может только человек — на портале.
    */
-  async createDraft(organizationId: string, userId: string, settlementId: string): Promise<EsfInvoiceDto> {
+  private async draftContext(organizationId: string, settlementId: string) {
     const settings = await this.prisma.companySettings.findUnique({ where: { organizationId } });
     if (!settings?.esfLogin || !settings.esfPasswordEnc) {
       throw new BadRequestException('Кабинет ЭСФ не подключён — укажите логин и пароль в настройках');
@@ -122,25 +125,56 @@ export class EsfService {
     // может быть несколько договоров с разными услугами, и копировать нужно
     // ЭСФ своей услуги. Если по договору ЭСФ ещё не было — берём любую ЭСФ партнёра.
     const sentStatuses: Prisma.EnumEsfStatusFilter = { in: [EsfStatus.SENT, EsfStatus.ACCEPTED] };
-    const source =
-      (await this.prisma.esfInvoice.findFirst({
-        where: {
-          organizationId,
-          status: sentStatuses,
-          OR: [{ settlement: { contractId: settlement.contractId } },
-            { settlementLinks: { some: { settlement: { contractId: settlement.contractId } } } }],
-        },
-        orderBy: [{ issuedOn: 'desc' }, { importedAt: 'desc' }],
-      })) ??
-      (await this.prisma.esfInvoice.findFirst({
-        where: { organizationId, counterpartyId: settlement.counterpartyId, status: sentStatuses },
-        orderBy: [{ issuedOn: 'desc' }, { importedAt: 'desc' }],
-      }));
+    const sameCompany = { organizationId, counterpartyId: settlement.counterpartyId, status: sentStatuses };
+    const sameContract = { ...sameCompany, OR: [{ settlement: { contractId: settlement.contractId } },
+      { settlementLinks: { some: { settlement: { contractId: settlement.contractId } } } }] };
+    let source = null;
+    // A matching total avoids choosing a consolidated multi-month invoice as
+    // the regular monthly service breakdown when a matching example exists.
+    for (const where of [{ ...sameContract, amount: settlement.amount }, { ...sameCompany, amount: settlement.amount },
+      sameContract, sameCompany]) {
+      source = await this.prisma.esfInvoice.findFirst({ where, orderBy: [{ issuedOn: 'desc' }, { importedAt: 'desc' }] });
+      if (source) break;
+    }
     if (!source) {
       throw new BadRequestException(
         `У партнёра «${settlement.counterparty.name}» нет ни одной отправленной ЭСФ — первую выставьте на портале вручную, дальше Vault будет её копировать`,
       );
     }
+
+    return { settings, settlement, source };
+  }
+
+  async draftPreview(organizationId: string, settlementId: string) {
+    const { settings, settlement, source } = await this.draftContext(organizationId, settlementId);
+    const template = await this.draft.getTemplate(settings.esfLogin!, openSecret(settings.esfPasswordEnc!), source.uuid)
+      .catch(error => { if (error instanceof EsfPortalError) throw new BadRequestException(error.message); throw error; });
+    const lines = template.lines.map(line => ({ ...line, name: esfServiceForPeriod(line.name, settlement.year, settlement.month) }));
+    if (lines.length === 1) {
+      const line = lines[0]!;
+      const taxFactor = line.priceIncludesTaxes ? 1 : 1 + (line.vatRate + line.salesTaxRate) / 100;
+      const price = Number((settlement.amount.toNumber() / (line.quantity * taxFactor)).toFixed(5));
+      const adjusted = { ...line, price };
+      if (Math.round(esfLineAmounts(adjusted).total * 100) === Math.round(settlement.amount.toNumber() * 100)) lines[0] = adjusted;
+    }
+    return { ...template, lines, sourceUuid: source.uuid, sourceNumber: source.number,
+      amount: settlement.amount.toNumber(), currency: settlement.currency,
+      period: `${MONTH_NAMES_RU[settlement.month - 1]} ${settlement.year}`, crmRef: esfAccountingRef(settlement.id) };
+  }
+
+  async createDraft(organizationId: string, userId: string, settlementId: string, dto?: CreateEsfDraftDto): Promise<EsfInvoiceDto> {
+    const key = `${organizationId}:${settlementId}`;
+    if (this.creatingDrafts.has(key)) throw new BadRequestException('Черновик этого расчёта уже создаётся. Дождитесь результата.');
+    this.creatingDrafts.add(key);
+    try {
+      return await this.createReviewedDraft(organizationId, userId, settlementId, dto);
+    } finally { this.creatingDrafts.delete(key); }
+  }
+
+  private async createReviewedDraft(organizationId: string, userId: string, settlementId: string, dto?: CreateEsfDraftDto): Promise<EsfInvoiceDto> {
+    const { settings, settlement, source } = await this.draftContext(organizationId, settlementId);
+    if (!dto?.lines?.length || !dto.sourceSignature) throw new BadRequestException('Сначала загрузите и проверьте строки услуг ЭСФ.');
+    if (dto.sourceUuid !== source.uuid) throw new BadRequestException('ЭСФ-образец изменился. Загрузите строки заново и проверьте их.');
 
     // Стабильный номер ErkinAI.Docs: не зависит от номера акта или ЭСФ-образца.
     const crmRef = esfAccountingRef(settlement.id);
@@ -155,14 +189,16 @@ export class EsfService {
     const note = `${settlement.contract.title} — ${monthName} ${settlement.year}`;
 
     const { uuid } = await this.draft.createByCopy({
-      login: settings.esfLogin,
-      password: openSecret(settings.esfPasswordEnc),
+      login: settings.esfLogin!,
+      password: openSecret(settings.esfPasswordEnc!),
       sourceUuid: source.uuid,
       amount: settlement.amount.toNumber(),
       deliveryDate,
       crmRef,
       note,
-    });
+      sourceSignature: dto.sourceSignature,
+      lines: dto.lines,
+    }).catch(error => { if (error instanceof EsfPortalError) throw new BadRequestException(error.message); throw error; });
 
     // Подтягиваем черновик как обычную ЭСФ и привязываем к расчёту.
     await this.sync(organizationId, userId);

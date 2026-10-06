@@ -5,7 +5,8 @@ import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, ExternalLink, FileText, Link2, Paperclip, Trash2 } from "lucide-react";
 import { ApiError } from "@/lib/api/client";
-import { esfApi, esfCoversSettlement, esfSettlementIds, ESF_STATUS_LABELS } from "@/lib/api/esf";
+import { esfApi, esfCoversSettlement, esfSettlementIds, ESF_STATUS_LABELS, type CreateEsfDraft } from "@/lib/api/esf";
+import { EsfDraftEditor } from './EsfDraftEditor';
 import { openFile, uploadFile } from "@/lib/api/files";
 import { Button, Input, Modal } from "@/components/ui";
 import { fieldClassName } from "@/components/ui/Input";
@@ -66,6 +67,7 @@ function isPdfScan(file: File): boolean {
 export function StepActionModal({ settlement, step, onClose }: Props) {
   const qc = useQueryClient();
   const [error, setError] = useState("");
+  const [draftBusy, setDraftBusy] = useState(false);
 
   // Поля разных шагов; каждый использует только своё.
   const [note, setNote] = useState(step.note ?? "");
@@ -178,7 +180,7 @@ export function StepActionModal({ settlement, step, onClose }: Props) {
     onError: handleError,
   });
 
-  const busy = complete.isPending || reopen.isPending || addPayment.isPending;
+  const busy = complete.isPending || reopen.isPending || addPayment.isPending || draftBusy;
   const isPaymentStep = step.type === "RECEIVE_PAYMENT";
   const hasEsfEvidence = esfMode === "portal" ? !!selectedInvoice
     : esfMode === "url" ? !!evidenceUrl.trim() : !!file;
@@ -192,7 +194,7 @@ export function StepActionModal({ settlement, step, onClose }: Props) {
   }
 
   return (
-    <Modal onClose={() => { if (!busy) onClose(); }} size="md">
+    <Modal onClose={() => { if (!busy) onClose(); }} size={isEsfStep ? "lg" : "md"}>
       <div className="p-5 max-h-[80vh] overflow-y-auto">
         <div className="mb-1 flex flex-wrap items-baseline justify-between gap-3">
           <h3 className="text-sm font-semibold text-[var(--color-text-primary)]">
@@ -292,10 +294,10 @@ export function StepActionModal({ settlement, step, onClose }: Props) {
                         {selectedInvoice ? "Проверьте дату и сумму: выбранная ЭСФ будет связана с этим расчётом." : !esfQuery.isPending && esfCandidates.length === 0 ? "Нет доступных отправленных или принятых ЭСФ этого партнёра. Синхронизируйте кабинет или добавьте ссылку / скан." : "Показаны отправленные и принятые ЭСФ этого партнёра, свободные или связанные с этим расчётом."}
                       </p>
                     )}
-                    {linkedInvoice?.status === "NEW" ? <EsfDraftPanel settlementId={settlement.id} stepNote={step.note} actPdfId={actPdfId} /> : !linkedInvoice && (
+                    {linkedInvoice?.status === "NEW" ? <EsfDraftPanel settlementId={settlement.id} stepNote={step.note} actPdfId={actPdfId} onBusyChange={setDraftBusy} /> : !linkedInvoice && (
                       <details className="mt-3 text-xs text-[var(--color-text-secondary)]">
                         <summary className="cursor-pointer py-1">Создать новую ЭСФ на портале</summary>
-                        <div className="mt-2"><EsfDraftPanel settlementId={settlement.id} stepNote={step.note} actPdfId={actPdfId} /></div>
+                        <div className="mt-2"><EsfDraftPanel settlementId={settlement.id} stepNote={step.note} actPdfId={actPdfId} onBusyChange={setDraftBusy} /></div>
                       </details>
                     )}
                   </div>
@@ -545,7 +547,7 @@ function DoneStepFiles({ step, settlementId }: { step: SettlementStep; settlemen
  * датой, суммой и номером учётной системы. Подписать и отправить — только на портале,
  * после этого синхронизация закроет шаг сама.
  */
-function EsfDraftPanel({ settlementId, stepNote, actPdfId }: { settlementId: string; stepNote: string | null; actPdfId: string | null }) {
+function EsfDraftPanel({ settlementId, stepNote, actPdfId, onBusyChange }: { settlementId: string; stepNote: string | null; actPdfId: string | null; onBusyChange: (busy: boolean) => void }) {
   const qc = useQueryClient();
   const [error, setError] = useState("");
   const { data: esf } = useQuery({
@@ -555,7 +557,9 @@ function EsfDraftPanel({ settlementId, stepNote, actPdfId }: { settlementId: str
   const draft = esf?.[0];
 
   const create = useMutation({
-    mutationFn: () => esfApi.createDraft(settlementId),
+    mutationFn: (data: CreateEsfDraft) => esfApi.createDraft(settlementId, data),
+    onMutate: () => { setError(""); onBusyChange(true); },
+    onSettled: () => onBusyChange(false),
     onSuccess: () => {
       setError("");
       void qc.invalidateQueries({ queryKey: ["esf"] });
@@ -592,26 +596,5 @@ function EsfDraftPanel({ settlementId, stepNote, actPdfId }: { settlementId: str
     );
   }
 
-  return (
-    <div className="mb-3">
-      <Button
-        type="button"
-        variant="secondary"
-        disabled={!actPdfId}
-        aria-describedby={`esf-draft-hint-${settlementId}`}
-        onClick={() => create.mutate()}
-        loading={create.isPending}
-        loadingText="Создаю на портале…"
-      >
-        <FileText className="w-4 h-4 shrink-0" aria-hidden="true" />
-        Создать черновик ЭСФ на портале
-      </Button>
-      <p id={`esf-draft-hint-${settlementId}`} className="text-sm text-[var(--color-text-secondary)] mt-1.5">
-        {actPdfId
-          ? "PDF акта прикреплён. Черновик создаётся с датой, суммой и номером ErkinAI.Docs. Подпись — на портале."
-          : "Сначала загрузите PDF акта в шаге «Выставить акт» этого расчёта. После загрузки создание ЭСФ станет доступно."}
-      </p>
-      {error && <p role="alert" className="text-sm text-[var(--color-danger)] mt-1.5">{error}</p>}
-    </div>
-  );
+  return <EsfDraftEditor settlementId={settlementId} actPdfId={actPdfId} creating={create.isPending} error={error} onCreate={data => create.mutate(data)} />;
 }

@@ -1,4 +1,22 @@
 import { api } from './client';
+import type { EsfDraftLine } from '@ai-vault/doc-placeholders';
+
+export interface EsfDraftPreview {
+  sourceUuid: string;
+  sourceSignature: string;
+  sourceNumber: string | null;
+  lines: EsfDraftLine[];
+  amount: number;
+  currency: string;
+  period: string;
+  crmRef: string;
+}
+
+export interface CreateEsfDraft {
+  sourceUuid: string;
+  sourceSignature: string;
+  lines: Pick<EsfDraftLine, 'name' | 'quantity' | 'price'>[];
+}
 
 export type EsfStatus = 'NEW' | 'SENT' | 'ACCEPTED' | 'REVOKED' | 'REJECTED' | 'UNKNOWN';
 
@@ -81,8 +99,9 @@ export const esfApi = {
   hiddenCount: () => api.get<{ count: number }>('/esf/invoices/hidden-count'),
   sync: () => api.post<EsfSyncReport>('/esf/sync', {}),
   /** Черновик на портале для расчёта — подписать и отправить нужно на портале. */
-  createDraft: (settlementId: string) =>
-    api.post<EsfInvoice>(`/esf/settlements/${settlementId}/draft`, {}),
+  draftPreview: (settlementId: string) => api.get<EsfDraftPreview>(`/esf/settlements/${settlementId}/draft-preview`),
+  createDraft: (settlementId: string, data: CreateEsfDraft) =>
+    api.post<EsfInvoice>(`/esf/settlements/${settlementId}/draft`, data),
   portalListUrl: 'https://esf.salyk.kg/esf/view/document/realization_list.xhtml',
   checkConnection: (login: string, password: string) =>
     api.post<{ ok: true }>('/esf/check-connection', { login, password }),

@@ -202,18 +202,35 @@ export class EsfPortalClient {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
     try {
-      const response = await fetch(BASE + path, {
-        ...init,
-        signal: controller.signal,
-        headers: {
-          'User-Agent': USER_AGENT,
-          Accept: 'text/html,application/xml;q=0.9,*/*;q=0.8',
-          ...(jar.header() ? { Cookie: jar.header() } : {}),
-          ...(init.headers ?? {}),
-        },
-      });
-      jar.absorb(response);
-      return response;
+      let url = new URL(path, BASE);
+      let method = init.method ?? 'GET';
+      let body = init.body;
+      // The portal emits absolute HTTP redirects. Keep credentials on HTTPS,
+      // absorb cookies at every hop, and retain the JSF conversation query.
+      for (let hop = 0; hop < 6; hop++) {
+        if (url.hostname !== new URL(BASE).hostname || url.port || url.username || url.password) {
+          throw new EsfPortalError('Портал перенаправил запрос на неизвестный адрес', 'network');
+        }
+        url.protocol = 'https:';
+        const response = await fetch(url.toString(), {
+          ...init, method, body: body ?? null, redirect: 'manual', signal: controller.signal,
+          headers: {
+            'User-Agent': USER_AGENT,
+            Accept: 'text/html,application/xml;q=0.9,*/*;q=0.8',
+            ...(jar.header() ? { Cookie: jar.header() } : {}),
+            ...(init.headers ?? {}),
+          },
+        });
+        jar.absorb(response);
+        const location = response.headers.get('location');
+        if (init.redirect !== 'follow' || !location || ![301, 302, 303, 307, 308].includes(response.status)) return response;
+        url = new URL(location, url);
+        if (response.status === 303 || ([301, 302].includes(response.status) && method === 'POST')) {
+          method = 'GET';
+          body = undefined;
+        }
+      }
+      throw new EsfPortalError('Слишком много перенаправлений портала', 'network');
     } catch (error) {
       throw new EsfPortalError(
         `Портал ЭСФ недоступен: ${error instanceof Error ? error.message : String(error)}`,

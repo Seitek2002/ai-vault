@@ -24,7 +24,7 @@ describe('Номер учётной системы новых ЭСФ', () => {
     const service = new EsfService(prisma as never, {} as never, {} as never, draft as never, {} as never, links as never);
     vi.spyOn(service, 'sync').mockResolvedValue({ fetched: 1, created: 1, updated: 0, matched: 1, unmatched: 0, errors: [] });
     vi.spyOn(service, 'findOneDto').mockResolvedValue({ id: 'new-esf' } as never);
-    await service.createDraft('org', 'user', id);
+    await service.createDraft('org', 'user', id, { sourceUuid: 'source-uuid', sourceSignature: 'a'.repeat(64), lines: [{ name: 'Services', quantity: 1, price: 35000 }] });
     expect(draft.createByCopy).toHaveBeenCalledWith(expect.objectContaining({ crmRef: `ErkinAI.Docs-${id}`, amount: 35000, sourceUuid: 'source-uuid' }));
     expect(links.attach).not.toHaveBeenCalled();
   });

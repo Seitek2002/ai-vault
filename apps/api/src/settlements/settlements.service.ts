@@ -235,7 +235,7 @@ export class SettlementsService {
         tx, contract, dto.year, dto.month, (last?.sequence ?? 0) + 1,
         new Prisma.Decimal(dto.amount), dto.label?.trim() || null, userId,
       );
-    });
+    }, { maxWait: 15000, timeout: 15000 });
     return this.findOne(id, organizationId);
   }
 

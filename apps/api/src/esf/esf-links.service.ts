@@ -33,6 +33,7 @@ export class EsfLinksService {
         const invoice = await this.lockInvoice(tx, organizationId, invoiceId);
         const before = invoiceSettlementIds(invoice);
         const ids = replace ? requested : [...new Set([...before, ...requested])];
+        if (ids.length > 120) throw new BadRequestException('Одна ЭСФ может покрывать не более 120 расчётов.');
         await this.lockSettlements(tx, organizationId, [...before, ...ids]);
         const settlements = await tx.settlement.findMany({ where: { organizationId, id: { in: ids } } });
         if (settlements.length !== ids.length) throw new NotFoundException('Некоторые расчёты не найдены');
@@ -48,7 +49,7 @@ export class EsfLinksService {
         }, select: { number: true } });
         if (taken) throw new BadRequestException(`На одном из расчётов уже есть ЭСФ ${taken.number ?? '(без номера)'}`);
         await this.reconcile(tx, invoice, ids, userId, settlements[0]!.counterpartyId);
-      }, { timeout: 15000 });
+      }, { maxWait: 15000, timeout: 30000 });
     } catch (error) {
       if ((error as { code?: string }).code === 'P2002') {
         throw new BadRequestException('Один из расчётов уже занят другой ЭСФ. Обновите список.');
@@ -67,7 +68,7 @@ export class EsfLinksService {
       if (settlementId && !before.includes(settlementId)) throw new NotFoundException('ЭСФ не привязана к этому расчёту');
       await this.lockSettlements(tx, organizationId, before);
       await this.reconcile(tx, invoice, settlementId ? before.filter((id) => id !== settlementId) : []);
-    }, { timeout: 15000 });
+    }, { maxWait: 15000, timeout: 30000 });
   }
 
   async refreshStatus(org: string, id: string, status: EsfStatus, number: string, issuedOn: Date | null, portalStatus: string, userId: string): Promise<void> {
@@ -92,7 +93,7 @@ export class EsfLinksService {
         }
       }
       await this.refreshClosedAt(tx, ids);
-    }, { timeout: 15000 });
+    }, { maxWait: 15000, timeout: 30000 });
   }
 
   private async lockInvoice(tx: Prisma.TransactionClient, organizationId: string, id: string): Promise<Invoice> {

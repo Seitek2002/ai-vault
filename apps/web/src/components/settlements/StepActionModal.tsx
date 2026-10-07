@@ -13,6 +13,7 @@ import { openFile, uploadFile } from "@/lib/api/files";
 import { Button, Input, Modal } from "@/components/ui";
 import {
   formatMoney,
+  MONTH_NAMES,
   settlementsApi,
   STEP_FULL_LABELS,
   type Settlement,
@@ -67,6 +68,7 @@ function isPdfScan(file: File): boolean {
 
 export function StepActionModal({ settlement, step, onClose }: Props) {
   const qc = useQueryClient();
+  const periodLabel = `${MONTH_NAMES[settlement.month - 1]} ${settlement.year}`;
   const [error, setError] = useState("");
   const [draftBusy, setDraftBusy] = useState(false);
 
@@ -197,22 +199,33 @@ export function StepActionModal({ settlement, step, onClose }: Props) {
   return (
     <Modal onClose={() => { if (!busy) onClose(); }} size={isEsfStep ? "lg" : "md"}>
       <div className="p-5 max-h-[80vh] overflow-y-auto">
-        <div className="mb-1 flex flex-wrap items-baseline justify-between gap-3">
-          <h3 className="text-sm font-semibold text-[var(--color-text-primary)]">
-            {STEP_FULL_LABELS[step.type]}
-          </h3>
-          <span className="text-xs text-[var(--color-text-muted)] min-w-0 text-right">
-            {settlement.counterpartyName}
-            <span className="block">{settlement.contractTitle}</span>
-            <span className="block">Комплект №{settlement.sequence ?? 1}{settlement.label ? ` · ${settlement.label}` : ""}</span>
-          </span>
+        <div className="sticky -top-5 z-10 -mx-5 -mt-5 mb-4 border-b border-[var(--color-border)] bg-[var(--color-bg-surface)] px-5 pb-4 pt-5">
+          <div className="flex flex-wrap items-baseline justify-between gap-3">
+            <h3 className="text-sm font-semibold text-[var(--color-text-primary)]">
+              {STEP_FULL_LABELS[step.type]}
+            </h3>
+            <span className="text-xs text-[var(--color-text-secondary)] min-w-0 text-right">
+              {settlement.counterpartyName}
+              <span className="block">{settlement.contractTitle}</span>
+              <span className="block">Комплект №{settlement.sequence ?? 1}{settlement.label ? ` · ${settlement.label}` : ""}</span>
+            </span>
+          </div>
+          <dl className="mt-3 flex flex-wrap gap-x-8 gap-y-3">
+            <div>
+              <dt className="text-xs text-[var(--color-text-secondary)]">Период расчёта</dt>
+              <dd className="mt-1 text-base font-semibold text-[var(--color-text-primary)]">{periodLabel}</dd>
+            </div>
+            <div>
+              <dt className="text-xs text-[var(--color-text-secondary)]">Сумма расчёта</dt>
+              <dd className="mt-1 text-base tabular-nums text-[var(--color-text-primary)]">
+                {formatMoney(settlement.amount, settlement.currency)}
+                {settlement.dueAmount > 0 && settlement.paidAmount > 0 && (
+                  <span className="block text-xs text-[var(--color-text-secondary)]">Остаток {formatMoney(settlement.dueAmount, settlement.currency)}</span>
+                )}
+              </dd>
+            </div>
+          </dl>
         </div>
-        <p className="text-xs text-[var(--color-text-muted)] mb-4">
-          {formatMoney(settlement.amount, settlement.currency)}
-          {settlement.dueAmount > 0 && settlement.paidAmount > 0 && (
-            <> · остаток {formatMoney(settlement.dueAmount, settlement.currency)}</>
-          )}
-        </p>
 
         {step.documentId && !requiresPdfScan && (
           <Link
@@ -275,7 +288,7 @@ export function StepActionModal({ settlement, step, onClose }: Props) {
                         <p className="text-[var(--color-text-primary)] break-words">ЭСФ № {selectedInvoice.number ?? "—"}</p>
                         <p className="mt-1 text-[var(--color-text-secondary)]">ID ЭСФ на портале: <span className="font-mono break-all select-all text-[var(--color-text-primary)]">{selectedInvoice.uuid}</span></p>
                         <p className="mt-1 text-[var(--color-text-secondary)]">{selectedInvoice.deliveryDate ? new Date(selectedInvoice.deliveryDate).toLocaleDateString("ru-RU") : "Без даты"} · {formatMoney(selectedInvoice.amount, settlement.currency)} · {ESF_STATUS_LABELS[selectedInvoice.status]}</p>
-                        {esfSettlementIds(selectedInvoice).length > 0 && !esfCoversSettlement(selectedInvoice, settlement.id) && <p className="mt-1 text-[var(--color-text-secondary)]">Эта ЭСФ уже покрывает другие расчёты. Текущий месяц будет добавлен к ним.</p>}
+                        {esfSettlementIds(selectedInvoice).length > 0 && !esfCoversSettlement(selectedInvoice, settlement.id) && <p className="mt-1 text-[var(--color-text-secondary)]">Эта ЭСФ уже покрывает другие расчёты. К ней будет добавлен расчёт: {periodLabel}.</p>}
                       </div>
                     )}
                     {esfQuery.isError ? (
@@ -285,7 +298,7 @@ export function StepActionModal({ settlement, step, onClose }: Props) {
                       </div>
                     ) : (
                       <p className="mt-1.5 text-xs text-[var(--color-text-secondary)]">
-                        {selectedInvoice ? "Проверьте примечание, период и сумму: выбранная ЭСФ будет связана с этим расчётом." : !esfQuery.isPending && esfCandidates.length === 0 ? "Нет доступных отправленных или принятых ЭСФ этого партнёра. Синхронизируйте кабинет или добавьте ссылку / скан." : "Показаны отправленные и принятые ЭСФ партнёра, включая привязанные к другим месяцам. Период указан в примечании или связанных расчётах."}
+                        {selectedInvoice ? `Проверьте примечание, период и сумму: выбранная ЭСФ будет связана с расчётом за ${periodLabel}.` : !esfQuery.isPending && esfCandidates.length === 0 ? "Нет доступных отправленных или принятых ЭСФ этого партнёра. Синхронизируйте кабинет или добавьте ссылку / скан." : "Показаны отправленные и принятые ЭСФ партнёра, включая привязанные к другим месяцам. Период ЭСФ указан в примечании или связанных расчётах."}
                       </p>
                     )}
                     {linkedInvoice?.status === "NEW" ? <EsfDraftPanel settlementId={settlement.id} stepNote={step.note} actPdfId={actPdfId} onBusyChange={setDraftBusy} /> : !linkedInvoice && (

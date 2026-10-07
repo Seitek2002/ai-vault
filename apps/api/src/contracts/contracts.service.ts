@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { calculateContractEndDate } from '@ai-vault/doc-placeholders';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { MAX_UPLOAD_SIZE_BYTES, MAX_UPLOAD_SIZE_MB } from '../files/upload-limits';
 import type { CreateContractDto, ListContractsDto, UpdateContractDto } from './dto/contract.dto';
 
 const ATTACHMENT_SELECT = { id: true, originalName: true, size: true } as const;
@@ -270,8 +271,8 @@ export class ContractsService {
     if (file.mimeType !== 'application/pdf') {
       throw new BadRequestException('Вложения договора должны быть в формате PDF');
     }
-    if (file.size <= 0 || file.size > 20 * 1024 * 1024) {
-      throw new BadRequestException('Вложения договора должны быть непустыми PDF размером до 20 МБ');
+    if (file.size <= 0 || file.size > MAX_UPLOAD_SIZE_BYTES) {
+      throw new BadRequestException(`Вложения договора должны быть непустыми PDF размером до ${MAX_UPLOAD_SIZE_MB} МБ`);
     }
   }
 

@@ -6,6 +6,7 @@ import {
 import { ValidationPipe } from '@nestjs/common';
 import multipart from '@fastify/multipart';
 import { AppModule } from './app.module';
+import { MAX_UPLOAD_SIZE_BYTES } from './files/upload-limits';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestFastifyApplication>(
@@ -15,7 +16,7 @@ async function bootstrap() {
 
   // File upload support (must be registered before global prefix)
   await app.register(multipart as Parameters<typeof app.register>[0], {
-    limits: { fileSize: 20 * 1024 * 1024 }, // 20 MB
+    limits: { fileSize: MAX_UPLOAD_SIZE_BYTES },
   });
 
   app.enableCors({

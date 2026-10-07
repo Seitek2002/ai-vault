@@ -4,13 +4,11 @@ import { useState, useRef, useCallback } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, FileText, Check, Plus, X } from "lucide-react";
 import { Button, Input, Spinner, Modal } from "@/components/ui";
-import { uploadFile } from "@/lib/api/files";
+import { MAX_UPLOAD_SIZE_BYTES, MAX_UPLOAD_SIZE_MB, uploadFile } from "@/lib/api/files";
 import { api } from "@/lib/api/client";
 import { counterpartiesApi } from "@/lib/api/counterparties";
 import { DocumentType } from "@ai-vault/types";
 import type { DocumentDto } from "@ai-vault/types";
-
-const MAX_MB = 20;
 
 type Step = "company" | "drop-file" | "processing";
 
@@ -101,9 +99,9 @@ export function ArchiveUploadModal({ onClose, onUploaded }: { onClose: () => voi
         setError("PDF-файл пуст. Выберите скан документа.");
         return;
       }
-      if (f.size > MAX_MB * 1024 * 1024) {
+      if (f.size > MAX_UPLOAD_SIZE_BYTES) {
         setFile(null);
-        setError(`Файл слишком большой. Максимум ${MAX_MB} МБ.`);
+        setError(`Файл слишком большой. Максимум ${MAX_UPLOAD_SIZE_MB} МБ.`);
         return;
       }
       setFile(f);
@@ -293,7 +291,7 @@ export function ArchiveUploadModal({ onClose, onUploaded }: { onClose: () => voi
                   Перетащите файл сюда
                 </p>
                 <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-                  или нажмите для выбора · PDF · до {MAX_MB} МБ
+                  или нажмите для выбора · PDF · до {MAX_UPLOAD_SIZE_MB} МБ
                 </p>
               </div>
               <input

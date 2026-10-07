@@ -7,7 +7,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Handshake, Trash2 } from "lucide-react";
 import { ApiError } from "@/lib/api/client";
 import { contractsApi, type Contract, type ContractFormData, type ContractAttachment } from "@/lib/api/contracts";
-import { openFile, uploadFile } from "@/lib/api/files";
+import { MAX_UPLOAD_SIZE_BYTES, MAX_UPLOAD_SIZE_MB, openFile, uploadFile } from "@/lib/api/files";
 import { counterpartiesApi } from "@/lib/api/counterparties";
 import { formatMoney } from "@/lib/api/settlements";
 import { Button, Card, EmptyState, Input, Modal, PageHeader, Select, Spinner } from "@/components/ui";
@@ -313,8 +313,8 @@ export function ContractModal({ editing, onClose }: { editing: Contract | null; 
                         setError("Выберите непустой файл в формате PDF");
                         return;
                       }
-                      if (selected.size > 20 * 1024 * 1024) {
-                        setError("Размер PDF не должен превышать 20 МБ");
+                      if (selected.size > MAX_UPLOAD_SIZE_BYTES) {
+                        setError(`Размер PDF не должен превышать ${MAX_UPLOAD_SIZE_MB} МБ`);
                         return;
                       }
                       setError("");
@@ -354,8 +354,8 @@ export function ContractModal({ editing, onClose }: { editing: Contract | null; 
                     setError("Выберите непустые файлы в формате PDF");
                     return;
                   }
-                  if (selected.some((file) => file.size > 20 * 1024 * 1024)) {
-                    setError("Размер каждого PDF не должен превышать 20 МБ");
+                  if (selected.some((file) => file.size > MAX_UPLOAD_SIZE_BYTES)) {
+                    setError(`Размер каждого PDF не должен превышать ${MAX_UPLOAD_SIZE_MB} МБ`);
                     return;
                   }
                   setError("");
@@ -379,7 +379,7 @@ export function ContractModal({ editing, onClose }: { editing: Contract | null; 
               </div>
             ))}
           </div>
-          <p className={hintClass}>Необязательно. PDF до 20 МБ каждый. Файлы сохраняются вместе с договором.</p>
+          <p className={hintClass}>Необязательно. PDF до {MAX_UPLOAD_SIZE_MB} МБ каждый. Файлы сохраняются вместе с договором.</p>
         </fieldset>
 
         <label className="flex items-center gap-2 mb-1 cursor-pointer">

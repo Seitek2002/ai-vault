@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { FilesService } from '../files/files.service';
+import { MAX_UPLOAD_SIZE_BYTES, MAX_UPLOAD_SIZE_MB } from '../files/upload-limits';
 import { StorageService } from '../storage/storage.service';
 import type { CreateDocumentDto, UpdateDocumentDto, ListDocumentsDto, ReplaceFileDto } from './dto/document.dto';
 import type { ImportDocumentDto } from './dto/import.dto';
@@ -198,8 +199,8 @@ export class DocumentsService {
       if (fileAsset.mimeType !== 'application/pdf' || fileAsset.size <= 0) {
         throw new BadRequestException('Прикрепите непустой файл PDF');
       }
-      if (fileAsset.size > 20 * 1024 * 1024) {
-        throw new BadRequestException('Максимальный размер PDF — 20 МБ');
+      if (fileAsset.size > MAX_UPLOAD_SIZE_BYTES) {
+        throw new BadRequestException(`Максимальный размер PDF — ${MAX_UPLOAD_SIZE_MB} МБ`);
       }
       if (fileAsset.documentId) {
         const existing = await tx.document.findFirst({

@@ -83,14 +83,23 @@ describe('contract PDF attachments', () => {
     expect(prisma.contract.update).not.toHaveBeenCalled();
   });
 
-  it.each([0, 20 * 1024 * 1024 + 1])('rejects empty or oversized PDF attachments (%i bytes)', async (size) => {
+  it.each([0, 100 * 1024 * 1024 + 1])('rejects empty or oversized PDF attachments (%i bytes)', async (size) => {
     const { prisma, service } = setup();
     prisma.fileAsset.findFirst.mockResolvedValue({ mimeType: 'application/pdf', size });
-    await expect(service.create('org', { ...input, contractPdfId: 'pdf' })).rejects.toThrow('непустыми PDF размером до 20 МБ');
-    await expect(service.update('contract', 'org', { ndaPdfId: 'pdf' })).rejects.toThrow('непустыми PDF размером до 20 МБ');
-    await expect(service.update('contract', 'org', { additionalPdfIds: ['pdf'] })).rejects.toThrow('непустыми PDF размером до 20 МБ');
+    await expect(service.create('org', { ...input, contractPdfId: 'pdf' })).rejects.toThrow('непустыми PDF размером до 100 МБ');
+    await expect(service.update('contract', 'org', { ndaPdfId: 'pdf' })).rejects.toThrow('непустыми PDF размером до 100 МБ');
+    await expect(service.update('contract', 'org', { additionalPdfIds: ['pdf'] })).rejects.toThrow('непустыми PDF размером до 100 МБ');
     expect(prisma.contract.create).not.toHaveBeenCalled();
     expect(prisma.contract.update).not.toHaveBeenCalled();
+  });
+
+  it.each([20 * 1024 * 1024 + 1, 100 * 1024 * 1024])('accepts larger PDFs in every contract slot (%i bytes)', async (size) => {
+    const { prisma, service } = setup();
+    prisma.fileAsset.findFirst.mockResolvedValue({ mimeType: 'application/pdf', size });
+    await service.create('org', { ...input, contractPdfId: 'pdf', ndaPdfId: 'nda', additionalPdfIds: ['extra'] });
+    await service.update('contract', 'org', { contractPdfId: 'pdf', ndaPdfId: 'nda', additionalPdfIds: ['extra'] });
+    expect(prisma.contract.create).toHaveBeenCalledOnce();
+    expect(prisma.contract.update).toHaveBeenCalledOnce();
   });
 
   it('replaces a PDF and explicitly disconnects NDA', async () => {

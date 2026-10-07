@@ -72,16 +72,16 @@ describe('Archive import', () => {
     expect(tx.document.create).not.toHaveBeenCalled();
   });
 
-  it.each([0, -1, 20 * 1024 * 1024 + 1])('rejects invalid size %s', async (size) => {
+  it.each([0, -1, 100 * 1024 * 1024 + 1])('rejects invalid size %s', async (size) => {
     const { asset, tx, run } = fixture();
     asset.size = size;
     await expect(run()).rejects.toBeInstanceOf(BadRequestException);
     expect(tx.document.create).not.toHaveBeenCalled();
   });
 
-  it('accepts a PDF at the 20 MB limit', async () => {
+  it.each([20 * 1024 * 1024 + 1, 100 * 1024 * 1024])('accepts a PDF up to the 100 MB limit (%i bytes)', async (size) => {
     const { asset, run } = fixture();
-    asset.size = 20 * 1024 * 1024;
+    asset.size = size;
     await expect(run()).resolves.toMatchObject({ id: 'archive-1' });
   });
 

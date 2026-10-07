@@ -60,7 +60,7 @@ export function EsfInvoicePicker({ invoices, value, currency, disabled, loading,
       </button>
 
       {open && <div id={`${id}-options`} className="mt-2 overflow-hidden rounded-lg border border-[var(--color-border)]"
-        onKeyDown={(event) => {
+        onKeyDownCapture={(event) => {
           if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setOpen(false); trigger.current?.focus(); }
         }}>
         <div className="border-b border-[var(--color-border)] p-3">

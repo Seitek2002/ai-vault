@@ -3,14 +3,16 @@
 import { useState, type FormEvent } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import { Plus, Search, X, Pencil, Trash2, Building2, Landmark, FileText, Phone, Mail, ChevronDown, Copy, Check, ArrowUpDown } from 'lucide-react';
 import { Button, Input, Modal, EmptyState } from '@/components/ui';
 import { counterpartiesApi, type CounterpartyFormData } from '@/lib/api/counterparties';
 import { contractsApi, type Contract } from '@/lib/api/contracts';
 import { formatMoney } from '@/lib/api/settlements';
-import { ContractModal } from '@/components/contracts/ContractsClient';
 import type { CounterpartyDto } from '@ai-vault/types';
 import { ApiError } from '@/lib/api/client';
+
+const ContractModal = dynamic(() => import('@/components/contracts/ContractsClient').then((m) => m.ContractModal));
 
 const EMPTY_FORM: CounterpartyFormData = {
   name: '',

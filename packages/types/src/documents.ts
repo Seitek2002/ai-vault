@@ -154,6 +154,8 @@ export interface DocumentDto {
   createdById: string;
 }
 
+export type DocumentSummaryDto = Omit<DocumentDto, 'bodyJson'>;
+
 export interface DocumentChangeDto {
   id: string;
   documentId: string;

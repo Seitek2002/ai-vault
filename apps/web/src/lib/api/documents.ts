@@ -1,6 +1,7 @@
 import { api } from './client';
 import type {
   DocumentDto,
+  DocumentSummaryDto,
   PaginatedResponse,
   CreateDocumentRequest,
   UpdateDocumentRequest,
@@ -22,6 +23,9 @@ function uploadContentImage(file: File): Promise<{ url: string }> {
 }
 
 export const documentsApi = {
+  listSummaries: (params: ListDocumentsParams = {}) =>
+    api.get<PaginatedResponse<DocumentSummaryDto>>(`/documents${buildQuery({ ...params, summary: true })}`),
+
   list: (params: ListDocumentsParams = {}) =>
     api.get<PaginatedResponse<DocumentDto>>(`/documents${buildQuery(params as Record<string, unknown>)}`),
 

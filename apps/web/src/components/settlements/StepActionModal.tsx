@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, ExternalLink, FileText, Link2, Paperclip, Trash2 } from "lucide-react";
 import { ApiError } from "@/lib/api/client";
+import { esfInvoicesQuery } from "@/lib/queries/esf";
 import { esfApi, esfCoversSettlement, esfSettlementIds, ESF_STATUS_LABELS, type CreateEsfDraft } from "@/lib/api/esf";
 import { EsfDraftEditor } from './EsfDraftEditor';
 import { SettlementDocumentActions } from './SettlementDocumentActions';
@@ -84,8 +85,7 @@ export function StepActionModal({ settlement, step, onClose }: Props) {
   const [evidenceUrl, setEvidenceUrl] = useState(step.evidenceUrl ?? "");
   const [esfInvoiceId, setEsfInvoiceId] = useState("");
   const esfQuery = useQuery({
-    queryKey: ["esf", "all"],
-    queryFn: () => esfApi.list(),
+    ...esfInvoicesQuery,
     enabled: isEsfStep && !step.doneAt,
   });
   const esfCandidates = (esfQuery.data ?? []).filter((invoice) =>
@@ -492,8 +492,8 @@ function DoneStepFiles({ step, settlementId }: { step: SettlementStep; settlemen
   const [opening, setOpening] = useState(false);
   const [error, setError] = useState("");
   const { data: esf } = useQuery({
-    queryKey: ["esf", "settlement", settlementId],
-    queryFn: () => esfApi.list().then((all) => all.filter((i) => esfCoversSettlement(i, settlementId))),
+    ...esfInvoicesQuery,
+    select: (all) => all.filter((i) => esfCoversSettlement(i, settlementId)),
     enabled: step.type === "ISSUE_ESF",
   });
   const portal = esf?.find((i) => i.fileAssetId === step.fileAssetId) ?? esf?.[0];
@@ -561,8 +561,8 @@ function EsfDraftPanel({ settlementId, stepNote, actPdfId, onBusyChange }: { set
   const qc = useQueryClient();
   const [error, setError] = useState("");
   const { data: esf } = useQuery({
-    queryKey: ["esf", "settlement", settlementId],
-    queryFn: () => esfApi.list().then((all) => all.filter((i) => esfCoversSettlement(i, settlementId))),
+    ...esfInvoicesQuery,
+    select: (all) => all.filter((i) => esfCoversSettlement(i, settlementId)),
   });
   const draft = esf?.[0];
 

@@ -4,6 +4,7 @@ import { useMemo, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ExternalLink, Eye, EyeOff, Link2, Link2Off, Lock } from "lucide-react";
 import { ApiError } from "@/lib/api/client";
+import { esfInvoicesQuery } from "@/lib/queries/esf";
 import { Button, Card, Input } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import { ESF_STATUS_LABELS, esfApi, esfCoversSettlement, type EsfInvoice } from "@/lib/api/esf";
@@ -346,8 +347,8 @@ export function EsfOnSettlement({ settlementId }: { settlementId: string }) {
   const [linkOpen, setLinkOpen] = useState(false);
   const qc = useQueryClient();
   const { data } = useQuery({
-    queryKey: ["esf", "settlement", settlementId],
-    queryFn: () => esfApi.list().then((all) => all.filter((i) => esfCoversSettlement(i, settlementId))),
+    ...esfInvoicesQuery,
+    select: (all) => all.filter((i) => esfCoversSettlement(i, settlementId)),
   });
   const detach = useMutation({
     mutationFn: (id: string) => esfApi.detach(id, settlementId),

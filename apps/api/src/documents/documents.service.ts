@@ -46,6 +46,8 @@ export class DocumentsService {
         skip,
         take: limit,
         orderBy: { updatedAt: 'desc' },
+        // List cards need metadata; load the editor body only on demand.
+        ...(query.summary === 'true' ? { omit: { bodyJson: true } } : {}),
         include: {
           counterparty: true,
           category: true,

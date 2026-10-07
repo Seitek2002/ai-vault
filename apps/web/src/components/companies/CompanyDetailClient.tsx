@@ -9,7 +9,7 @@ import { CompanySettlements } from "@/components/settlements/CompanySettlements"
 import { documentsApi } from "@/lib/api/documents";
 import { DOCUMENT_TEMPLATES } from "@/lib/templates";
 import { DocumentType, DocumentStatus } from "@ai-vault/types";
-import type { DocumentDto, DocumentMetaAvr, DocumentMetaInvoicePayment } from "@ai-vault/types";
+import type { DocumentDto, DocumentSummaryDto, DocumentMetaAvr, DocumentMetaInvoicePayment } from "@ai-vault/types";
 
 // ── Date helpers ───────────────────────────────────────────────────────────────
 
@@ -47,7 +47,7 @@ function replaceDateInBody(bodyJson: unknown, oldDate: Date, newDate: Date): unk
   return JSON.parse(text) as unknown;
 }
 
-function getDocDate(doc: DocumentDto, type: DocumentType): Date | null {
+function getDocDate(doc: DocumentSummaryDto, type: DocumentType): Date | null {
   try {
     if (type === DocumentType.AVR) {
       const dateStr = (doc.meta as DocumentMetaAvr).actDate;
@@ -88,7 +88,7 @@ function MonthlyDocCard({
   onCreated,
 }: {
   type: DocumentType.AVR | DocumentType.INVOICE_PAYMENT;
-  lastDoc: DocumentDto | undefined;
+  lastDoc: DocumentSummaryDto | undefined;
   companyId: string;
   onCreated: (doc: DocumentDto) => void;
 }) {
@@ -98,7 +98,7 @@ function MonthlyDocCard({
   const nextDate = lastDate ? getNextAutoDate(lastDate) : null;
 
   const createMutation = useMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
       if (!lastDoc || !lastDate || !nextDate) {
         return documentsApi.create({
           type,
@@ -109,7 +109,8 @@ function MonthlyDocCard({
         });
       }
 
-      const newBodyJson = replaceDateInBody(lastDoc.bodyJson, lastDate, nextDate);
+      const source = await documentsApi.get(lastDoc.id);
+      const newBodyJson = replaceDateInBody(source.bodyJson, lastDate, nextDate);
       const newMeta = { ...(lastDoc.meta as unknown as Record<string, unknown>) };
       if (type === DocumentType.AVR) {
         newMeta.actDate = nextDate.toISOString().split("T")[0];
@@ -179,7 +180,7 @@ function MonthlyDocCard({
 
 // ── Doc row ────────────────────────────────────────────────────────────────────
 
-function DocRow({ doc }: { doc: DocumentDto }) {
+function DocRow({ doc }: { doc: DocumentSummaryDto }) {
   const router = useRouter();
   const tpl = DOCUMENT_TEMPLATES[doc.type];
   const badgeColor = doc.category?.color ?? tpl.color;
@@ -225,7 +226,7 @@ export function CompanyDetailClient({ companyId }: { companyId: string }) {
 
   const { data: docsData, isLoading: loadingDocs } = useQuery({
     queryKey: ["company-docs", companyId],
-    queryFn: () => documentsApi.list({ counterpartyId: companyId, limit: 100 }),
+    queryFn: () => documentsApi.listSummaries({ counterpartyId: companyId, limit: 100 }),
     enabled: !!companyId,
   });
 

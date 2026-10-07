@@ -8,9 +8,9 @@ import { CompanyFilterDropdown } from "@/components/documents/CompanyFilterDropd
 import { documentsApi } from "@/lib/api/documents";
 import { getOriginalFileUrl, downloadOriginalFile } from "@/lib/api/export";
 import { ArchiveUploadModal } from "./ArchiveUploadModal";
-import type { DocumentDto } from "@ai-vault/types";
+import type { DocumentSummaryDto } from "@ai-vault/types";
 
-function ArchiveCard({ doc, onDeleted }: { doc: DocumentDto; onDeleted: () => void }) {
+function ArchiveCard({ doc, onDeleted }: { doc: DocumentSummaryDto; onDeleted: () => void }) {
   const qc = useQueryClient();
   const [confirming, setConfirming] = useState(false);
   const [opening, setOpening] = useState(false);
@@ -134,7 +134,7 @@ export function ArchiveListClient() {
   const { data, isLoading, isError, isFetching, refetch } = useQuery({
     queryKey: ["documents", "archive", companyFilter, search, page],
     queryFn: () =>
-      documentsApi.list({
+      documentsApi.listSummaries({
         archived: true,
         ...(companyFilter ? { counterpartyId: companyFilter } : {}),
         ...(search ? { search } : {}),

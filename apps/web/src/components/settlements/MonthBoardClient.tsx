@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarDays, ChevronLeft, ChevronRight, RefreshCw, Plus } from "lucide-react";
 import { ApiError } from "@/lib/api/client";
@@ -20,10 +21,11 @@ import {
 import { esfApi } from "@/lib/api/esf";
 import { settingsApi } from "@/lib/api/settings";
 import { EsfInbox } from "./EsfInbox";
-import { StepActionModal } from "./StepActionModal";
 import { StepCell, StepChip } from "./StepBadge";
 import { AmountEditor } from "./AmountEditor";
-import { AddSettlementModal } from "./AddSettlementModal";
+
+const StepActionModal = dynamic(() => import('./StepActionModal').then((m) => m.StepActionModal));
+const AddSettlementModal = dynamic(() => import('./AddSettlementModal').then((m) => m.AddSettlementModal));
 
 const STATUS_META: Record<Settlement["status"], { label: string; className: string }> = {
   closed: { label: "Закрыт", className: "bg-[rgba(74,222,128,0.12)] text-[#4ADE80]" },

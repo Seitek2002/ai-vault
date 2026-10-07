@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { esfInvoicesQuery } from "@/lib/queries/esf";
 import { X } from "lucide-react";
 import { parseMoneyInput } from "@ai-vault/doc-placeholders";
 import { Button, Input, Modal, Spinner } from "@/components/ui";
@@ -32,7 +33,7 @@ export function EsfLinkModal({ inv, onClose }: { inv: EsfInvoice; onClose: () =>
     queryKey: ["settlements", "by-counterparty", contract?.counterpartyId],
     queryFn: () => settlementsApi.byCounterparty(contract!.counterpartyId), enabled: !!contract,
   });
-  const invoicesQuery = useQuery({ queryKey: ["esf", "link-targets"], queryFn: () => esfApi.list() });
+  const invoicesQuery = useQuery(esfInvoicesQuery);
   const taken = new Map((invoicesQuery.data ?? []).filter((i) => i.id !== inv.id)
     .flatMap((i) => esfSettlementIds(i).map((id) => [id, i.number ?? "без номера"] as const)));
   const loading = contractsQuery.isPending || (!!contract && setsQuery.isPending) || invoicesQuery.isPending;

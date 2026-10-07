@@ -22,7 +22,7 @@ import { DOCUMENT_TEMPLATES, DOCUMENT_TYPE_LIST } from "@/lib/templates";
 import { substituteVariables, extractManualVariables } from "@/lib/placeholders";
 import { documentCategoriesApi } from "@/lib/api/documentCategories";
 import { DocumentType, DocumentStatus } from "@ai-vault/types";
-import type { DocumentDto } from "@ai-vault/types";
+import type { DocumentSummaryDto } from "@ai-vault/types";
 
 // ─── Status label map ──────────────────────────────────────────────────────────
 const STATUS_LABELS: Record<DocumentStatus, string> = {
@@ -403,7 +403,7 @@ function CreateDocumentModal({ onClose }: { onClose: () => void }) {
 }
 
 // ─── Document card ─────────────────────────────────────────────────────────────
-function DocCard({ doc }: { doc: DocumentDto }) {
+function DocCard({ doc }: { doc: DocumentSummaryDto }) {
   const router = useRouter();
   const qc = useQueryClient();
   const [confirming, setConfirming] = useState(false);
@@ -501,7 +501,7 @@ export function DocumentsListClient() {
   const { data, isLoading } = useQuery({
     queryKey: ["documents", typeFilter, categoryFilter, statusFilter, search, companyFilter],
     queryFn: () =>
-      documentsApi.list({
+      documentsApi.listSummaries({
         ...(typeFilter ? { type: typeFilter } : {}),
         ...(categoryFilter ? { categoryId: categoryFilter } : {}),
         ...(statusFilter ? { status: statusFilter } : {}),

@@ -75,6 +75,10 @@ export class ReplaceFileDto {
 
 export class ListDocumentsDto {
   @IsOptional()
+  @IsBooleanString()
+  summary?: string;
+
+  @IsOptional()
   @IsEnum(DocumentType)
   type?: DocumentType;
 

@@ -48,7 +48,11 @@ export function EsfDraftEditor({ settlementId, actPdfId, creating, error, onCrea
         <h4 className="text-base font-semibold text-[var(--color-text-primary)]">Услуги за {preview.period}</h4>
         <Button type="button" variant="ghost" size="sm" disabled={busy} onClick={() => load.mutate()}>Загрузить заново</Button>
       </div>
-      <p className="text-[var(--color-text-secondary)] break-words">Образец: ЭСФ № {preview.sourceNumber ?? 'без номера'}. Единицы, ГКЭД и налоговые ставки сохранены из образца.</p>
+      <div className="space-y-1">
+        <p className="text-[var(--color-text-primary)] break-words">Образец: {preview.sourceNumber ? `ЭСФ № ${preview.sourceNumber}` : 'ЭСФ без номера'}</p>
+        <p className="text-[var(--color-text-secondary)]">ID ЭСФ на портале: <span className="font-mono break-all select-all text-[var(--color-text-primary)]">{preview.sourceUuid}</span></p>
+        <p className="text-[var(--color-text-secondary)]">Единицы, ГКЭД и налоговые ставки сохранены из образца.</p>
+      </div>
       <fieldset disabled={busy} className="min-w-0 divide-y divide-[var(--color-border)]">
         <legend className="sr-only">Строки услуг ЭСФ</legend>
         {edited.map((line, index) => <div key={index} className="min-w-0 py-4 first:pt-0">

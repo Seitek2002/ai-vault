@@ -281,6 +281,7 @@ export function StepActionModal({ settlement, step, onClose }: Props) {
                     {selectedInvoice && (
                       <div className="mt-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elevated)] px-3 py-2 text-xs">
                         <p className="text-[var(--color-text-primary)] break-words">ЭСФ № {selectedInvoice.number ?? "—"}</p>
+                        <p className="mt-1 text-[var(--color-text-secondary)]">ID ЭСФ на портале: <span className="font-mono break-all select-all text-[var(--color-text-primary)]">{selectedInvoice.uuid}</span></p>
                         <p className="mt-1 text-[var(--color-text-secondary)]">{selectedInvoice.deliveryDate ? new Date(selectedInvoice.deliveryDate).toLocaleDateString("ru-RU") : "Без даты"} · {formatMoney(selectedInvoice.amount, settlement.currency)} · {ESF_STATUS_LABELS[selectedInvoice.status]}</p>
                         {esfSettlementIds(selectedInvoice).length > 0 && !esfCoversSettlement(selectedInvoice, settlement.id) && <p className="mt-1 text-[var(--color-text-secondary)]">Эта ЭСФ уже покрывает другие расчёты. Текущий месяц будет добавлен к ним.</p>}
                       </div>
@@ -530,6 +531,8 @@ function DoneStepFiles({ step, settlementId }: { step: SettlementStep; settlemen
         </a>
       )}
       {portal && <div className="w-full text-xs text-[var(--color-text-secondary)]">
+        <p className="text-[var(--color-text-primary)] break-words">{portal.number ? `ЭСФ № ${portal.number}` : "ЭСФ без номера"}</p>
+        <p className="mt-1">ID ЭСФ на портале: <span className="font-mono break-all select-all text-[var(--color-text-primary)]">{portal.uuid}</span></p>
         {(portal.settlements?.length ?? 0) > 1 && <p>Эта ЭСФ покрывает {portal.settlements!.map((s) => `${s.month.toString().padStart(2, "0")}.${s.year}`).join(", ")}.</p>}
         <Link href={`/settlements/${settlementId}`} className="inline-block py-1 text-[var(--color-accent)] hover:underline">Изменить месяцы в карточке расчёта</Link>
       </div>}
@@ -580,6 +583,8 @@ function EsfDraftPanel({ settlementId, stepNote, actPdfId, onBusyChange }: { set
             <span className="text-xs text-[#FBBF24] ml-2">ждёт подписи</span>
           )}
         </p>
+        <p className="mt-1 text-xs text-[var(--color-text-secondary)]">ID ЭСФ на портале: <span className="font-mono break-all select-all text-[var(--color-text-primary)]">{draft.uuid}</span></p>
+        {draft.crmRef && <p className="mt-1 text-xs text-[var(--color-text-secondary)]">Номер учётной системы: <span className="break-all select-all text-[var(--color-text-primary)]">{draft.crmRef}</span></p>}
         <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
           {draft.status === "NEW"
             ? "Откройте портал, проверьте и нажмите «Подписать» — после этого шаг закроется сам при синхронизации."

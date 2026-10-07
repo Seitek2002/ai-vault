@@ -6,6 +6,9 @@ import Link from 'next/link';
 import { Plus, Search, X, Pencil, Trash2, Building2, Phone, Mail, ChevronDown, Copy, Check, ArrowUpDown } from 'lucide-react';
 import { Button, Input, Modal, EmptyState } from '@/components/ui';
 import { counterpartiesApi, type CounterpartyFormData } from '@/lib/api/counterparties';
+import { contractsApi, type Contract } from '@/lib/api/contracts';
+import { formatMoney } from '@/lib/api/settlements';
+import { ContractModal } from '@/components/contracts/ContractsClient';
 import type { CounterpartyDto } from '@ai-vault/types';
 import { ApiError } from '@/lib/api/client';
 
@@ -226,14 +229,30 @@ function CompanyModal({ editing, onClose, onSaved }: ModalProps) {
 
 interface CompanyRowProps {
   cp: CounterpartyDto;
+  contracts: Contract[];
+  contractsLoading: boolean;
+  contractsError: boolean;
+  onRetryContracts: () => void;
+  onOpenContract: (contract: Contract) => void;
   onEdit: (cp: CounterpartyDto) => void;
   onDelete: (cp: CounterpartyDto) => void;
 }
 
-function CompanyRow({ cp, onEdit, onDelete }: CompanyRowProps) {
+const contractDate = new Intl.DateTimeFormat('ru-RU', { timeZone: 'UTC' });
+
+function contractPeriod(contract: Contract): string {
+  const start = contract.startDate ? `С ${contractDate.format(new Date(contract.startDate))}` : 'Начало не указано';
+  const end = contract.endDate ? `до ${contractDate.format(new Date(contract.endDate))}` : 'без срока окончания';
+  return `${start} · ${end}`;
+}
+
+function CompanyRow({ cp, contracts, contractsLoading, contractsError, onRetryContracts, onOpenContract, onEdit, onDelete }: CompanyRowProps) {
   const [expanded, setExpanded] = useState(false);
+  const [contractsExpanded, setContractsExpanded] = useState(false);
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'error'>('idle');
   const detailsId = `company-details-${cp.id}`;
+  const contractsId = `company-contracts-${cp.id}`;
+  const contractsHeadingId = `${contractsId}-heading`;
   const details = [
     ['ИНН', cp.inn], ['ОКПО', cp.bin], ['Юридический адрес', cp.address],
     ['Банк', cp.bankName], ['Расчётный счёт', cp.bankAccount], ['БИК', cp.bankBik],
@@ -259,6 +278,13 @@ function CompanyRow({ cp, onEdit, onDelete }: CompanyRowProps) {
             {cp.inn ? <span>ИНН <span className="text-[var(--color-text-primary)]">{cp.inn}</span></span> : <span>ИНН не указан</span>}
             {cp.bin && <span>ОКПО {cp.bin}</span>}
           </div>
+          <Button type="button" size="sm" variant="ghost" className="mt-2 min-h-10 px-2 -ml-2"
+            aria-label={`Действующие договоры ${cp.name}`} aria-expanded={contractsExpanded} aria-controls={contractsId}
+            onClick={() => setContractsExpanded(!contractsExpanded)}>
+            Действующие договоры
+            {!contractsLoading && !contractsError && <span className="tabular-nums text-[var(--color-text-primary)]">({contracts.length})</span>}
+            <ChevronDown className={`w-4 h-4 shrink-0 transition-transform motion-reduce:transition-none ${contractsExpanded ? 'rotate-180' : ''}`} aria-hidden="true" />
+          </Button>
         </div>
 
         <div className="flex min-w-0 flex-col gap-2 text-sm text-[var(--color-text-secondary)]">
@@ -283,6 +309,34 @@ function CompanyRow({ cp, onEdit, onDelete }: CompanyRowProps) {
             className="flex h-10 w-10 items-center justify-center rounded-lg text-[var(--color-text-secondary)] hover:text-[var(--color-danger)] hover:bg-[var(--color-bg-elevated)] transition-colors">
             <Trash2 className="w-4 h-4" aria-hidden="true" />
           </button>
+        </div>
+      </div>
+
+      <div id={contractsId} role="region" aria-labelledby={contractsHeadingId} hidden={!contractsExpanded} className="px-4 pb-5 sm:px-5">
+        <div className="border-t border-[var(--color-border)] pt-4">
+          <h3 id={contractsHeadingId} className="mb-3 text-sm font-semibold">Действующие договоры</h3>
+          {contractsLoading ? <p role="status" className="text-sm text-[var(--color-text-secondary)]">Загрузка договоров…</p>
+            : contractsError ? <div role="alert" className="flex flex-wrap items-center gap-3">
+              <p className="text-sm text-[var(--color-danger)]">Не удалось загрузить договоры.</p>
+              <Button type="button" size="sm" variant="secondary" className="min-h-10" onClick={onRetryContracts}>Повторить загрузку</Button>
+            </div>
+            : contracts.length === 0 ? <p className="text-sm text-[var(--color-text-secondary)]">У компании нет действующих договоров.</p>
+            : <ul className="divide-y divide-[var(--color-border)]">
+              {contracts.map((contract) => <li key={contract.id} className="grid grid-cols-1 gap-3 py-3 first:pt-0 last:pb-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+                <div className="min-w-0">
+                  <p className="text-sm sm:text-base font-medium text-[var(--color-text-primary)] [overflow-wrap:anywhere]">№ {contract.number} · {contract.title}</p>
+                  <p className="mt-1 text-sm text-[var(--color-text-secondary)] tabular-nums [overflow-wrap:anywhere]">{contractPeriod(contract)}</p>
+                </div>
+                <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 sm:justify-end sm:gap-5">
+                  <div className="min-w-0 text-sm sm:text-right">
+                    <p className="font-medium tabular-nums text-[var(--color-text-primary)] [overflow-wrap:anywhere]">{formatMoney(contract.defaultAmount, contract.currency)}</p>
+                    <p className="text-xs text-[var(--color-text-secondary)]">в месяц</p>
+                  </div>
+                  <Button type="button" size="sm" variant="secondary" className="min-h-10 shrink-0"
+                    aria-label={`Открыть договор № ${contract.number} ${contract.title}`} onClick={() => onOpenContract(contract)}>Открыть</Button>
+                </div>
+              </li>)}
+            </ul>}
         </div>
       </div>
 
@@ -359,11 +413,23 @@ export function CompaniesClient() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<CounterpartyDto | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<CounterpartyDto | null>(null);
+  const [contractTarget, setContractTarget] = useState<Contract | null>(null);
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['companies'],
     queryFn: () => counterpartiesApi.list(),
   });
+  const contractsQuery = useQuery({
+    queryKey: ['contracts'],
+    queryFn: () => contractsApi.list(),
+  });
+  const contractsByCompany = new Map<string, Contract[]>();
+  for (const contract of contractsQuery.data ?? []) {
+    if (!contract.active) continue;
+    const companyContracts = contractsByCompany.get(contract.counterpartyId) ?? [];
+    companyContracts.push(contract);
+    contractsByCompany.set(contract.counterpartyId, companyContracts);
+  }
   const query = search.trim().toLocaleLowerCase('ru');
   const compactQuery = query.replace(/[\s()-]/g, '');
   const companies = (data ?? []).filter((cp) => {
@@ -417,7 +483,10 @@ export function CompaniesClient() {
             <span>Компания / ИНН</span><span>Контакты</span><span className="w-72 text-right">Действия</span>
           </div>
           <ul aria-label="Компании и партнёры">
-            {companies.map((cp) => <CompanyRow key={cp.id} cp={cp} onEdit={setEditTarget} onDelete={setDeleteTarget} />)}
+            {companies.map((cp) => <CompanyRow key={cp.id} cp={cp} contracts={contractsByCompany.get(cp.id) ?? []}
+              contractsLoading={contractsQuery.isPending} contractsError={contractsQuery.isError}
+              onRetryContracts={() => void contractsQuery.refetch()} onOpenContract={setContractTarget}
+              onEdit={setEditTarget} onDelete={setDeleteTarget} />)}
           </ul>
         </div>}
       </div>
@@ -426,6 +495,7 @@ export function CompaniesClient() {
         onClose={() => { setCreateOpen(false); setEditTarget(null); }}
         onSaved={() => { setCreateOpen(false); setEditTarget(null); }} />}
       {deleteTarget && <DeleteModal cp={deleteTarget} onClose={() => setDeleteTarget(null)} onDeleted={() => setDeleteTarget(null)} />}
+      {contractTarget && <ContractModal key={contractTarget.id} editing={contractTarget} onClose={() => setContractTarget(null)} />}
     </div>
   );
 }

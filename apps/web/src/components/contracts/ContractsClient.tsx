@@ -59,7 +59,7 @@ function toForm(c: Contract): ContractFormData {
   };
 }
 
-function ContractModal({ editing, onClose }: { editing: Contract | null; onClose: () => void }) {
+export function ContractModal({ editing, onClose }: { editing: Contract | null; onClose: () => void }) {
   const qc = useQueryClient();
   const [form, setForm] = useState<ContractFormData>(editing ? toForm(editing) : EMPTY);
   const [amount, setAmount] = useState(String(editing?.defaultAmount ?? 0));

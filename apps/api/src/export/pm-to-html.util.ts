@@ -92,13 +92,13 @@ function nodeToHtml(node: PmNode): string {
     case 'tableHeader': {
       const thColspan = node.attrs?.colspan as number | undefined;
       const thAttr = thColspan && thColspan > 1 ? ` colspan="${thColspan}"` : '';
-      return `<th${thAttr}>${children()}</th>`;
+      return `<th${thAttr}${cellWidthStyle(node)}>${children()}</th>`;
     }
 
     case 'tableCell': {
       const tdColspan = node.attrs?.colspan as number | undefined;
       const tdAttr = tdColspan && tdColspan > 1 ? ` colspan="${tdColspan}"` : '';
-      return `<td${tdAttr}>${children()}</td>`;
+      return `<td${tdAttr}${cellWidthStyle(node)}>${children()}</td>`;
     }
 
     case 'blockquote':
@@ -122,6 +122,13 @@ function nodeToHtml(node: PmNode): string {
     default:
       return children();
   }
+}
+
+/** ProseMirror stores resized column widths in pixels, one entry per spanned column. */
+function cellWidthStyle(node: PmNode): string {
+  const widths = node.attrs?.colwidth;
+  if (!Array.isArray(widths) || !widths.length || !widths.every(w => typeof w === 'number' && Number.isFinite(w) && w > 0)) return '';
+  return ` style="width:${widths.reduce((sum, w) => sum + w, 0)}px"`;
 }
 
 const PAGE_CSS = `

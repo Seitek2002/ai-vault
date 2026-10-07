@@ -28,6 +28,12 @@ type DocxBlock = Paragraph | Table;
 type DocxImageType = 'jpg' | 'png' | 'gif' | 'bmp';
 type ImageCache = Map<string, { data: Buffer; type: DocxImageType } | null>;
 
+function cellWidth(node: PmNode): number {
+  const widths = node.attrs?.colwidth;
+  return Array.isArray(widths) && widths.length && widths.every(w => typeof w === 'number' && Number.isFinite(w) && w > 0)
+    ? widths.reduce((sum, w) => sum + w, 0) : 0;
+}
+
 // ─── Images ───────────────────────────────────────────────────────────────────
 
 function docxImageType(url: string): DocxImageType | null {
@@ -197,12 +203,15 @@ function nodeToBlocks(node: PmNode, images: ImageCache): DocxBlock[] {
         ? { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' }
         : { style: BorderStyle.SINGLE, size: 1, color: '333333' };
       const rows = (node.content ?? []).map(
-        (row) =>
-          new TableRow({
+        (row) => {
+          const widths = (row.content ?? []).map(cellWidth);
+          const totalWidth = widths.every(w => w > 0) ? widths.reduce((sum, w) => sum + w, 0) : 0;
+          return new TableRow({
             children: (row.content ?? []).map(
-              (cell) =>
+              (cell, index) =>
                 new TableCell({
                   children: (cell.content ?? []).flatMap((n) => nodeToBlocks(n, images)) as Paragraph[],
+                  ...(totalWidth ? { width: { size: widths[index]! / totalWidth * 100, type: WidthType.PERCENTAGE } } : {}),
                   borders: {
                     top: borderDef, bottom: borderDef, left: borderDef, right: borderDef,
                   },
@@ -211,7 +220,8 @@ function nodeToBlocks(node: PmNode, images: ImageCache): DocxBlock[] {
                     : {}),
                 }),
             ),
-          }),
+          });
+        },
       );
       return [
         new Table({

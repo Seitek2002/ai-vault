@@ -2,7 +2,10 @@
 const text = (value: string) => ({ type: 'text', text: value });
 const paragraph = (value: string) => ({ type: 'paragraph', content: [text(value)] });
 const heading = (value: string) => ({ type: 'heading', attrs: { level: 1, textAlign: 'center' }, content: [text(value)] });
-const cell = (value: string, header = false) => ({ type: header ? 'tableHeader' : 'tableCell', content: [paragraph(value)] });
+const cell = (value: string, width: number, header = false) => ({
+  type: header ? 'tableHeader' : 'tableCell', attrs: { colwidth: [width] }, content: [paragraph(value)],
+});
+const serviceWidths = [32, 312, 64, 48, 112, 112];
 const party = (label: string, prefix: 'org' | 'company') => [
   paragraph(label + ': {{' + prefix + '.name}}'),
   paragraph('ИНН: {{' + prefix + '.inn}} · ОКПО: {{' + prefix + '.bin}}'),
@@ -11,8 +14,8 @@ const party = (label: string, prefix: 'org' | 'company') => [
   paragraph('Расчётный счёт: {{' + prefix + '.bankAccount}} · БИК: {{' + prefix + '.bankBik}}'),
 ];
 const services = () => ({ type: 'table', content: [
-  { type: 'tableRow', content: ['№', 'Наименование услуги', 'Кол-во', 'Ед.', 'Цена', 'Сумма'].map(v => cell(v, true)) },
-  { type: 'tableRow', content: ['1', '{{doc.service}}', '1', 'усл.', '{{doc.amount}}', '{{doc.amount}}'].map(v => cell(v)) },
+  { type: 'tableRow', content: ['№', 'Наименование услуги', 'Кол-во', 'Ед.', 'Цена', 'Сумма'].map((v, i) => cell(v, serviceWidths[i]!, true)) },
+  { type: 'tableRow', content: ['1', '{{doc.service}}', '1', 'усл.', '{{doc.amount}}', '{{doc.amount}}'].map((v, i) => cell(v, serviceWidths[i]!)) },
 ] });
 const totals = () => [
   paragraph('Итого: {{doc.amount}} {{doc.currency}}'),

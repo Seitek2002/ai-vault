@@ -44,15 +44,20 @@ export class ExportService {
       executablePath: chromePath,
       args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
       headless: true,
+      // Cold Chromium startup on the production host can exceed Puppeteer's 30 s default.
+      timeout: 90000,
+      protocolTimeout: 90000,
+      pipe: true,
     });
 
     try {
       const page = await browser.newPage();
-      await page.setContent(html, { waitUntil: 'load' });
+      await page.setContent(html, { waitUntil: 'load', timeout: 60000 });
       const pdf = await page.pdf({
         format: 'A4',
         margin: { top: '1.5cm', right: '1.5cm', bottom: '1.5cm', left: '1.5cm' },
         printBackground: true,
+        timeout: 60000,
       });
       return { buffer: Buffer.from(pdf), filename: doc.title };
     } finally {

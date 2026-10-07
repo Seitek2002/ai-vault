@@ -8,9 +8,9 @@ import { ApiError } from "@/lib/api/client";
 import { esfApi, esfCoversSettlement, esfSettlementIds, ESF_STATUS_LABELS, type CreateEsfDraft } from "@/lib/api/esf";
 import { EsfDraftEditor } from './EsfDraftEditor';
 import { SettlementDocumentActions } from './SettlementDocumentActions';
+import { EsfInvoicePicker } from './EsfInvoicePicker';
 import { openFile, uploadFile } from "@/lib/api/files";
 import { Button, Input, Modal } from "@/components/ui";
-import { fieldClassName } from "@/components/ui/Input";
 import {
   formatMoney,
   settlementsApi,
@@ -267,17 +267,9 @@ export function StepActionModal({ settlement, step, onClose }: Props) {
 
                 {esfMode === "portal" && (
                   <div className="mb-4">
-                    <label className="block">
-                      <span className={labelClass}>ЭСФ партнёра из кабинета</span>
-                      <select className={fieldClassName} required disabled={busy || esfQuery.isPending || esfQuery.isError} value={selectedInvoiceId} onChange={(e) => { setEsfInvoiceId(e.target.value); setError(""); }}>
-                        <option value="">{esfQuery.isPending ? "Загружаю ЭСФ…" : "Выберите ЭСФ"}</option>
-                        {esfCandidates.map((invoice) => (
-                          <option key={invoice.id} value={invoice.id}>
-                            № {invoice.number ?? "—"} · {invoice.deliveryDate ? new Date(invoice.deliveryDate).toLocaleDateString("ru-RU") : "без даты"} · {formatMoney(invoice.amount, settlement.currency)} · {ESF_STATUS_LABELS[invoice.status]}{esfSettlementIds(invoice).length ? ` · уже в расчётах: ${esfSettlementIds(invoice).length}` : ""}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
+                    <EsfInvoicePicker invoices={esfCandidates} value={selectedInvoiceId} currency={settlement.currency}
+                      loading={esfQuery.isPending} disabled={busy || esfQuery.isPending || esfQuery.isError}
+                      onChange={(id) => { setEsfInvoiceId(id); setError(""); }} />
                     {selectedInvoice && (
                       <div className="mt-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elevated)] px-3 py-2 text-xs">
                         <p className="text-[var(--color-text-primary)] break-words">ЭСФ № {selectedInvoice.number ?? "—"}</p>
@@ -293,7 +285,7 @@ export function StepActionModal({ settlement, step, onClose }: Props) {
                       </div>
                     ) : (
                       <p className="mt-1.5 text-xs text-[var(--color-text-secondary)]">
-                        {selectedInvoice ? "Проверьте дату и сумму: выбранная ЭСФ будет связана с этим расчётом." : !esfQuery.isPending && esfCandidates.length === 0 ? "Нет доступных отправленных или принятых ЭСФ этого партнёра. Синхронизируйте кабинет или добавьте ссылку / скан." : "Показаны отправленные и принятые ЭСФ этого партнёра, свободные или связанные с этим расчётом."}
+                        {selectedInvoice ? "Проверьте примечание, период и сумму: выбранная ЭСФ будет связана с этим расчётом." : !esfQuery.isPending && esfCandidates.length === 0 ? "Нет доступных отправленных или принятых ЭСФ этого партнёра. Синхронизируйте кабинет или добавьте ссылку / скан." : "Показаны отправленные и принятые ЭСФ партнёра, включая привязанные к другим месяцам. Период указан в примечании или связанных расчётах."}
                       </p>
                     )}
                     {linkedInvoice?.status === "NEW" ? <EsfDraftPanel settlementId={settlement.id} stepNote={step.note} actPdfId={actPdfId} onBusyChange={setDraftBusy} /> : !linkedInvoice && (

@@ -3,7 +3,7 @@
 import { useState, type FormEvent } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
-import { Plus, Search, X, Pencil, Trash2, Building2, Phone, Mail, ChevronDown, Copy, Check, ArrowUpDown } from 'lucide-react';
+import { Plus, Search, X, Pencil, Trash2, Building2, FileText, Phone, Mail, ChevronDown, Copy, Check, ArrowUpDown } from 'lucide-react';
 import { Button, Input, Modal, EmptyState } from '@/components/ui';
 import { counterpartiesApi, type CounterpartyFormData } from '@/lib/api/counterparties';
 import { contractsApi, type Contract } from '@/lib/api/contracts';
@@ -269,22 +269,23 @@ function CompanyRow({ cp, contracts, contractsLoading, contractsError, onRetryCo
 
   return (
     <li className="group border-b border-[var(--color-border)] last:border-b-0">
-      <div className="grid grid-cols-1 gap-4 p-4 sm:p-5 md:grid-cols-[minmax(0,1fr)_minmax(0,0.7fr)] xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.7fr)_auto] xl:items-center transition-colors hover:bg-[var(--color-bg-elevated)]/40">
+      <div className="grid grid-cols-1 gap-3 px-4 py-3 sm:px-5 md:grid-cols-[minmax(0,1fr)_minmax(0,0.7fr)] xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.7fr)_auto] xl:items-center transition-colors hover:bg-[var(--color-bg-elevated)]/40">
         <div className="min-w-0">
           <Link href={`/companies/${cp.id}`} className="inline-block text-sm sm:text-base font-semibold leading-snug text-[var(--color-text-primary)] hover:text-[var(--color-accent)] underline-offset-4 hover:underline [overflow-wrap:anywhere]">
             {cp.name}
           </Link>
-          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[var(--color-text-secondary)] tabular-nums">
+          <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[var(--color-text-secondary)] tabular-nums">
             {cp.inn ? <span>ИНН <span className="text-[var(--color-text-primary)]">{cp.inn}</span></span> : <span>ИНН не указан</span>}
             {cp.bin && <span>ОКПО {cp.bin}</span>}
+            <Button type="button" size="sm" variant="ghost" className="min-h-10 px-2 text-xs"
+              title="Действующие договоры" aria-label={`Действующие договоры ${cp.name}`} aria-expanded={contractsExpanded} aria-controls={contractsId}
+              onClick={() => setContractsExpanded(!contractsExpanded)}>
+              <FileText className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+              Договоры
+              {!contractsLoading && !contractsError && <span className="tabular-nums text-[var(--color-text-primary)]">({contracts.length})</span>}
+              <ChevronDown className={`w-4 h-4 shrink-0 transition-transform motion-reduce:transition-none ${contractsExpanded ? 'rotate-180' : ''}`} aria-hidden="true" />
+            </Button>
           </div>
-          <Button type="button" size="sm" variant="ghost" className="mt-2 min-h-10 px-2 -ml-2"
-            aria-label={`Действующие договоры ${cp.name}`} aria-expanded={contractsExpanded} aria-controls={contractsId}
-            onClick={() => setContractsExpanded(!contractsExpanded)}>
-            Действующие договоры
-            {!contractsLoading && !contractsError && <span className="tabular-nums text-[var(--color-text-primary)]">({contracts.length})</span>}
-            <ChevronDown className={`w-4 h-4 shrink-0 transition-transform motion-reduce:transition-none ${contractsExpanded ? 'rotate-180' : ''}`} aria-hidden="true" />
-          </Button>
         </div>
 
         <div className="flex min-w-0 flex-col gap-2 text-sm text-[var(--color-text-secondary)]">
@@ -312,27 +313,33 @@ function CompanyRow({ cp, contracts, contractsLoading, contractsError, onRetryCo
         </div>
       </div>
 
-      <div id={contractsId} role="region" aria-labelledby={contractsHeadingId} hidden={!contractsExpanded} className="px-4 pb-5 sm:px-5">
-        <div className="border-t border-[var(--color-border)] pt-4">
-          <h3 id={contractsHeadingId} className="mb-3 text-sm font-semibold">Действующие договоры</h3>
-          {contractsLoading ? <p role="status" className="text-sm text-[var(--color-text-secondary)]">Загрузка договоров…</p>
-            : contractsError ? <div role="alert" className="flex flex-wrap items-center gap-3">
+      <div id={contractsId} role="region" aria-labelledby={contractsHeadingId} hidden={!contractsExpanded} className="px-4 pb-3 sm:px-5">
+        <div className="border-t border-[var(--color-border)] bg-[var(--color-bg-base)] px-3">
+          <h3 id={contractsHeadingId} className="sr-only">Действующие договоры {cp.name}</h3>
+          {contractsLoading ? <p role="status" className="py-3 text-sm text-[var(--color-text-secondary)]">Загрузка договоров…</p>
+            : contractsError ? <div role="alert" className="flex flex-wrap items-center gap-3 py-3">
               <p className="text-sm text-[var(--color-danger)]">Не удалось загрузить договоры.</p>
               <Button type="button" size="sm" variant="secondary" className="min-h-10" onClick={onRetryContracts}>Повторить загрузку</Button>
             </div>
-            : contracts.length === 0 ? <p className="text-sm text-[var(--color-text-secondary)]">У компании нет действующих договоров.</p>
+            : contracts.length === 0 ? <p className="py-3 text-sm text-[var(--color-text-secondary)]">У компании нет действующих договоров.</p>
             : <ul className="divide-y divide-[var(--color-border)]">
-              {contracts.map((contract) => <li key={contract.id} className="grid grid-cols-1 gap-3 py-3 first:pt-0 last:pb-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
-                <div className="min-w-0">
-                  <p className="text-sm sm:text-base font-medium text-[var(--color-text-primary)] [overflow-wrap:anywhere]">№ {contract.number} · {contract.title}</p>
-                  <p className="mt-1 text-sm text-[var(--color-text-secondary)] tabular-nums [overflow-wrap:anywhere]">{contractPeriod(contract)}</p>
-                </div>
-                <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 sm:justify-end sm:gap-5">
-                  <div className="min-w-0 text-sm sm:text-right">
-                    <p className="font-medium tabular-nums text-[var(--color-text-primary)] [overflow-wrap:anywhere]">{formatMoney(contract.defaultAmount, contract.currency)}</p>
-                    <p className="text-xs text-[var(--color-text-secondary)]">в месяц</p>
+              {contracts.map((contract) => <li key={contract.id} className="grid grid-cols-1 gap-2 py-2.5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+                <div className="flex min-w-0 items-start gap-2.5">
+                  <FileText className="mt-0.5 h-4 w-4 shrink-0 text-[var(--color-text-secondary)]" aria-hidden="true" />
+                  <div className="min-w-0">
+                    <p className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-sm text-[var(--color-text-primary)] [overflow-wrap:anywhere]">
+                      <span className="text-xs font-medium tabular-nums text-[var(--color-accent)]">№ {contract.number}</span>
+                      <span className="font-medium">{contract.title}</span>
+                    </p>
+                    <p className="mt-0.5 text-xs text-[var(--color-text-secondary)] tabular-nums [overflow-wrap:anywhere]">{contractPeriod(contract)}</p>
                   </div>
-                  <Button type="button" size="sm" variant="secondary" className="min-h-10 shrink-0"
+                </div>
+                <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 pl-[26px] sm:justify-end sm:gap-4 sm:pl-0">
+                  <div className="flex min-w-0 flex-wrap items-baseline gap-x-1.5 text-sm">
+                    <span className="font-medium tabular-nums text-[var(--color-text-primary)] [overflow-wrap:anywhere]">{formatMoney(contract.defaultAmount, contract.currency)}</span>
+                    <span className="text-xs text-[var(--color-text-secondary)]">в месяц</span>
+                  </div>
+                  <Button type="button" size="sm" variant="ghost" className="min-h-10 shrink-0 px-2"
                     aria-label={`Открыть договор № ${contract.number} ${contract.title}`} onClick={() => onOpenContract(contract)}>Открыть</Button>
                 </div>
               </li>)}

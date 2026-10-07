@@ -300,7 +300,7 @@ export function ContractModal({ editing, onClose }: { editing: Contract | null; 
             return (
               <div key={key} className="rounded-lg border border-[var(--color-border)] p-3">
                 <label className="block">
-                  <span className={labelClass}>{key === "contractPdfId" ? "PDF договора" : "NDA (PDF)"}</span>
+                  <span className={labelClass}>{key === "contractPdfId" ? "PDF договора" : "Соглашение о конфиденциальности — NDA (PDF)"}</span>
                   <input
                     type="file"
                     accept="application/pdf,.pdf"

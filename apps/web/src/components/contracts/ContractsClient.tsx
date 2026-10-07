@@ -191,7 +191,7 @@ export function ContractModal({ editing, onClose }: { editing: Contract | null; 
         </label>
 
         <label className="block mb-3">
-          <span className={labelClass}>Название</span>
+          <span className={labelClass}>Наименование услуги</span>
           <Input value={form.title} onChange={(e) => set("title", e.target.value)} />
         </label>
 

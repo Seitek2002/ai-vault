@@ -148,8 +148,8 @@ export function syncPeriodInBody(bodyJson: unknown, startIso: string, endIso: st
 export function syncAvrPeriodInBody(bodyJson: unknown, startIso: string, endIso: string): unknown {
   return syncPeriodPhraseInBody(
     bodyJson, startIso, endIso,
-    new RegExp(`${DATE_TOKEN}\\s*–\\s*${DATE_TOKEN}`),
-    (s, e) => `${s} – ${e}`,
+    new RegExp(`${DATE_TOKEN}\\s*[–-]\\s*${DATE_TOKEN}`),
+    (s, e) => `${s} - ${e}`,
   );
 }
 

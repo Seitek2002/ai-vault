@@ -5,6 +5,7 @@ import {
   CreatePaymentDto,
   CreateSettlementDto,
   GenerateSettlementsDto,
+  GenerateStepDocumentDto,
   ListSettlementsDto,
   UpdateSettlementDto,
 } from './dto/settlement.dto';
@@ -81,6 +82,16 @@ export class SettlementsController {
     @CurrentUser() user: JwtPayload,
   ) {
     return this.service.completeStep(id, stepId, organizationId, user.sub, dto);
+  }
+
+  @Post(':id/steps/:stepId/draft')
+  @RequirePermission(Permission.MANAGE_DOCUMENTS)
+  generateStepDocument(
+    @Param('id') id: string, @Param('stepId') stepId: string,
+    @Body() dto: GenerateStepDocumentDto,
+    @CurrentOrgId() organizationId: string, @CurrentUser() user: JwtPayload,
+  ) {
+    return this.service.generateStepDocument(id, stepId, organizationId, user.sub, dto);
   }
 
   @Post(':id/steps/:stepId/reopen')

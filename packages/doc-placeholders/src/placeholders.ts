@@ -84,6 +84,11 @@ export const PLACEHOLDER_MENU: Array<{ group: string; items: Array<{ label: stri
       { label: 'Сегодняшняя дата (числом)', key: 'date.todayShort' },
       { label: 'Номер документа', key: 'doc.number' },
       { label: 'Сумма', key: 'doc.amount' },
+      { label: 'Наименование услуги', key: 'doc.service' },
+      { label: 'Валюта', key: 'doc.currency' },
+      { label: 'В том числе НДС', key: 'doc.vatAmount' },
+      { label: 'Номер договора', key: 'contract.number' },
+      { label: 'Дата договора', key: 'contract.date' },
       { label: 'Период: начало', key: 'period.start' },
       { label: 'Период: конец', key: 'period.end' },
     ],
@@ -97,8 +102,13 @@ export interface PlaceholderContext {
   dateIso?: string | undefined;
   /** Номер документа; по умолчанию — «___» */
   number?: string | undefined;
-  /** Сумма документа; 0 или пусто → заглушка «__ 000,00» */
+  /** Сумма документа; отсутствующая сумма → заглушка «__ 000,00». Ноль сохраняется. */
   amount?: number | undefined;
+  service?: string;
+  currency?: string;
+  vatAmount?: number;
+  contractNumber?: string | undefined;
+  contractDate?: string | undefined;
   /** Период оказания услуг («2.06.26 г.»); по умолчанию — прочерки */
   periodStart?: string | undefined;
   periodEnd?: string | undefined;
@@ -133,7 +143,12 @@ export function substitutePlaceholders(bodyJson: unknown, ctx: PlaceholderContex
   map['date.today'] = ruDateFromISO(ctx.dateIso ?? todayISO());
   map['date.todayShort'] = shortNumericDate(ctx.dateIso ?? todayISO());
   map['doc.number'] = ctx.number?.trim() || '___';
-  map['doc.amount'] = ctx.amount && ctx.amount > 0 ? formatAmount(ctx.amount) : AMOUNT_PLACEHOLDER;
+  map['doc.amount'] = ctx.amount !== undefined && Number.isFinite(ctx.amount) && ctx.amount >= 0 ? formatAmount(ctx.amount) : AMOUNT_PLACEHOLDER;
+  map['doc.service'] = ctx.service ?? '';
+  map['doc.currency'] = ctx.currency ?? '';
+  map['doc.vatAmount'] = ctx.vatAmount !== undefined ? formatAmount(ctx.vatAmount) : '';
+  map['contract.number'] = ctx.contractNumber ?? '';
+  map['contract.date'] = ctx.contractDate ? shortNumericDate(ctx.contractDate) : '';
   map['period.start'] = ctx.periodStart?.trim() || '__.__.__ г.';
   map['period.end'] = ctx.periodEnd?.trim() || '__.__.__ г.';
 
@@ -145,7 +160,7 @@ export function substitutePlaceholders(bodyJson: unknown, ctx: PlaceholderContex
   return JSON.parse(text) as unknown;
 }
 
-const SYSTEM_PREFIXES = ['company.', 'org.', 'date.', 'doc.'];
+const SYSTEM_PREFIXES = ['company.', 'org.', 'date.', 'doc.', 'contract.', 'period.'];
 
 /** Ручные переменные шаблона — все {{...}}, кроме системных пространств имён */
 export function extractManualVariables(bodyJson: unknown): string[] {

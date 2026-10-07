@@ -1,13 +1,15 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import {
   DocumentType,
   Prisma,
   type CompanySettings,
+  type Contract,
   type Counterparty,
   type Settlement,
 } from '@prisma/client';
 import {
   shortPeriodDate,
+  SETTLEMENT_DOCUMENT_TEMPLATES,
   substitutePlaceholders,
   type PlaceholderContext,
 } from '@ai-vault/doc-placeholders';
@@ -57,16 +59,13 @@ const GENERATED: Array<{ type: DocumentType; counter: 'act' | 'invoice'; label: 
 
 @Injectable()
 export class SettlementDocsService {
-  private readonly logger = new Logger(SettlementDocsService.name);
-
   /**
    * Создаёт черновики акта и счёта для расчёта из шаблонов организации.
    *
    * Шаблон берётся из Конструктора (`DocumentTemplate`) и заполняется тем же
    * `substitutePlaceholders`, что и при ручном создании, — иначе автоматический
    * и ручной документы разошлись бы. Если шаблона нужного типа нет, документ
-   * не создаётся: выдумывать вёрстку за пользователя не нужно, шаг
-   * «Выставить акт» просто останется открытым.
+   * берётся стандартная форма с реквизитами и услугой из договора.
    *
    * Шаги ISSUE_ACT / ISSUE_INVOICE намеренно НЕ закрываются: черновик должен
    * проверить человек, в этом смысл шага.
@@ -79,22 +78,24 @@ export class SettlementDocsService {
       settings: CompanySettings | null;
       userId: string;
       organizationId: string;
+      contract?: Contract | undefined;
+      types?: DocumentType[];
+      templateId?: string | undefined;
     },
   ): Promise<Array<{ id: string; type: DocumentType }>> {
     const { settlement, counterparty, settings, userId, organizationId } = params;
     const created: Array<{ id: string; type: DocumentType }> = [];
 
-    for (const { type, counter, label } of GENERATED) {
-      const template = await this.resolveTemplate(tx, organizationId, type);
-      if (!template) {
-        this.logger.warn(
-          `Нет шаблона типа ${type} у организации ${organizationId} — документ не сгенерирован`,
-        );
-        continue;
-      }
+    for (const { type, counter, label } of GENERATED.filter(g => !params.types || params.types.includes(g.type))) {
+      const existing = await tx.document.findFirst({
+        where: { organizationId, settlementId: settlement.id, type },
+        orderBy: { createdAt: 'asc' }, select: { id: true, type: true },
+      });
+      if (existing) { created.push(existing); continue; }
+      const template = await this.resolveTemplate(tx, organizationId, type, params.templateId);
 
       const number = await this.nextNumber(tx, organizationId, counter, settlement.year);
-      const context = this.buildContext({ settlement, counterparty, settings, number });
+      const context = this.buildContext({ settlement, counterparty, settings, number, contract: params.contract });
       const bodyJson = sanitizePm(
         substitutePlaceholders(template.bodyJson, context),
       ) as Prisma.InputJsonValue;
@@ -107,6 +108,14 @@ export class SettlementDocsService {
           : { invoiceNumber: number, invoiceDate: periodEndIso }),
         currency: settlement.currency,
         totalAmount: settlement.amount.toNumber(),
+        totalVat: settlement.vatAmount.toNumber(),
+        periodStart: isoDate(firstDayOfMonth(settlement.year, settlement.month)),
+        periodEnd: periodEndIso,
+        serviceName: context.service,
+        contractNumber: params.contract?.number,
+        contractDate: params.contract?.startDate ? isoDate(params.contract.startDate) : undefined,
+        // Retain the source so changing a default template cannot rewrite another form on amount refresh.
+        generationTemplate: template.bodyJson,
       } as Prisma.InputJsonValue;
 
       const doc = await tx.document.create({
@@ -151,6 +160,7 @@ export class SettlementDocsService {
       settings: CompanySettings | null;
       userId: string;
       organizationId: string;
+      contract?: Contract | undefined;
     },
   ): Promise<number> {
     const { settlement, counterparty, settings, userId, organizationId } = params;
@@ -165,15 +175,23 @@ export class SettlementDocsService {
       const generated = GENERATED.find((g) => g.type === draft.type);
       if (!generated) continue;
 
-      const template = await this.resolveTemplate(tx, organizationId, draft.type);
-      if (!template) continue;
+      const previousMeta = (draft.meta ?? {}) as Record<string, unknown>;
+      const template = previousMeta.generationTemplate
+        ? { bodyJson: previousMeta.generationTemplate }
+        : await this.resolveTemplate(tx, organizationId, draft.type);
 
       const context = this.buildContext({
         settlement,
         counterparty,
         settings,
         number: draft.number ?? '',
+        contract: params.contract,
       });
+      if (!params.contract) {
+        context.service = String(previousMeta.serviceName ?? context.service);
+        context.contractNumber = previousMeta.contractNumber as string | undefined;
+        context.contractDate = previousMeta.contractDate as string | undefined;
+      }
       const bodyJson = sanitizePm(
         substitutePlaceholders(template.bodyJson, context),
       ) as Prisma.InputJsonValue;
@@ -182,6 +200,7 @@ export class SettlementDocsService {
         ...(draft.meta as Record<string, unknown>),
         currency: settlement.currency,
         totalAmount: settlement.amount.toNumber(),
+        totalVat: settlement.vatAmount.toNumber(),
       } as Prisma.InputJsonValue;
 
       await tx.document.update({ where: { id: draft.id }, data: { bodyJson, meta } });
@@ -211,6 +230,7 @@ export class SettlementDocsService {
     counterparty: Counterparty;
     settings: CompanySettings | null;
     number: string;
+    contract?: Contract | undefined;
   }): PlaceholderContext {
     const { settlement, counterparty, settings, number } = params;
     const periodStart = firstDayOfMonth(settlement.year, settlement.month);
@@ -243,6 +263,11 @@ export class SettlementDocsService {
       dateIso: isoDate(periodEnd),
       number,
       amount: settlement.amount.toNumber(),
+      service: settlement.label || params.contract?.title || 'Услуги по договору',
+      currency: settlement.currency === 'KGS' ? 'сом' : settlement.currency,
+      vatAmount: settlement.vatAmount.toNumber(),
+      contractNumber: params.contract?.number,
+      contractDate: params.contract?.startDate ? isoDate(params.contract.startDate) : undefined,
       periodStart: shortPeriodDate(isoDate(periodStart)),
       periodEnd: shortPeriodDate(isoDate(periodEnd)),
     };
@@ -258,16 +283,24 @@ export class SettlementDocsService {
     counter: 'act' | 'invoice',
     year: number,
   ): Promise<string> {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`document-number:${organizationId}`}))`;
     const settings = await tx.companySettings.findUnique({ where: { organizationId } });
-    if (!settings) return `${year}-${Date.now().toString().slice(-4)}`;
-
     const isAct = counter === 'act';
-    const currentYear = isAct ? settings.actCounterYear : settings.invoiceCounterYear;
-    const current = isAct ? settings.actCounter : settings.invoiceCounter;
-    const next = currentYear === year ? current + 1 : 1;
-    const prefix = isAct ? settings.actPrefix : settings.invoicePrefix;
+    const currentYear = isAct ? settings?.actCounterYear : settings?.invoiceCounterYear;
+    const current = (isAct ? settings?.actCounter : settings?.invoiceCounter) ?? 0;
+    const prefix = (isAct ? settings?.actPrefix : settings?.invoicePrefix) || (isAct ? 'АВР' : 'СЧ');
+    const start = `${prefix}-${year}-`;
+    const numbers = await tx.document.findMany({
+      where: { organizationId, type: isAct ? DocumentType.AVR : DocumentType.INVOICE_PAYMENT, number: { startsWith: start } },
+      select: { number: true },
+    });
+    const last = numbers.reduce((max, doc) => {
+      const suffix = doc.number?.slice(start.length) ?? '';
+      return /^\d+$/.test(suffix) ? Math.max(max, Number(suffix)) : max;
+    }, currentYear === year ? current : 0);
+    const next = last + 1;
 
-    await tx.companySettings.update({
+    if (settings) await tx.companySettings.update({
       where: { organizationId },
       data: isAct
         ? { actCounter: next, actCounterYear: year }
@@ -278,7 +311,12 @@ export class SettlementDocsService {
   }
 
   /** Шаблон организации: сначала помеченный по умолчанию, иначе самый свежий. */
-  private async resolveTemplate(tx: Tx, organizationId: string, type: DocumentType) {
+  private async resolveTemplate(tx: Tx, organizationId: string, type: DocumentType, templateId?: string) {
+    if (templateId) {
+      const selected = await tx.documentTemplate.findFirst({ where: { id: templateId, organizationId, type } });
+      if (!selected) throw new NotFoundException('Шаблон этого типа не найден');
+      return { bodyJson: selected.bodyJson as unknown, metaDefaults: (selected.metaDefaults ?? {}) as Record<string, unknown>, categoryId: selected.categoryId };
+    }
     const template =
       (await tx.documentTemplate.findFirst({
         where: { organizationId, type, isDefault: true },
@@ -288,7 +326,7 @@ export class SettlementDocsService {
         where: { organizationId, type },
         orderBy: { updatedAt: 'desc' },
       }));
-    if (!template) return null;
+    if (!template) return { bodyJson: SETTLEMENT_DOCUMENT_TEMPLATES[type as 'AVR' | 'INVOICE_PAYMENT'], metaDefaults: {}, categoryId: null };
 
     return {
       bodyJson: template.bodyJson as unknown,

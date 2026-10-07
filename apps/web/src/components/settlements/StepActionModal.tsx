@@ -7,6 +7,7 @@ import { ArrowRight, ExternalLink, FileText, Link2, Paperclip, Trash2 } from "lu
 import { ApiError } from "@/lib/api/client";
 import { esfApi, esfCoversSettlement, esfSettlementIds, ESF_STATUS_LABELS, type CreateEsfDraft } from "@/lib/api/esf";
 import { EsfDraftEditor } from './EsfDraftEditor';
+import { SettlementDocumentActions } from './SettlementDocumentActions';
 import { openFile, uploadFile } from "@/lib/api/files";
 import { Button, Input, Modal } from "@/components/ui";
 import { fieldClassName } from "@/components/ui/Input";
@@ -213,7 +214,7 @@ export function StepActionModal({ settlement, step, onClose }: Props) {
           )}
         </p>
 
-        {step.documentId && (
+        {step.documentId && !requiresPdfScan && (
           <Link
             href={`/documents/${step.documentId}`}
             className="mb-4 flex items-center justify-between gap-2 px-3 py-2 rounded-lg border border-[var(--color-accent-border)] bg-[var(--color-accent-dim)] text-sm text-[var(--color-accent)] hover:brightness-110 transition"
@@ -429,6 +430,7 @@ export function StepActionModal({ settlement, step, onClose }: Props) {
 
             {requiresPdfScan && (
               <div className="mb-4">
+                <SettlementDocumentActions settlement={settlement} step={step} disabled={busy} onBusyChange={setDraftBusy} />
                 <p className="text-sm text-[var(--color-text-secondary)] mb-3">
                   {step.documentId
                     ? `Проверьте черновик и прикрепите скан выставленного ${scanDocument} в PDF. После завершения шага документ получит статус «Финальный».`

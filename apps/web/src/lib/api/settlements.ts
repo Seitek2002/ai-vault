@@ -131,6 +131,10 @@ export const settlementsApi = {
   remove: (id: string) => api.delete<void>(`/settlements/${id}`),
   completeStep: (id: string, stepId: string, dto: CompleteStepDto) =>
     api.post<SettlementDetail>(`/settlements/${id}/steps/${stepId}/complete`, dto),
+  generateStepDocument: (id: string, stepId: string, templateId?: string) =>
+    api.post<{ id: string; title: string; number: string | null; status: string }>(
+      `/settlements/${id}/steps/${stepId}/draft`, templateId ? { templateId } : {},
+    ),
   reopenStep: (id: string, stepId: string) =>
     api.post<SettlementDetail>(`/settlements/${id}/steps/${stepId}/reopen`, {}),
   addPayment: (id: string, dto: CreatePaymentDto) =>

@@ -19,6 +19,7 @@ import type {
   CreatePaymentDto,
   CreateSettlementDto,
   GenerateSettlementsDto,
+  GenerateStepDocumentDto,
   ListSettlementsDto,
   UpdateSettlementDto,
 } from './dto/settlement.dto';
@@ -265,6 +266,7 @@ export class SettlementsService {
     const settings = await tx.companySettings.findUnique({ where: { organizationId: contract.organizationId } });
     const drafts = await this.docs.createDraftsForSettlement(tx, {
       settlement, counterparty, settings, userId, organizationId: contract.organizationId,
+      contract,
     });
     for (const draft of drafts) {
       const type = draft.type === 'AVR' ? SettlementStepType.ISSUE_ACT : SettlementStepType.ISSUE_INVOICE;
@@ -351,6 +353,41 @@ export class SettlementsService {
   }
 
   // ── Шаги ──────────────────────────────────────────────────────────────────
+
+  async generateStepDocument(
+    settlementId: string, stepId: string, organizationId: string, userId: string,
+    dto: GenerateStepDocumentDto,
+  ) {
+    return this.prisma.$transaction(async tx => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`settlement-draft:${organizationId}:${settlementId}`}))`;
+      await tx.$executeRaw`SELECT id FROM "Settlement" WHERE id = ${settlementId} AND "organizationId" = ${organizationId} FOR UPDATE`;
+      const settlement = await tx.settlement.findFirst({ where: { id: settlementId, organizationId } });
+      if (!settlement) throw new NotFoundException('Расчёт не найден');
+      const step = await tx.settlementStep.findFirst({ where: { id: stepId, settlementId } });
+      if (!step) throw new NotFoundException('Шаг не найден');
+      const type = step.type === SettlementStepType.ISSUE_ACT ? 'AVR'
+        : step.type === SettlementStepType.ISSUE_INVOICE ? 'INVOICE_PAYMENT' : null;
+      if (!type) throw new BadRequestException('Создание документа доступно для акта и счёта на оплату.');
+      if (step.documentId) {
+        const existing = await tx.document.findFirst({ where: { id: step.documentId, organizationId, settlementId, type } });
+        if (!existing) throw new BadRequestException('Документ шага не относится к этому расчёту.');
+        return { id: existing.id, title: existing.title, number: existing.number, type: existing.type, status: existing.status, reused: true };
+      }
+      if (step.doneAt) throw new BadRequestException('Шаг уже завершён. Для нового акта и счёта добавьте ещё один комплект.');
+      const [counterparty, settings, contract] = await Promise.all([
+        tx.counterparty.findFirstOrThrow({ where: { id: settlement.counterpartyId, organizationId } }),
+        tx.companySettings.findUnique({ where: { organizationId } }),
+        tx.contract.findFirstOrThrow({ where: { id: settlement.contractId, organizationId } }),
+      ]);
+      const drafts = await this.docs.createDraftsForSettlement(tx, {
+        settlement, counterparty, settings, contract, userId, organizationId,
+        types: [type], templateId: dto.templateId,
+      });
+      const document = await tx.document.findFirstOrThrow({ where: { id: drafts[0]!.id, organizationId, settlementId, type } });
+      await tx.settlementStep.update({ where: { id: step.id }, data: { documentId: document.id } });
+      return { id: document.id, title: document.title, number: document.number, type: document.type, status: document.status, reused: false };
+    }, { maxWait: 15000, timeout: 15000 });
+  }
 
   async completeStep(
     settlementId: string,

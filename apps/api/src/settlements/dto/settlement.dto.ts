@@ -113,6 +113,13 @@ export class CompleteStepDto {
   evidenceUrl?: string;
 }
 
+export class GenerateStepDocumentDto {
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  templateId?: string;
+}
+
 export class CreatePaymentDto {
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0.01)

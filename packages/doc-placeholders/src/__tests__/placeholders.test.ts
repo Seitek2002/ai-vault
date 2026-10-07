@@ -69,7 +69,12 @@ describe('substitutePlaceholders', () => {
 
   it('без суммы подставляет заглушку', () => {
     const doc = { type: 'doc', content: [para('{{doc.amount}}')] };
-    expect(texts(substitutePlaceholders(doc, { ...CTX, amount: 0 }))[0]).toBe('__ 000,00');
+    expect(texts(substitutePlaceholders(doc, { ...CTX, amount: undefined }))[0]).toBe('__ 000,00');
+  });
+
+  it('сохраняет явную нулевую сумму документа', () => {
+    const doc = { type: 'doc', content: [para('{{doc.amount}}')] };
+    expect(texts(substitutePlaceholders(doc, { ...CTX, amount: 0 }))[0]).toBe('0,00');
   });
 
   it('не трогает ручные переменные шаблона', () => {

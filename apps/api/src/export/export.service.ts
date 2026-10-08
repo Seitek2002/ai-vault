@@ -37,9 +37,13 @@ export class ExportService {
   async generateTemplatePdf(templateId: string, organizationId: string) {
     const template = await this.prisma.documentTemplate.findFirst({ where: { id: templateId, organizationId } });
     if (!template) throw new NotFoundException('Шаблон не найден');
+    return this.generateDraftTemplatePdf(template, organizationId);
+  }
+
+  async generateDraftTemplatePdf(template: { bodyJson: unknown; name?: string; metaDefaults?: unknown }, organizationId: string) {
     const settings = await this.prisma.companySettings.findUnique({ where: { organizationId } });
     const body = substitutePlaceholders(template.bodyJson, { org: settings, currency: 'сом' });
-    return this.renderPdf(body, template.name, template.metaDefaults, organizationId);
+    return this.renderPdf(body, template.name || 'Предпросмотр шаблона', template.metaDefaults, organizationId);
   }
 
   async renderPdf(body: unknown, title: string, meta: unknown, organizationId: string): Promise<{ buffer: Buffer; filename: string }> {

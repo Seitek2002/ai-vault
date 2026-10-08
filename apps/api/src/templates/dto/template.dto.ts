@@ -5,6 +5,7 @@ import {
   IsBoolean,
   MinLength,
   MaxLength,
+  IsObject,
 } from 'class-validator';
 import { DocumentType } from '@prisma/client';
 
@@ -67,4 +68,18 @@ export class ListTemplatesDto {
   @IsOptional()
   @IsEnum(DocumentType)
   type?: DocumentType;
+}
+
+export class PreviewTemplateDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  name?: string;
+
+  @IsObject()
+  declare bodyJson: object;
+
+  @IsOptional()
+  @IsObject()
+  metaDefaults?: Record<string, unknown>;
 }

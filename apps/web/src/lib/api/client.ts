@@ -144,6 +144,9 @@ export const api = {
   upload: <T>(path: string, form: FormData) => request<T>(path, { method: 'POST', body: form }),
   /** Binary download (PDF/DOCX export…) — same auth/refresh handling as the JSON methods. */
   getBlob: (path: string) => requestBlob(path),
+  postBlob: (path: string, body: unknown) => requestBlob(path, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  }),
 };
 
 export { THIRTY_DAYS };

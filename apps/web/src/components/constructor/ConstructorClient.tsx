@@ -18,6 +18,7 @@ import { PHOTO_ACT_TEMPLATE, readPageLayout } from '@ai-vault/doc-placeholders';
 import { PageLayoutFields } from '@/components/documents/PageLayoutFields';
 import { PdfBackgrounds } from './PdfBackgrounds';
 import { TemplatePreview } from './TemplatePreview';
+import { DraftTemplatePreview } from './DraftTemplatePreview';
 
 const CATEGORY_COLORS = ["#8B5CF6", "#3B82F6", "#10B981", "#F59E0B", "#EF4444", "#EC4899"];
 
@@ -198,17 +199,19 @@ function ConstructorModal({ initial, actPreset = false, companySettings, onClose
   };
 
   return (
-    <Modal onClose={onClose} className="max-w-3xl flex flex-col max-h-[90vh]">
+    <Modal onClose={onClose} className="flex h-[92dvh] max-w-[1440px] flex-col">
       <div className="px-6 py-4 border-b border-[var(--color-border)] flex items-center justify-between shrink-0">
         <h2 className="text-base font-semibold text-[var(--color-text-primary)]">
           {isEdit ? "Редактировать шаблон" : "Новый шаблон"}
         </h2>
-        <button onClick={onClose} className="text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] transition-colors">
+        <button type="button" aria-label="Закрыть редактор шаблона" onClick={onClose} className="flex h-9 w-9 items-center justify-center rounded-lg text-[var(--color-text-muted)] hover:bg-[var(--color-bg-elevated)] hover:text-[var(--color-text-primary)] transition-colors">
           <X className="w-5 h-5" />
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+      <div className="min-h-0 flex-1 overflow-y-auto lg:grid lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] lg:overflow-hidden">
+        <DraftTemplatePreview name={name} bodyJson={bodyJson} metaDefaults={metaDefaults} />
+      <div className="min-w-0 space-y-5 border-t border-[var(--color-border)] px-5 py-5 lg:overflow-y-auto lg:border-t-0 lg:border-l">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-wider block mb-1.5">
@@ -276,7 +279,7 @@ function ConstructorModal({ initial, actPreset = false, companySettings, onClose
           <label className="text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-wider block mb-1.5">
             Содержимое документа
           </label>
-          <div className="rounded-xl border border-[var(--color-border)] overflow-hidden" style={{ height: 320 }}>
+          <div className="h-[440px] overflow-hidden rounded-xl border border-[var(--color-border)]">
             <RichEditor
               initialContent={bodyJson}
               onChange={setBodyJson}
@@ -293,8 +296,9 @@ function ConstructorModal({ initial, actPreset = false, companySettings, onClose
           <VariablePreview bodyJson={bodyJson} onRelabel={handleRelabel} />
         </div>
       </div>
+      </div>
 
-      <div className="px-6 py-4 border-t border-[var(--color-border)] flex justify-end gap-3 shrink-0">
+      <div className="flex shrink-0 flex-wrap items-center justify-end gap-3 border-t border-[var(--color-border)] px-5 py-3">
         {mutation.error && <p role="alert" className="mr-auto text-sm text-[var(--color-danger)]">{mutation.error.message}</p>}
         <Button variant="ghost" onClick={onClose}>
           Отмена

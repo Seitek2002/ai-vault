@@ -4,13 +4,14 @@ import { useState, type FormEvent } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
-import { Plus, Search, X, Pencil, Trash2, Building2, Landmark, FileText, Phone, Mail, ChevronDown, Copy, Check, ArrowUpDown } from 'lucide-react';
+import { Plus, Search, X, Pencil, Trash2, Building2, FileText, Phone, Mail, ChevronDown, ArrowUpDown } from 'lucide-react';
 import { Button, Input, Modal, EmptyState } from '@/components/ui';
 import { counterpartiesApi, type CounterpartyFormData } from '@/lib/api/counterparties';
 import { contractsApi, type Contract } from '@/lib/api/contracts';
 import { formatMoney } from '@/lib/api/settlements';
 import type { CounterpartyDto } from '@ai-vault/types';
 import { ApiError } from '@/lib/api/client';
+import { CompanyRequisitesModal } from './CompanyRequisitesModal';
 
 const ContractModal = dynamic(() => import('@/components/contracts/ContractsClient').then((m) => m.ContractModal));
 
@@ -249,30 +250,10 @@ function contractPeriod(contract: Contract): string {
 }
 
 function CompanyRow({ cp, contracts, contractsLoading, contractsError, onRetryContracts, onOpenContract, onEdit, onDelete }: CompanyRowProps) {
-  const [expanded, setExpanded] = useState(false);
+  const [requisitesOpen, setRequisitesOpen] = useState(false);
   const [contractsExpanded, setContractsExpanded] = useState(false);
-  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'error'>('idle');
-  const detailsId = `company-details-${cp.id}`;
-  const detailsHeadingId = `${detailsId}-heading`;
   const contractsId = `company-contracts-${cp.id}`;
   const contractsHeadingId = `${contractsId}-heading`;
-  const details = [
-    ['ИНН', cp.inn], ['ОКПО', cp.bin], ['Юридический адрес', cp.address],
-    ['Банк', cp.bankName], ['Расчётный счёт', cp.bankAccount], ['БИК', cp.bankBik],
-  ] as const;
-  const detailGroups = [
-    { id: 'registration', title: 'Регистрационные данные', icon: Building2, fields: details.slice(0, 3), wideLabel: 'Юридический адрес' },
-    { id: 'bank', title: 'Банковские реквизиты', icon: Landmark, fields: details.slice(3), wideLabel: 'Банк' },
-  ];
-
-  async function copyDetails() {
-    try {
-      await navigator.clipboard.writeText([cp.name, ...details.filter(([, value]) => value).map(([label, value]) => `${label}: ${value}`)].join('\n'));
-      setCopyState('copied');
-    } catch {
-      setCopyState('error');
-    }
-  }
 
   return (
     <li className="group border-b border-[var(--color-border)] last:border-b-0">
@@ -306,9 +287,9 @@ function CompanyRow({ cp, contracts, contractsLoading, contractsError, onRetryCo
         </div>
 
         <div className="flex flex-wrap items-center gap-2 md:col-span-2 xl:col-span-1 xl:justify-end xl:w-72">
-          <Button size="sm" variant="ghost" className={`min-h-10 px-3 ${expanded ? 'bg-[var(--color-bg-elevated)] text-[var(--color-text-primary)]' : ''}`} aria-expanded={expanded} aria-controls={detailsId}
-            onClick={() => { setExpanded(!expanded); setCopyState('idle'); }}>
-            Реквизиты <ChevronDown className={`w-4 h-4 transition-transform ${expanded ? 'rotate-180' : ''}`} aria-hidden="true" />
+          <Button size="sm" variant="ghost" className="min-h-10 px-3" aria-haspopup="dialog"
+            onClick={() => setRequisitesOpen(true)}>
+            Реквизиты
           </Button>
           <Button size="sm" variant="secondary" className="min-h-10 px-3" onClick={() => onEdit(cp)} aria-label={`Изменить ${cp.name}`}>
             <Pencil className="w-3.5 h-3.5" aria-hidden="true" /> Изменить
@@ -354,34 +335,7 @@ function CompanyRow({ cp, contracts, contractsLoading, contractsError, onRetryCo
         </div>
       </div>
 
-      <div id={detailsId} role="region" aria-labelledby={detailsHeadingId} hidden={!expanded} className="px-4 pb-3 sm:px-5">
-        <div className="bg-[var(--color-bg-elevated)] px-3 py-2.5">
-          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-[var(--color-border)] pb-2">
-            <h3 id={detailsHeadingId} className="text-sm font-semibold">Реквизиты компании</h3>
-            <Button size="sm" variant="ghost" className="min-h-10 px-2" aria-label={`Копировать реквизиты ${cp.name}`} onClick={() => void copyDetails()}>
-              {copyState === 'copied' ? <Check className="w-4 h-4" aria-hidden="true" /> : <Copy className="w-4 h-4" aria-hidden="true" />}
-              {copyState === 'copied' ? 'Скопировано' : 'Копировать'}
-            </Button>
-          </div>
-          <div className="grid grid-cols-1 divide-y divide-[var(--color-border)] sm:grid-cols-2 sm:divide-x sm:divide-y-0">
-            {detailGroups.map(({ id, title, icon: Icon, fields, wideLabel }) => <section key={id}
-              aria-labelledby={`${detailsId}-${id}`} className="min-w-0 pt-3 first:pb-3 sm:first:pr-4 sm:first:pb-0 sm:last:pl-4">
-              <h4 id={`${detailsId}-${id}`} className="mb-2.5 flex items-center gap-2 text-xs font-medium text-[var(--color-text-secondary)]">
-                <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" /> {title}
-              </h4>
-              <dl className="grid grid-cols-2 gap-x-4 gap-y-3">
-                {fields.map(([label, value]) => <div key={label} className={`min-w-0 ${label === wideLabel ? 'col-span-2' : ''}`}>
-                  <dt className="mb-0.5 text-xs text-[var(--color-text-secondary)]">{label}</dt>
-                  <dd className="text-sm text-[var(--color-text-primary)] [overflow-wrap:anywhere] tabular-nums">{value || 'Не указано'}</dd>
-                </div>)}
-              </dl>
-            </section>)}
-          </div>
-          <p role="status" className={`text-xs text-[var(--color-text-secondary)] ${copyState === 'idle' ? 'sr-only' : 'mt-3'}`}>
-            {copyState === 'error' ? 'Не удалось скопировать. Выделите реквизиты и скопируйте вручную.' : copyState === 'copied' ? 'Название и реквизиты скопированы' : ''}
-          </p>
-        </div>
-      </div>
+      {requisitesOpen && <CompanyRequisitesModal cp={cp} onClose={() => setRequisitesOpen(false)} />}
     </li>
   );
 }

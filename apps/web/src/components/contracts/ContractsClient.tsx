@@ -147,7 +147,7 @@ export function ContractModal({ editing, onClose }: { editing: Contract | null; 
       return;
     }
     if (form.termUnit && !form.startDate) {
-      setError("Укажите дату начала договора");
+      setError("Укажите дату подписания договора");
       return;
     }
     if (form.termUnit && !calculatedEndDate) {
@@ -165,15 +165,28 @@ export function ContractModal({ editing, onClose }: { editing: Contract | null; 
         </h3>
 
         <fieldset disabled={mutation.isPending}>
-        <label className="block mb-3">
-          <span className={labelClass}>Номер договора</span>
-          <Input value={form.number ?? ""} maxLength={100}
-            placeholder={`Автоматически · /${contractNumberPeriod(form.startDate)}`}
-            onChange={(e) => set("number", e.target.value)} />
+        <div className="mb-3">
+          <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_minmax(0,0.85fr)] gap-3">
+            <label className="block min-w-0">
+              <span className={labelClass}>Номер договора</span>
+              <Input value={form.number ?? ""} maxLength={100}
+                placeholder={`Автоматически · /${contractNumberPeriod(form.startDate)}`}
+                onChange={(e) => set("number", e.target.value)} />
+            </label>
+            <label className="block min-w-0">
+              <span className={labelClass}>Дата подписания</span>
+              <span className="flex items-center gap-2">
+                <span aria-hidden="true" className="text-sm text-[var(--color-text-secondary)] shrink-0">от</span>
+                <Input type="date" aria-label="Дата подписания" className="min-w-0 flex-1"
+                  value={form.startDate ?? ""}
+                  onChange={(e) => set("startDate", e.target.value)} />
+              </span>
+            </label>
+          </div>
           <span className={hintClass}>{form.number?.trim()
             ? `Номер при сохранении: ${formatContractNumber(form.number, form.startDate)}`
-            : "Оставьте пустым для автоматической нумерации или введите свой номер"}. Суффикс /ММГГ — по дате начала, без неё — по дате создания.</span>
-        </label>
+            : "Оставьте пустым для автоматической нумерации или введите свой номер"}. Суффикс /ММГГ — по дате договора, без неё — по дате создания.</span>
+        </div>
         <label className="block mb-3">
           <span className={labelClass}>Партнёр</span>
           <Select
@@ -243,15 +256,7 @@ export function ContractModal({ editing, onClose }: { editing: Contract | null; 
           </label>
         </div>
 
-        <div className="grid grid-cols-2 gap-2 mb-3">
-          <label className="block">
-            <span className={labelClass}>Начало</span>
-            <Input
-              type="date"
-              value={form.startDate ?? ""}
-              onChange={(e) => set("startDate", e.target.value)}
-            />
-          </label>
+        <div className="mb-3">
           <div>
             <span className={labelClass}>Срок договора</span>
             <div className="flex gap-2">
@@ -291,7 +296,7 @@ export function ContractModal({ editing, onClose }: { editing: Contract | null; 
         <p className="text-xs text-[var(--color-text-secondary)] mb-4">
           {calculatedEndDate
             ? `Окончание: ${calculatedEndDate.slice(0, 10).split("-").reverse().join(".")}`
-            : form.termUnit ? "Выберите дату начала и срок — окончание рассчитается автоматически" : "Дата окончания не установлена"}
+            : form.termUnit ? "Выберите дату подписания и срок — окончание рассчитается автоматически" : "Дата окончания не установлена"}
         </p>
 
         <fieldset disabled={mutation.isPending} className="mb-4 space-y-3">

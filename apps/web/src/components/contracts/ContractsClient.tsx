@@ -164,7 +164,7 @@ export function ContractModal({ editing, onClose }: { editing: Contract | null; 
           {editing ? "Договор" : "Новый договор"}
         </h3>
 
-        <fieldset disabled={mutation.isPending}>
+        <fieldset disabled={mutation.isPending} className="min-w-0">
         <div className="mb-3">
           <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_minmax(0,0.85fr)] gap-3">
             <label className="block min-w-0">
@@ -299,7 +299,7 @@ export function ContractModal({ editing, onClose }: { editing: Contract | null; 
             : form.termUnit ? "Выберите дату подписания и срок — окончание рассчитается автоматически" : "Дата окончания не установлена"}
         </p>
 
-        <fieldset disabled={mutation.isPending} className="mb-4 space-y-3">
+        <fieldset disabled={mutation.isPending} className="min-w-0 mb-4 space-y-3">
           <legend className="text-sm font-medium mb-2">Вложения</legend>
           {(["contractPdfId", "ndaPdfId"] as const).map((key) => {
             const attachment = attachments[key];

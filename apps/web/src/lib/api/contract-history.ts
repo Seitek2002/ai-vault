@@ -9,6 +9,7 @@ export interface HistoryDocument {
 export interface HistorySettlement {
   id: string; year: number; month: number; sequence: number; label: string | null;
   amount: number; currency: string; closedAt: string | null;
+  deletedAt?: string | null;
   paidAmount: number; dueAmount: number; overpaidAmount: number; status: SettlementStatus;
   steps: { type: SettlementStepType; dueDate: string | null; doneAt: string | null;
     note: string | null; evidenceUrl: string | null; doneByName: string | null;

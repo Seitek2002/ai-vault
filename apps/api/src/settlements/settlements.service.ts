@@ -77,6 +77,7 @@ export interface SettlementDto {
   dueAmount: number;
   status: SettlementStatus;
   closedAt: string | null;
+  deletedAt?: string | null;
   steps: SettlementStepDto[];
   payments: PaymentDto[];
 }
@@ -104,12 +105,13 @@ export class SettlementsService {
 
   // ── Чтение ────────────────────────────────────────────────────────────────
 
-  async findAll(organizationId: string, query: ListSettlementsDto): Promise<MonthBoardDto> {
+  async findAll(organizationId: string, query: ListSettlementsDto, deleted = false): Promise<MonthBoardDto> {
     const rows = await this.prisma.settlement.findMany({
       where: {
         organizationId,
         year: query.year,
         month: query.month,
+        deletedAt: deleted ? { not: null } : null,
         ...(query.counterpartyId ? { counterpartyId: query.counterpartyId } : {}),
       },
       include: SETTLEMENT_INCLUDE,
@@ -130,7 +132,7 @@ export class SettlementsService {
   /** История расчётов по контрагенту — для вкладки на странице компании. */
   async findByCounterparty(organizationId: string, counterpartyId: string): Promise<SettlementDto[]> {
     const rows = await this.prisma.settlement.findMany({
-      where: { organizationId, counterpartyId },
+      where: { organizationId, counterpartyId, deletedAt: null },
       include: SETTLEMENT_INCLUDE,
       orderBy: [{ year: 'desc' }, { month: 'desc' }, { contractId: 'asc' }, { sequence: 'asc' }],
     });
@@ -351,8 +353,24 @@ export class SettlementsService {
   }
 
   async remove(id: string, organizationId: string) {
-    await this.getEntity(id, organizationId);
-    await this.prisma.settlement.delete({ where: { id } });
+    const result = await this.prisma.settlement.updateMany({
+      where: { id, organizationId, deletedAt: null }, data: { deletedAt: new Date() },
+    });
+    if (!result.count) {
+      const existing = await this.prisma.settlement.findFirst({ where: { id, organizationId }, select: { id: true } });
+      if (!existing) throw new NotFoundException('Расчёт не найден');
+    }
+    return { id };
+  }
+
+  async restore(id: string, organizationId: string) {
+    const result = await this.prisma.settlement.updateMany({
+      where: { id, organizationId, deletedAt: { not: null } }, data: { deletedAt: null },
+    });
+    if (!result.count) {
+      const existing = await this.prisma.settlement.findFirst({ where: { id, organizationId }, select: { id: true } });
+      if (!existing) throw new NotFoundException('Расчёт не найден');
+    }
     return { id };
   }
 
@@ -367,6 +385,7 @@ export class SettlementsService {
       await tx.$executeRaw`SELECT id FROM "Settlement" WHERE id = ${settlementId} AND "organizationId" = ${organizationId} FOR UPDATE`;
       const settlement = await tx.settlement.findFirst({ where: { id: settlementId, organizationId } });
       if (!settlement) throw new NotFoundException('Расчёт не найден');
+      if (settlement.deletedAt) throw new BadRequestException('Комплект удалён. Сначала восстановите его.');
       const step = await tx.settlementStep.findFirst({ where: { id: stepId, settlementId } });
       if (!step) throw new NotFoundException('Шаг не найден');
       const type = step.type === SettlementStepType.ISSUE_ACT ? 'AVR'
@@ -697,6 +716,7 @@ export class SettlementsService {
       dueAmount: Math.max(0, Math.round((amount - paid) * 100) / 100),
       status: deriveStatus(row.steps, now),
       closedAt: row.closedAt?.toISOString() ?? null,
+      deletedAt: row.deletedAt?.toISOString() ?? null,
       steps: row.steps.map((step) => ({
         id: step.id,
         type: step.type,
@@ -751,6 +771,7 @@ export class SettlementsService {
       where: { id, organizationId },
     });
     if (!settlement) throw new NotFoundException('Расчёт не найден');
+    if (settlement.deletedAt) throw new BadRequestException('Комплект удалён. Сначала восстановите его.');
     return settlement;
   }
 

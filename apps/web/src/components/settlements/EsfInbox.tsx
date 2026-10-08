@@ -343,7 +343,7 @@ export function EsfInbox({
 }
 
 /** Строка с ЭСФ внутри карточки расчёта. */
-export function EsfOnSettlement({ settlementId }: { settlementId: string }) {
+export function EsfOnSettlement({ settlementId, readOnly = false }: { settlementId: string; readOnly?: boolean }) {
   const [linkOpen, setLinkOpen] = useState(false);
   const qc = useQueryClient();
   const { data } = useQuery({
@@ -378,7 +378,7 @@ export function EsfOnSettlement({ settlementId }: { settlementId: string }) {
           <span className="block">Итого расчётов: {formatMoney(inv.settlements!.reduce((sum, s) => sum + s.amount, 0), inv.settlements![0]?.currency)}</span>
         </span>}
       </span>
-      <Button size="sm" variant="secondary" disabled={detach.isPending} onClick={() => setLinkOpen(true)}>Изменить месяцы</Button>
+      {!readOnly && <Button size="sm" variant="secondary" disabled={detach.isPending} onClick={() => setLinkOpen(true)}>Изменить месяцы</Button>}
       <a
         href={esfApi.portalPdfUrl(inv.uuid)}
         target="_blank"
@@ -387,14 +387,14 @@ export function EsfOnSettlement({ settlementId }: { settlementId: string }) {
       >
         PDF
       </a>
-      <button
+      {!readOnly && <button
         onClick={() => detach.mutate(inv.id)}
         disabled={detach.isPending}
         title="Отвязать только от этого расчёта" aria-label="Отвязать ЭСФ только от этого расчёта"
         className="p-1 rounded text-[var(--color-text-muted)] hover:text-[var(--color-danger)] transition-colors shrink-0"
       >
         <Link2Off className="w-3.5 h-3.5" />
-      </button>
+      </button>}
     {detach.isError && <p role="alert" className="w-full text-xs text-[var(--color-danger)]">{detach.error instanceof Error ? detach.error.message : "Не удалось отвязать ЭСФ."}</p>}
     </div>
     {linkOpen && <EsfLinkModal inv={inv} onClose={() => setLinkOpen(false)} />}

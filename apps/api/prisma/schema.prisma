@@ -439,6 +439,7 @@ model Settlement {
   currency  String  @default("KGS")
 
   closedAt  DateTime?
+  deletedAt DateTime?
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 

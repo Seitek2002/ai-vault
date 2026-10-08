@@ -38,6 +38,7 @@ export class EsfLinksService {
         await this.lockSettlements(tx, organizationId, [...before, ...ids]);
         const settlements = await tx.settlement.findMany({ where: { organizationId, id: { in: ids } } });
         if (settlements.length !== ids.length) throw new NotFoundException('Некоторые расчёты не найдены');
+        if (settlements.some((settlement) => settlement.deletedAt)) throw new BadRequestException('Удалённый комплект нужно сначала восстановить.');
         if (new Set(settlements.map((s) => s.counterpartyId)).size !== 1) {
           throw new BadRequestException('Одна ЭСФ может покрывать несколько месяцев только одной компании.');
         }

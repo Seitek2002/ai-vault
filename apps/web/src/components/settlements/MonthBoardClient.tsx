@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarDays, ChevronLeft, ChevronRight, RefreshCw, Plus } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight, RefreshCw, Plus, Trash2 } from "lucide-react";
 import { ApiError } from "@/lib/api/client";
 import { Button, Card, EmptyState, Spinner } from "@/components/ui";
 import { cn } from "@/lib/cn";
@@ -26,6 +26,8 @@ import { AmountEditor } from "./AmountEditor";
 
 const StepActionModal = dynamic(() => import('./StepActionModal').then((m) => m.StepActionModal));
 const AddSettlementModal = dynamic(() => import('./AddSettlementModal').then((m) => m.AddSettlementModal));
+const DeleteSettlementModal = dynamic(() => import('./DeleteSettlementModal').then((m) => m.DeleteSettlementModal));
+const DeletedSettlements = dynamic(() => import('./DeletedSettlements').then((m) => m.DeletedSettlements));
 
 const STATUS_META: Record<Settlement["status"], { label: string; className: string }> = {
   closed: { label: "Закрыт", className: "bg-[rgba(74,222,128,0.12)] text-[#4ADE80]" },
@@ -69,6 +71,8 @@ export function MonthBoardClient() {
   );
   const [notice, setNotice] = useState("");
   const [adding, setAdding] = useState<{ contractId?: string } | null>(null);
+  const [removing, setRemoving] = useState<Settlement | null>(null);
+  const [showDeleted, setShowDeleted] = useState(false);
 
   const qc = useQueryClient();
 
@@ -260,6 +264,8 @@ export function MonthBoardClient() {
                       <button type="button" onClick={() => setAdding({ contractId: s.contractId })}
                         aria-label={`Добавить акт и счёт: ${s.counterpartyName}`}
                         className="mt-1 text-xs text-[var(--color-accent)] hover:underline focus-visible:outline-2">+ Ещё акт и счёт</button>
+                      <button type="button" onClick={() => setRemoving(s)} aria-label={`Удалить ${settlementSetLabel(s)}: ${s.counterpartyName}`}
+                        className="ml-3 inline-flex min-h-8 items-center gap-1 text-xs text-[var(--color-text-muted)] hover:text-[var(--color-danger)] focus-visible:outline-2"><Trash2 className="size-3" /> Удалить</button>
                     </td>
                     <td className="px-3 py-2 text-right">
                       <AmountEditor settlement={s} compact />
@@ -330,6 +336,8 @@ export function MonthBoardClient() {
                 <button type="button" onClick={() => setAdding({ contractId: s.contractId })}
                   aria-label={`Добавить акт и счёт: ${s.counterpartyName}`}
                   className="mb-3 min-h-9 text-xs text-[var(--color-accent)] hover:underline focus-visible:outline-2">+ Ещё акт и счёт</button>
+                <button type="button" onClick={() => setRemoving(s)} aria-label={`Удалить ${settlementSetLabel(s)}: ${s.counterpartyName}`}
+                  className="ml-3 inline-flex min-h-9 items-center gap-1 text-xs text-[var(--color-text-muted)] hover:text-[var(--color-danger)] focus-visible:outline-2"><Trash2 className="size-3.5" /> Удалить</button>
                 <div className="flex flex-wrap gap-1.5">
                   {s.steps.map((step) => (
                     <StepChip
@@ -355,6 +363,13 @@ export function MonthBoardClient() {
           }}
         />
       )}
+
+      <details className="mt-5 shrink-0 border-t border-[var(--color-border)] pt-3" onToggle={(event) => setShowDeleted(event.currentTarget.open)}>
+        <summary className="cursor-pointer text-xs text-[var(--color-text-secondary)] focus-visible:outline-2">Удалённые комплекты · {MONTH_NAMES[month - 1]} {year}</summary>
+        {showDeleted && <DeletedSettlements year={year} month={month} />}
+      </details>
+
+      {removing && <DeleteSettlementModal settlement={removing} onClose={() => setRemoving(null)} onDeleted={() => { setNotice(`${settlementSetLabel(removing)} удалён. Его можно восстановить в «Удалённых комплектах».`); setRemoving(null); }} />}
 
       {adding && <AddSettlementModal year={year} month={month} {...adding} onClose={() => setAdding(null)}
         onCreated={(created) => { setAdding(null); setNotice(`${settlementSetLabel(created)} добавлен: ${created.counterpartyName}`); }} />}

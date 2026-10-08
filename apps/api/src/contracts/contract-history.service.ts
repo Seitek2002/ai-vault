@@ -21,7 +21,7 @@ const invoiceSelect = {
 } as const;
 const historySelect = {
   id: true, year: true, month: true, sequence: true, label: true, amount: true,
-  currency: true, closedAt: true,
+  currency: true, closedAt: true, deletedAt: true,
   steps: { orderBy: { order: 'asc' }, select: {
     type: true, order: true, dueDate: true, doneAt: true, note: true, evidenceUrl: true,
     doneBy: { select: { name: true } }, fileAsset: { select: fileSelect },
@@ -76,13 +76,15 @@ export class ContractHistoryService {
       const due = Prisma.Decimal.max(row.amount.sub(paid), 0);
       const overpaid = Prisma.Decimal.max(paid.sub(row.amount), 0);
       const total = totals.get(row.currency) ?? { currency: row.currency, billed: new Prisma.Decimal(0), paid: new Prisma.Decimal(0), due: new Prisma.Decimal(0), overpaid: new Prisma.Decimal(0) };
-      total.billed = total.billed.add(row.amount); total.paid = total.paid.add(paid);
-      // Do not offset another settlement's debt with this settlement's overpayment.
-      total.due = total.due.add(due); total.overpaid = total.overpaid.add(overpaid);
-      totals.set(row.currency, total);
+      if (!row.deletedAt) {
+        total.billed = total.billed.add(row.amount); total.paid = total.paid.add(paid);
+        // Do not offset another settlement's debt with this settlement's overpayment.
+        total.due = total.due.add(due); total.overpaid = total.overpaid.add(overpaid);
+        totals.set(row.currency, total);
+      }
       return {
         id: row.id, year: row.year, month: row.month, sequence: row.sequence, label: row.label,
-        amount: row.amount.toNumber(), currency: row.currency, closedAt: row.closedAt,
+        amount: row.amount.toNumber(), currency: row.currency, closedAt: row.closedAt, deletedAt: row.deletedAt,
         paidAmount: paid.toNumber(), dueAmount: due.toNumber(), overpaidAmount: overpaid.toNumber(),
         status: deriveStatus(row.steps),
         steps: row.steps.map((step) => ({ type: step.type, dueDate: step.dueDate, doneAt: step.doneAt,

@@ -51,6 +51,7 @@ export interface Settlement {
   dueAmount: number;
   status: SettlementStatus;
   closedAt: string | null;
+  deletedAt?: string | null;
   steps: SettlementStep[];
   payments: SettlementPayment[];
 }
@@ -129,6 +130,8 @@ export const settlementsApi = {
   update: (id: string, dto: { amount?: number; vatAmount?: number }) =>
     api.patch<SettlementDetail>(`/settlements/${id}`, dto),
   remove: (id: string) => api.delete<void>(`/settlements/${id}`),
+  deleted: (year: number, month: number) => api.get<MonthBoard>(`/settlements/deleted?year=${year}&month=${month}`),
+  restore: (id: string) => api.post<{ id: string }>(`/settlements/${id}/restore`, {}),
   completeStep: (id: string, stepId: string, dto: CompleteStepDto) =>
     api.post<SettlementDetail>(`/settlements/${id}/steps/${stepId}/complete`, dto),
   generateStepDocument: (id: string, stepId: string, templateId?: string) =>

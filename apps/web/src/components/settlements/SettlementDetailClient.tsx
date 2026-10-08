@@ -2,8 +2,9 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { useQuery } from '@tanstack/react-query';
-import { Spinner } from "@/components/ui";
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useRouter } from 'next/navigation';
+import { Button, Spinner } from "@/components/ui";
 import {
   MONTH_NAMES,
   STEP_FULL_LABELS,
@@ -17,6 +18,7 @@ import { EsfOnSettlement } from './EsfInbox';
 import { openFile } from '@/lib/api/files';
 import { StepActionModal } from './StepActionModal';
 import { stepState } from './StepBadge';
+import { DeleteSettlementModal } from './DeleteSettlementModal';
 
 const DOC_STATUS_LABELS: Record<string, string> = {
   DRAFT: 'Черновик',
@@ -39,6 +41,13 @@ const STATE_DOT: Record<ReturnType<typeof stepState>, string> = {
 
 export function SettlementDetailClient({ settlementId }: { settlementId: string }) {
   const [selectedStepId, setSelectedStepId] = useState<string | null>(null);
+  const [removing, setRemoving] = useState(false);
+  const router = useRouter();
+  const qc = useQueryClient();
+  const restore = useMutation({
+    mutationFn: () => settlementsApi.restore(settlementId),
+    onSuccess: () => { for (const key of ['settlements', 'settlement', 'contract-history', 'esf']) void qc.invalidateQueries({ queryKey: [key] }); },
+  });
 
   const { data, isLoading } = useQuery({
     queryKey: ['settlement', settlementId],
@@ -77,8 +86,14 @@ export function SettlementDetailClient({ settlementId }: { settlementId: string 
           </p>
           <p className="mt-1 text-sm text-[var(--color-text-secondary)]">{settlementSetLabel(data)}</p>
         </div>
-        <AmountEditor settlement={data} />
+        <div className="flex flex-wrap items-center gap-3">
+          {data.deletedAt ? <span className="text-sm font-medium">{formatMoney(data.amount, data.currency)}</span> : <AmountEditor settlement={data} />}
+          {data.deletedAt ? <Button variant="secondary" size="sm" loading={restore.isPending} loadingText="Восстанавливаю…" onClick={() => restore.mutate()}>Восстановить комплект</Button> : <Button variant="secondary" size="sm" onClick={() => setRemoving(true)}>Удалить комплект</Button>}
+        </div>
       </div>
+
+      {data.deletedAt && <p className="mb-4 text-sm text-[var(--color-text-secondary)]">Комплект удалён {new Date(data.deletedAt).toLocaleDateString('ru-RU')}. Документы и оплаты сохранены; комплект не учитывается в итогах. Для изменения шагов восстановите его.</p>}
+      {restore.isError && <p role="alert" className="mb-4 text-sm text-[var(--color-danger)]">{restore.error instanceof Error ? restore.error.message : 'Не удалось восстановить комплект.'}</p>}
 
       <div className="grid lg:grid-cols-2 gap-6">
         {/* Чек-лист */}
@@ -90,6 +105,7 @@ export function SettlementDetailClient({ settlementId }: { settlementId: string 
               return (
                 <li key={step.id}>
                   <button
+                    disabled={!!data.deletedAt}
                     onClick={() => setSelectedStepId(step.id)}
                     className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg bg-[var(--color-bg-surface)] border border-[var(--color-border)] hover:border-[var(--color-accent-border)] transition-colors text-left"
                   >
@@ -125,7 +141,7 @@ export function SettlementDetailClient({ settlementId }: { settlementId: string 
               Документы
             </h2>
             <div className="mb-1.5">
-              <EsfOnSettlement settlementId={data.id} />
+              <EsfOnSettlement settlementId={data.id} readOnly={!!data.deletedAt} />
             </div>
             {data.documents.length === 0 ? (
               <p className="text-sm text-[var(--color-text-muted)]">Документов нет.</p>
@@ -214,7 +230,8 @@ export function SettlementDetailClient({ settlementId }: { settlementId: string 
         </div>
       </div>
 
-      {selectedStep && (
+      {removing && <DeleteSettlementModal settlement={data} onClose={() => setRemoving(false)} onDeleted={() => router.push('/month')} />}
+      {selectedStep && !data.deletedAt && (
         <StepActionModal
           settlement={data}
           step={selectedStep}

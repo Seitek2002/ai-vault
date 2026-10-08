@@ -7,6 +7,11 @@ import { AttachEsfDto } from '../dto/esf.dto';
 import { linksFixture } from './links-fixture';
 
 describe('ЭСФ за несколько расчётов', () => {
+  it('не позволяет привязать ЭСФ к удалённому комплекту', async () => {
+    const f = linksFixture(); Object.assign(f.settlements[1]!, { deletedAt: new Date() });
+    await expect(f.service.attach('org', 'user', 'inv', ['s2'])).rejects.toThrow('сначала восстановить');
+    expect(f.links()).toEqual([{ invoiceId: 'inv', settlementId: 's1' }]);
+  });
   it('закрывает все выбранные шаги одним PDF и сохраняет основной расчёт', async () => {
     const { service, links, steps, settlements, invoices } = linksFixture();
     await service.attach('org', 'user', 'inv', ['s1', 's2', 's3']);

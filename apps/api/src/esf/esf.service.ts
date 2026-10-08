@@ -101,6 +101,7 @@ export class EsfService {
       include: { contract: true, counterparty: true, steps: true, documents: true },
     });
     if (!settlement) throw new NotFoundException('Расчёт не найден');
+    if (settlement.deletedAt) throw new BadRequestException('Комплект удалён. Сначала восстановите его.');
     const step = settlement.steps.find((s) => s.type === SettlementStepType.ISSUE_ESF);
     if (!step) throw new BadRequestException('В этом расчёте нет шага «Выставить ЭСФ»');
     if (step.doneAt) throw new BadRequestException('Шаг «Выставить ЭСФ» уже закрыт');
@@ -525,7 +526,7 @@ export class EsfService {
 
   private async candidatesFor(organizationId: string, counterpartyId: string): Promise<SettlementCandidate[]> {
     const settlements = await this.prisma.settlement.findMany({
-      where: { organizationId, counterpartyId },
+      where: { organizationId, counterpartyId, deletedAt: null },
       select: {
         id: true,
         year: true,

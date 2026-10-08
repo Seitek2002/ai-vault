@@ -30,6 +30,17 @@ export class SettlementsController {
     return this.service.findByCounterparty(organizationId, counterpartyId);
   }
 
+  @Get('deleted')
+  findDeleted(@CurrentOrgId() organizationId: string, @Query() query: ListSettlementsDto) {
+    return this.service.findAll(organizationId, query, true);
+  }
+
+  @Post(':id/restore')
+  @RequirePermission(Permission.MANAGE_DOCUMENTS)
+  restore(@Param('id') id: string, @CurrentOrgId() organizationId: string) {
+    return this.service.restore(id, organizationId);
+  }
+
   @Post('generate')
   @RequirePermission(Permission.MANAGE_DOCUMENTS)
   generate(

@@ -15,6 +15,14 @@ function setup(rows: unknown[] = []) {
 }
 
 describe('contract financial history', () => {
+  it('retains deleted sets and their payments in history but excludes them from totals', async () => {
+    const removed = { ...settlement('deleted', 8, 100), deletedAt: new Date(), payments: [{ id: 'paid', organizationId: 'org', amount: decimal(100), paidAt: new Date(), reference: null, fileAsset: file() }] };
+    const { service } = setup([removed, settlement('active', 8, 50)]);
+    const result = await service.find('contract', 'org');
+    expect(result.settlements[0]).toMatchObject({ id: 'deleted', deletedAt: removed.deletedAt, paidAmount: 100 });
+    expect(result.settlements[0]!.payments).toHaveLength(1);
+    expect(result.totals).toEqual([{ currency: 'KGS', billed: 50, paid: 0, due: 50, overpaid: 0 }]);
+  });
   it('checks organization ownership before accessing any settlements', async () => {
     const { prisma, service } = setup();
     prisma.contract.findFirst.mockResolvedValue(null as never);

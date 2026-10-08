@@ -67,7 +67,7 @@ export function ContractHistory({ contract }: { contract: Contract }) {
             <Info label="К оплате" value={formatMoney(total.due, total.currency)} />
             <Info label="Переплата" value={formatMoney(total.overpaid, total.currency)} />
           </dl>)}
-          <p className="mb-2 text-xs text-[var(--color-text-muted)]">Показаны все расчётные месяцы. Переплата отображается отдельно от долга.</p>
+          <p className="mb-2 text-xs text-[var(--color-text-muted)]">Показаны все расчётные месяцы. Удалённые комплекты сохранены в истории и исключены из итогов. Переплата отображается отдельно от долга.</p>
           {[...months.entries()].map(([key, sets], index) => <details key={key} open={index === 0} className="group/month border-t border-[var(--color-border)]">
             <summary className="flex cursor-pointer list-none items-center gap-2 py-3 text-sm focus-visible:outline-2 focus-visible:outline-[var(--color-accent)]">
               <ChevronDown className="size-4 shrink-0 text-[var(--color-text-muted)] transition-transform group-open/month:rotate-180" />
@@ -94,7 +94,7 @@ function SettlementHistory({ set, contractId, onFile }: { set: HistorySettlement
   return <section className="min-w-0 border-l-2 border-[var(--color-border)] pl-3">
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
       <Link href={`/settlements/${set.id}`} className="font-semibold text-[var(--color-accent)] hover:underline">Комплект №{set.sequence}{set.label ? ` · ${set.label}` : ""} ↗</Link>
-      <span className={set.status === "overdue" ? "text-[var(--color-danger)]" : "text-[var(--color-text-secondary)]"}>{STATUS[set.status]}</span>
+      <span className={!set.deletedAt && set.status === "overdue" ? "text-[var(--color-danger)]" : "text-[var(--color-text-secondary)]"}>{set.deletedAt ? "Удалён · можно восстановить" : STATUS[set.status]}</span>
       <span className="ml-auto font-medium">{formatMoney(set.amount, set.currency)}</span>
     </div>
     <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-[var(--color-text-secondary)]">

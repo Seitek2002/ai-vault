@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { calculateContractEndDate } from '@ai-vault/doc-placeholders';
+import { calculateContractEndDate, formatContractNumber } from '@ai-vault/doc-placeholders';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { MAX_UPLOAD_SIZE_BYTES, MAX_UPLOAD_SIZE_MB } from '../files/upload-limits';
@@ -106,7 +106,9 @@ export class ContractsService {
       return await this.prisma.$transaction(async (tx) => {
         // Serialize numbering and manual reservations within this organization.
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${organizationId}))`;
-        const number = dto.number?.trim() || await this.nextNumber(tx, organizationId);
+        const number = dto.number?.trim()
+          ? this.normalizeNumber(dto.number, dates.startDate)
+          : await this.nextNumber(tx, organizationId, dates.startDate);
         const contract = await tx.contract.create({
           data: {
             organizationId,
@@ -147,7 +149,8 @@ export class ContractsService {
     if (dto.number !== undefined) {
       const number = dto.number?.trim();
       if (!number) throw new BadRequestException('Номер договора не может быть пустым');
-      data.number = number;
+      data.number = this.normalizeNumber(number,
+        dto.startDate !== undefined ? dto.startDate : existing.startDate, existing.createdAt);
     }
     if (dto.title !== undefined) data.title = dto.title;
     if (dto.defaultAmount !== undefined) data.defaultAmount = new Prisma.Decimal(dto.defaultAmount);
@@ -224,14 +227,21 @@ export class ContractsService {
     return { startDate, endDate, termValue, termUnit };
   }
 
-  private async nextNumber(tx: Prisma.TransactionClient, organizationId: string): Promise<string> {
+  private normalizeNumber(number: string, startDate?: string | Date | null, createdAt?: Date): string {
+    if (!number.trim().replace(/\/+$/, '')) throw new BadRequestException('Укажите номер договора перед суффиксом');
+    const normalized = formatContractNumber(number, startDate, createdAt);
+    if (normalized.length > 100) throw new BadRequestException('Номер договора с суффиксом месяца и года не должен превышать 100 символов');
+    return normalized;
+  }
+
+  private async nextNumber(tx: Prisma.TransactionClient, organizationId: string, startDate: Date | null): Promise<string> {
     while (true) {
       const counter = await tx.contractNumberCounter.upsert({
         where: { organizationId },
         create: { organizationId, lastNumber: 1 },
         update: { lastNumber: { increment: 1 } },
       });
-      const number = `ДГ-${String(counter.lastNumber).padStart(6, '0')}`;
+      const number = this.normalizeNumber(`ДГ-${String(counter.lastNumber).padStart(6, '0')}`, startDate);
       const exists = await tx.contract.findFirst({ where: { organizationId, number }, select: { id: true } });
       if (!exists) return number;
     }

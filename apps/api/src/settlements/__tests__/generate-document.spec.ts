@@ -18,7 +18,7 @@ function fixture() {
     },
     companySettings: { findUnique: vi.fn().mockResolvedValue(settings), update: vi.fn(({ data }) => Object.assign(settings, data)) },
     counterparty: { findFirstOrThrow: vi.fn().mockResolvedValue({ id: 'cp1', name: 'Заказчик', inn: '456', address: 'Бишкек' }) },
-    contract: { findFirstOrThrow: vi.fn().mockResolvedValue({ id: 'c1', number: 'ДГ-25', title: 'Обслуживание', startDate: new Date('2026-03-01T00:00:00Z') }) },
+    contract: { findFirstOrThrow: vi.fn().mockResolvedValue({ id: 'c1', number: 'ДГ-25/0326', title: 'Обслуживание', startDate: new Date('2026-03-01T00:00:00Z') }) },
     documentTemplate: { findFirst: vi.fn().mockResolvedValue(null) },
     document: {
       findFirst: vi.fn(({ where }) => Promise.resolve(records.find(r => match(r, where)) ?? null)),
@@ -45,7 +45,7 @@ describe('generation from a settlement step', () => {
       const body = JSON.stringify(doc.bodyJson);
       expect(body).toContain('Заказчик'); expect(body).toContain('Исполнитель');
       expect(body).toContain('Дополнительные услуги'); expect(body).toContain('35 000,00');
-      expect(body).toContain('ДГ-25'); expect(body).toContain('1.03.2026');
+      expect(body).toContain('ДГ-25/0326'); expect(body).toContain('1.03.2026');
       expect(body).toContain('1.09.26 г.'); expect(body).toContain('30.09.26 г.');
       expect(body).not.toContain('{{'); expect(body).not.toContain('Адам.Тех');
       expect(doc.meta).toMatchObject({ totalAmount: 35000, totalVat: 0, periodStart: '2026-09-01', periodEnd: '2026-09-30' });

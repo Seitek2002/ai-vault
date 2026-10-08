@@ -2,7 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import Link from "next/link";
-import { calculateContractEndDate, parseMoneyInput } from "@ai-vault/doc-placeholders";
+import { calculateContractEndDate, contractNumberPeriod, formatContractNumber, parseMoneyInput } from "@ai-vault/doc-placeholders";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Handshake, Trash2 } from "lucide-react";
 import { ApiError } from "@/lib/api/client";
@@ -168,9 +168,11 @@ export function ContractModal({ editing, onClose }: { editing: Contract | null; 
         <label className="block mb-3">
           <span className={labelClass}>Номер договора</span>
           <Input value={form.number ?? ""} maxLength={100}
-            placeholder="Будет присвоен автоматически"
+            placeholder={`Автоматически · /${contractNumberPeriod(form.startDate)}`}
             onChange={(e) => set("number", e.target.value)} />
-          <span className={hintClass}>{editing ? "Можно изменить номер вручную" : "Оставьте пустым для автоматической нумерации или введите свой номер"}</span>
+          <span className={hintClass}>{form.number?.trim()
+            ? `Номер при сохранении: ${formatContractNumber(form.number, form.startDate)}`
+            : "Оставьте пустым для автоматической нумерации или введите свой номер"}. Суффикс /ММГГ — по дате начала, без неё — по дате создания.</span>
         </label>
         <label className="block mb-3">
           <span className={labelClass}>Партнёр</span>

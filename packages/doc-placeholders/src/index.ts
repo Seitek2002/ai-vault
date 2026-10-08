@@ -1,6 +1,7 @@
 export * from './format';
 export * from './placeholders';
 export * from './contract-term';
+export * from './contract-number';
 export * from './money-input';
 export * from './esf';
 export * from './settlement-templates';

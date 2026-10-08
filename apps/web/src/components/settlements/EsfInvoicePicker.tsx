@@ -77,7 +77,7 @@ export function EsfInvoicePicker({ invoices, value, currency, disabled, loading,
         <fieldset disabled={disabled} className="max-h-80 min-w-0 overflow-y-auto overscroll-contain">
           <legend className="sr-only">Выберите ЭСФ для расчёта</legend>
           {filtered.length === 0 ? <p className="p-4 text-sm text-[var(--color-text-secondary)]">
-            {query ? "ЭСФ не найдены. Измените запрос или очистите поиск." : "Нет доступных ЭСФ этого партнёра."}
+            {query ? "ЭСФ не найдены. Измените запрос или очистите поиск." : "Нет свободных ЭСФ этого партнёра."}
           </p> : filtered.map((invoice) => {
             const periods = linkedPeriods(invoice);
             const contracts = [...new Set((invoice.settlements ?? []).map((s) => `№ ${s.contractNumber} · ${s.contractTitle}`))];

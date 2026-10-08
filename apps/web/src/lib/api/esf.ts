@@ -65,6 +65,12 @@ export function esfCoversSettlement(invoice: EsfInvoice, settlementId: string): 
   return esfSettlementIds(invoice).includes(settlementId);
 }
 
+/** The picker offers free invoices; current links are displayed separately. */
+export function esfUnlinkedPartnerInvoices(invoices: EsfInvoice[], counterpartyId: string): EsfInvoice[] {
+  return invoices.filter((invoice) => !invoice.hiddenAt && invoice.counterpartyId === counterpartyId &&
+    (invoice.status === 'SENT' || invoice.status === 'ACCEPTED') && esfSettlementIds(invoice).length === 0);
+}
+
 export interface EsfSyncReport {
   fetched: number;
   created: number;

@@ -6,7 +6,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, ExternalLink, FileText, Link2, Paperclip, Trash2 } from "lucide-react";
 import { ApiError } from "@/lib/api/client";
 import { esfInvoicesQuery } from "@/lib/queries/esf";
-import { esfApi, esfCoversSettlement, esfSettlementIds, ESF_STATUS_LABELS, type CreateEsfDraft } from "@/lib/api/esf";
+import { esfApi, esfCoversSettlement, esfUnlinkedPartnerInvoices, ESF_STATUS_LABELS, type CreateEsfDraft } from "@/lib/api/esf";
 import { EsfDraftEditor } from './EsfDraftEditor';
 import { SettlementDocumentActions } from './SettlementDocumentActions';
 import { EsfInvoicePicker } from './EsfInvoicePicker';
@@ -89,13 +89,14 @@ export function StepActionModal({ settlement, step, onClose }: Props) {
     ...esfInvoicesQuery,
     enabled: isEsfStep && !step.doneAt,
   });
-  const esfCandidates = (esfQuery.data ?? []).filter((invoice) =>
-    !invoice.hiddenAt && invoice.counterpartyId === settlement.counterpartyId &&
-    (invoice.status === "SENT" || invoice.status === "ACCEPTED"),
-  ).sort((a, b) => (b.deliveryDate ?? "").localeCompare(a.deliveryDate ?? ""));
+  const esfCandidates = esfUnlinkedPartnerInvoices(esfQuery.data ?? [], settlement.counterpartyId)
+    .sort((a, b) => (b.deliveryDate ?? "").localeCompare(a.deliveryDate ?? ""));
   const linkedInvoice = esfQuery.data?.find((invoice) => esfCoversSettlement(invoice, settlement.id));
-  const selectedInvoiceId = esfInvoiceId || esfCandidates.find((invoice) => esfCoversSettlement(invoice, settlement.id))?.id || "";
-  const selectedInvoice = esfCandidates.find((invoice) => invoice.id === selectedInvoiceId);
+  const currentInvoice = linkedInvoice && !linkedInvoice.hiddenAt && linkedInvoice.counterpartyId === settlement.counterpartyId &&
+    (linkedInvoice.status === "SENT" || linkedInvoice.status === "ACCEPTED") ? linkedInvoice : undefined;
+  const selectedInvoiceId = esfInvoiceId || currentInvoice?.id || "";
+  const selectedInvoice = esfCandidates.find((invoice) => invoice.id === selectedInvoiceId) ??
+    (currentInvoice?.id === selectedInvoiceId ? currentInvoice : undefined);
   const actPdfId = settlement.steps.find((s) => s.type === "ISSUE_ACT")?.fileAssetId ?? null;
   const requiresPdfScan = step.type === "ISSUE_ACT" || step.type === "ISSUE_INVOICE";
   const scanDocument = step.type === "ISSUE_ACT" ? "акта" : "счёта на оплату";
@@ -286,10 +287,10 @@ export function StepActionModal({ settlement, step, onClose }: Props) {
                       onChange={(id) => { setEsfInvoiceId(id); setError(""); }} />
                     {selectedInvoice && (
                       <div className="mt-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elevated)] px-3 py-2 text-xs">
+                        {esfCoversSettlement(selectedInvoice, settlement.id) && <p className="mb-1 font-medium text-[var(--color-text-primary)]">Привязана к этому расчёту</p>}
                         <p className="text-[var(--color-text-primary)] break-words">ЭСФ № {selectedInvoice.number ?? "—"}</p>
                         <p className="mt-1 text-[var(--color-text-secondary)]">ID ЭСФ на портале: <span className="font-mono break-all select-all text-[var(--color-text-primary)]">{selectedInvoice.uuid}</span></p>
                         <p className="mt-1 text-[var(--color-text-secondary)]">{selectedInvoice.deliveryDate ? new Date(selectedInvoice.deliveryDate).toLocaleDateString("ru-RU") : "Без даты"} · {formatMoney(selectedInvoice.amount, settlement.currency)} · {ESF_STATUS_LABELS[selectedInvoice.status]}</p>
-                        {esfSettlementIds(selectedInvoice).length > 0 && !esfCoversSettlement(selectedInvoice, settlement.id) && <p className="mt-1 text-[var(--color-text-secondary)]">Эта ЭСФ уже покрывает другие расчёты. К ней будет добавлен расчёт: {periodLabel}.</p>}
                       </div>
                     )}
                     {esfQuery.isError ? (
@@ -299,7 +300,7 @@ export function StepActionModal({ settlement, step, onClose }: Props) {
                       </div>
                     ) : (
                       <p className="mt-1.5 text-xs text-[var(--color-text-secondary)]">
-                        {selectedInvoice ? `Проверьте примечание, период и сумму: выбранная ЭСФ будет связана с расчётом за ${periodLabel}.` : !esfQuery.isPending && esfCandidates.length === 0 ? "Нет доступных отправленных или принятых ЭСФ этого партнёра. Синхронизируйте кабинет или добавьте ссылку / скан." : "Показаны отправленные и принятые ЭСФ партнёра, включая привязанные к другим месяцам. Период ЭСФ указан в примечании или связанных расчётах."}
+                        {selectedInvoice && !esfCoversSettlement(selectedInvoice, settlement.id) ? `Проверьте примечание, период и сумму: выбранная ЭСФ будет связана с расчётом за ${periodLabel}.` : !esfQuery.isPending && esfCandidates.length === 0 ? "Свободных отправленных или принятых ЭСФ этого партнёра нет. Создайте новую ЭСФ или добавьте ссылку / скан." : "В списке только свободные отправленные и принятые ЭСФ партнёра. Привязанные к расчётам ЭСФ скрыты из списка."}
                       </p>
                     )}
                     {linkedInvoice?.status === "NEW" ? <EsfDraftPanel settlementId={settlement.id} stepNote={step.note} actPdfId={actPdfId} onBusyChange={setDraftBusy} onDetached={() => { setEsfInvoiceId(""); setNote(""); }} /> : (

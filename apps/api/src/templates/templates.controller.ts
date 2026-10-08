@@ -13,7 +13,6 @@ export class TemplatesController {
 
   @Post('preview/pdf')
   @HttpCode(200)
-  @RequirePermission(Permission.MANAGE_TEMPLATES)
   async previewDraft(@Body() dto: PreviewTemplateDto, @CurrentOrgId() organizationId: string, @Res() reply: FastifyReply) {
     const { buffer } = await this.exporter.generateDraftTemplatePdf(dto, organizationId);
     return reply.header('Content-Type', 'application/pdf').header('Cache-Control', 'private, no-store').send(buffer);

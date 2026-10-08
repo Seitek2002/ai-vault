@@ -89,4 +89,15 @@ describe('Создание ЭСФ после загрузки акта', () => {
     expect(f.prisma.fileAsset.findFirst).not.toHaveBeenCalled();
     expect(f.draft.createByCopy).not.toHaveBeenCalled();
   });
+
+  it.each(['NEW', 'SENT', 'ACCEPTED'])('требует явной отвязки существующей ЭСФ %s перед созданием новой', async (status) => {
+    const f = fixture();
+    f.prisma.esfInvoice.findFirst.mockReset().mockResolvedValue({ id: 'old-esf', number: 'OLD-1', status });
+    await expect(f.create()).rejects.toThrow('К расчёту уже привязана ЭСФ OLD-1');
+    expect(f.draft.createByCopy).not.toHaveBeenCalled();
+    expect(f.sync).not.toHaveBeenCalled();
+    expect(f.prisma.esfInvoice.findFirst).toHaveBeenCalledWith({ where: {
+      organizationId: 'org', OR: [{ settlementId: 'set-1' }, { settlementLinks: { some: { settlementId: 'set-1' } } }],
+    } });
+  });
 });

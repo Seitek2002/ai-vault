@@ -38,7 +38,7 @@ export function DraftTemplatePreview({ name, bodyJson, metaDefaults }: {
           if (previous) URL.revokeObjectURL(previous);
           setResult({ key, error: '' });
         } catch (e) {
-          if (!cancelled && version === revision.current) setResult({ key, error: e instanceof Error ? e.message : 'Не удалось обновить превью. Повторите попытку.' });
+          if (!cancelled && version === revision.current) setResult({ key, error: e instanceof Error && e.message ? e.message : 'Не удалось обновить превью. Повторите попытку.' });
         }
       });
     }, 1200);

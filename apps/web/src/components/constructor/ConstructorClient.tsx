@@ -237,7 +237,9 @@ function ConstructorModal({ initial, actPreset = false, companySettings, onClose
           </div>
         </div>
 
-        <div className="relative">
+        <details className="rounded-lg border border-[var(--color-border)]">
+          <summary className="cursor-pointer px-3 py-2 text-sm font-medium text-[var(--color-text-secondary)]">Страница и настройки · {readPageLayout(metaDefaults).paperSize} · {readPageLayout(metaDefaults).orientation === 'landscape' ? 'Альбомная' : 'Книжная'}</summary>
+        <div className="relative border-t border-[var(--color-border)] p-3">
           <label className="mb-4 block text-sm text-[var(--color-text-secondary)]">Тип документа
             <Select value={type} onChange={v => setType(v as DocumentType)} disabled={isEdit} options={[
               { value: DocumentType.CUSTOM, label: 'Свой документ' }, { value: DocumentType.AVR, label: 'Акт выполненных работ' },
@@ -274,6 +276,7 @@ function ConstructorModal({ initial, actPreset = false, companySettings, onClose
             />
           )}
         </div>
+        </details>
 
         <div>
           <label className="text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-wider block mb-1.5">

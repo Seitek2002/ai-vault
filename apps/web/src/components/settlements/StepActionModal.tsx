@@ -10,7 +10,8 @@ import { esfApi, esfCoversSettlement, esfUnlinkedPartnerInvoices, ESF_STATUS_LAB
 import { EsfDraftEditor } from './EsfDraftEditor';
 import { SettlementDocumentActions } from './SettlementDocumentActions';
 import { EsfInvoicePicker } from './EsfInvoicePicker';
-import { openFile, uploadFile } from "@/lib/api/files";
+import { StepFilePreview } from './StepFilePreview';
+import { uploadFile } from "@/lib/api/files";
 import { Button, Input, Modal } from "@/components/ui";
 import {
   formatMoney,
@@ -73,6 +74,16 @@ export function StepActionModal({ settlement, step, onClose }: Props) {
   const [error, setError] = useState("");
   const [draftBusy, setDraftBusy] = useState(false);
   const [preparingEsf, setPreparingEsf] = useState(false);
+  const [previewFile, setPreviewFile] = useState<{ id: string; title: string } | null>(null);
+  const previewTrigger = useRef<HTMLElement | null>(null);
+  function previewFileInModal(id: string, title: string) {
+    previewTrigger.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setPreviewFile({ id, title });
+  }
+  function closeFilePreview() {
+    setPreviewFile(null);
+    previewTrigger.current?.focus();
+  }
 
   // Поля разных шагов; каждый использует только своё.
   const [note, setNote] = useState(step.note ?? "");
@@ -199,8 +210,9 @@ export function StepActionModal({ settlement, step, onClose }: Props) {
   }
 
   return (
-    <Modal onClose={() => { if (!busy) onClose(); }} size={isEsfStep ? "lg" : "md"}>
-      <div className="p-5 max-h-[80vh] overflow-y-auto">
+    <Modal onClose={() => { if (!busy) onClose(); }} size={isEsfStep ? "lg" : "md"} className={previewFile ? "max-w-7xl" : ""}>
+      <div className={previewFile ? "grid max-h-[90dvh] overflow-y-auto lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] lg:overflow-hidden" : ""}>
+      <div className={`min-w-0 p-5 overflow-y-auto ${previewFile ? "lg:max-h-[85dvh]" : "max-h-[80vh]"}`}>
         <div className="sticky -top-5 z-10 -mx-5 -mt-5 mb-4 border-b border-[var(--color-border)] bg-[var(--color-bg-surface)] px-5 pb-4 pt-5">
           <div className="flex flex-wrap items-baseline justify-between gap-3">
             <h3 className="text-sm font-semibold text-[var(--color-text-primary)]">
@@ -248,7 +260,7 @@ export function StepActionModal({ settlement, step, onClose }: Props) {
             {step.note && (
               <p className="text-sm text-[var(--color-text-primary)] mb-3">{step.note}</p>
             )}
-            <DoneStepFiles step={step} settlementId={settlement.id} />
+            <DoneStepFiles step={step} settlementId={settlement.id} onPreview={previewFileInModal} />
             {error && <p className="text-xs text-[var(--color-danger)] mb-2">{error}</p>}
             <div className="flex justify-end gap-2 mt-4">
               <Button variant="ghost" onClick={onClose}>Закрыть</Button>
@@ -303,11 +315,11 @@ export function StepActionModal({ settlement, step, onClose }: Props) {
                         {selectedInvoice && !esfCoversSettlement(selectedInvoice, settlement.id) ? `Проверьте примечание, период и сумму: выбранная ЭСФ будет связана с расчётом за ${periodLabel}.` : !esfQuery.isPending && esfCandidates.length === 0 ? "Свободных отправленных или принятых ЭСФ этого партнёра нет. Создайте новую ЭСФ или добавьте ссылку / скан." : "В списке только свободные отправленные и принятые ЭСФ партнёра. Привязанные к расчётам ЭСФ скрыты из списка."}
                       </p>
                     )}
-                    {linkedInvoice?.status === "NEW" ? <EsfDraftPanel settlementId={settlement.id} stepNote={step.note} actPdfId={actPdfId} onBusyChange={setDraftBusy} onDetached={() => { setEsfInvoiceId(""); setNote(""); }} /> : (
+                    {linkedInvoice?.status === "NEW" ? <EsfDraftPanel settlementId={settlement.id} stepNote={step.note} actPdfId={actPdfId} onBusyChange={setDraftBusy} onDetached={() => { setEsfInvoiceId(""); setNote(""); }} onPreview={previewFileInModal} /> : (
                       <details className="mt-3 border-t border-[var(--color-border)] pt-2 text-xs text-[var(--color-text-secondary)]"
                         onToggle={(event) => setPreparingEsf(event.currentTarget.open)}>
                         <summary className="cursor-pointer py-2 font-medium text-[var(--color-accent)] focus-visible:outline-2 focus-visible:outline-[var(--color-accent)]">Создать новую ЭСФ на портале</summary>
-                        <div className="mt-2"><EsfDraftPanel settlementId={settlement.id} stepNote={step.note} actPdfId={actPdfId} onBusyChange={setDraftBusy} onDetached={() => { setEsfInvoiceId(""); setNote(""); }} /></div>
+                        <div className="mt-2"><EsfDraftPanel settlementId={settlement.id} stepNote={step.note} actPdfId={actPdfId} onBusyChange={setDraftBusy} onDetached={() => { setEsfInvoiceId(""); setNote(""); }} onPreview={previewFileInModal} /></div>
                       </details>
                     )}
                   </div>
@@ -483,6 +495,8 @@ export function StepActionModal({ settlement, step, onClose }: Props) {
           </form>
         )}
       </div>
+      {previewFile && <StepFilePreview fileId={previewFile.id} title={previewFile.title} onClose={closeFilePreview} />}
+      </div>
     </Modal>
   );
 }
@@ -491,15 +505,13 @@ export function StepActionModal({ settlement, step, onClose }: Props) {
  * Что приложено к закрытому шагу: наш файл (скан, PDF ЭСФ) по короткой
  * ссылке и, для ЭСФ, официальная страница на портале.
  */
-function DoneStepFiles({ step, settlementId }: { step: SettlementStep; settlementId: string }) {
-  const [opening, setOpening] = useState(false);
-  const [error, setError] = useState("");
+function DoneStepFiles({ step, settlementId, onPreview }: { step: SettlementStep; settlementId: string; onPreview: (id: string, title: string) => void }) {
   const { data: esf } = useQuery({
     ...esfInvoicesQuery,
     select: (all) => all.filter((i) => esfCoversSettlement(i, settlementId)),
     enabled: step.type === "ISSUE_ESF",
   });
-  const portal = esf?.find((i) => i.fileAssetId === step.fileAssetId) ?? esf?.[0];
+  const portal = step.type === "ISSUE_ESF" ? esf?.find((i) => i.fileAssetId === step.fileAssetId) ?? esf?.[0] : undefined;
 
   const savedUrl = step.evidenceUrl && isEvidenceUrl(step.evidenceUrl) ? step.evidenceUrl : null;
   if (!step.fileAssetId && !portal && !savedUrl) return null;
@@ -510,18 +522,7 @@ function DoneStepFiles({ step, settlementId }: { step: SettlementStep; settlemen
         <Button
           size="sm"
           variant="secondary"
-          disabled={opening}
-          onClick={async () => {
-            setOpening(true);
-            setError("");
-            try {
-              await openFile(step.fileAssetId!);
-            } catch (err) {
-              setError(err instanceof Error ? err.message : "Не удалось открыть файл. Попробуйте ещё раз.");
-            } finally {
-              setOpening(false);
-            }
-          }}
+          onClick={() => onPreview(step.fileAssetId!, (stepFileLabels[step.type] ?? "Открыть файл").replace(/^Открыть /, ""))}
         >
           <FileText className="w-3.5 h-3.5" />
           {stepFileLabels[step.type] ?? "Открыть файл"}
@@ -550,7 +551,6 @@ function DoneStepFiles({ step, settlementId }: { step: SettlementStep; settlemen
           Открыть ссылку ЭСФ
         </a>
       )}
-      {error && <p role="alert" className="w-full text-xs text-[var(--color-danger)]">{error}</p>}
     </div>
   );
 }
@@ -560,7 +560,7 @@ function DoneStepFiles({ step, settlementId }: { step: SettlementStep; settlemen
  * датой, суммой и номером учётной системы. Подписать и отправить — только на портале,
  * после этого синхронизация закроет шаг сама.
  */
-function EsfDraftPanel({ settlementId, stepNote, actPdfId, onBusyChange, onDetached }: { settlementId: string; stepNote: string | null; actPdfId: string | null; onBusyChange: (busy: boolean) => void; onDetached: () => void }) {
+function EsfDraftPanel({ settlementId, stepNote, actPdfId, onBusyChange, onDetached, onPreview }: { settlementId: string; stepNote: string | null; actPdfId: string | null; onBusyChange: (busy: boolean) => void; onDetached: () => void; onPreview: (id: string, title: string) => void }) {
   const qc = useQueryClient();
   const [error, setError] = useState("");
   const esfQuery = useQuery({
@@ -642,5 +642,5 @@ function EsfDraftPanel({ settlementId, stepNote, actPdfId, onBusyChange, onDetac
       {error && <p role="alert" className="text-[var(--color-danger)]">{error}</p>}
     </div>
   );
-  return <EsfDraftEditor settlementId={settlementId} actPdfId={actPdfId} creating={create.isPending} error={error} onCreate={data => create.mutate(data)} />;
+  return <EsfDraftEditor settlementId={settlementId} actPdfId={actPdfId} creating={create.isPending} error={error} onCreate={data => create.mutate(data)} onPreviewAct={() => { if (actPdfId) onPreview(actPdfId, "PDF акта для сверки"); }} />;
 }

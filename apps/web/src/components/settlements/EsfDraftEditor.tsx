@@ -9,17 +9,15 @@ import { fieldClassName } from '@/components/ui/Input';
 import { esfApi, type CreateEsfDraft, type EsfDraftPreview } from '@/lib/api/esf';
 import { formatMoney } from '@/lib/api/settlements';
 import { reviewEsfLines, type EditableEsfLine } from '@/lib/esf-draft';
-import { openFile } from '@/lib/api/files';
 
-export function EsfDraftEditor({ settlementId, actPdfId, creating, error, onCreate }: {
+export function EsfDraftEditor({ settlementId, actPdfId, creating, error, onCreate, onPreviewAct }: {
   settlementId: string; actPdfId: string | null; creating: boolean; error: string;
   onCreate: (data: CreateEsfDraft) => void;
+  onPreviewAct: () => void;
 }) {
   const [preview, setPreview] = useState<EsfDraftPreview | null>(null);
   const [edited, setEdited] = useState<EditableEsfLine[]>([]);
   const [confirmed, setConfirmed] = useState(false);
-  const [fileError, setFileError] = useState('');
-  const [openingFile, setOpeningFile] = useState(false);
   const load = useMutation({
     mutationFn: () => esfApi.draftPreview(settlementId),
     onSuccess: data => {
@@ -73,11 +71,7 @@ export function EsfDraftEditor({ settlementId, actPdfId, creating, error, onCrea
         <div className="mt-1 flex flex-wrap justify-between gap-2 text-sm text-[var(--color-text-secondary)]"><span>Сумма расчёта</span><span>{formatMoney(preview.amount, preview.currency)}</span></div>
         {reviewed?.error && <p className="mt-2 text-sm text-[var(--color-danger)]">{reviewed.error}</p>}
       </div>
-      <Button type="button" variant="ghost" disabled={openingFile || busy} onClick={async () => {
-        setOpeningFile(true); setFileError('');
-        try { await openFile(actPdfId); } catch (e) { setFileError(e instanceof Error ? e.message : 'Не удалось открыть PDF акта.'); }
-        finally { setOpeningFile(false); }
-      }}>Открыть PDF акта для сверки</Button>
+      <Button type="button" variant="ghost" disabled={busy} onClick={onPreviewAct}>Открыть PDF акта для сверки</Button>
       <label className="flex items-start gap-2 text-base text-[var(--color-text-primary)]">
         <input type="checkbox" checked={confirmed} disabled={busy || !!reviewed?.error} onChange={e => setConfirmed(e.target.checked)} className="mt-1 accent-[var(--color-accent)]" />
         Строки и суммы совпадают с PDF акта
@@ -88,6 +82,6 @@ export function EsfDraftEditor({ settlementId, actPdfId, creating, error, onCrea
       }}><FileText className="h-4 w-4 shrink-0" aria-hidden="true" />Создать черновик ЭСФ на портале</Button>
       <p className="text-[var(--color-text-secondary)]">Номер учётной системы: <span className="break-all">{preview.crmRef}</span>. Подпись и отправка — на портале.</p>
     </>}
-    {(load.error || error || fileError) && <p role="alert" className="text-[var(--color-danger)]">{error || fileError || (load.error instanceof Error ? load.error.message : 'Не удалось загрузить строки. Повторите попытку.')}</p>}
+    {(load.error || error) && <p role="alert" className="text-[var(--color-danger)]">{error || (load.error instanceof Error ? load.error.message : 'Не удалось загрузить строки. Повторите попытку.')}</p>}
   </div>;
 }

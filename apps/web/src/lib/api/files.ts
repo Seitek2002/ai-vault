@@ -11,10 +11,15 @@ export interface UploadedFileResponse {
   s3Url: string;
 }
 
+/** Authenticated, short-lived URL for viewing a private attachment. */
+export async function getFileUrl(id: string): Promise<string> {
+  const { url } = await api.get<{ url: string }>(`/files/${id}/url`);
+  return url;
+}
+
 /** Открыть файл в новой вкладке по короткоживущей ссылке. */
 export async function openFile(id: string): Promise<void> {
-  const { url } = await api.get<{ url: string }>(`/files/${id}/url`);
-  window.open(url, '_blank', 'noopener');
+  window.open(await getFileUrl(id), '_blank', 'noopener');
 }
 
 export async function uploadFile(file: File): Promise<UploadedFileResponse> {

@@ -67,8 +67,8 @@ function CreateDocumentModal({ onClose }: { onClose: () => void }) {
   // "Тип документа" is now driven entirely by templates created in the Конструктор —
   // there is no more fixed list of built-in document types to pick from.
   const { data: templates = [] } = useQuery({
-    queryKey: ["templates", DocumentType.CUSTOM],
-    queryFn: () => templatesApi.list(DocumentType.CUSTOM),
+    queryKey: ["templates"],
+    queryFn: () => templatesApi.list(),
   });
 
   const createMutation = useMutation({
@@ -87,7 +87,8 @@ function CreateDocumentModal({ onClose }: { onClose: () => void }) {
       }
 
       return documentsApi.create({
-        type: DocumentType.CUSTOM,
+        type: selectedTemplate.type,
+        templateId: selectedTemplate.id,
         title: title.trim() || selectedTemplate.name,
         bodyJson,
         meta,

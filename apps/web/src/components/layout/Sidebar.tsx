@@ -31,7 +31,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/contracts", label: "Договоры", icon: Handshake },
   { href: "/documents", label: "Документы", icon: FileText },
   { href: "/companies", label: "Компании", icon: Building2 },
-  { href: "/builder", label: "Конструктор", icon: Wand2 },
+  { href: "/templates", label: "Шаблоны", icon: Wand2 },
   { href: "/archive", label: "Архив", icon: Archive },
   { href: "/settings", label: "Настройки", icon: Settings },
 ];

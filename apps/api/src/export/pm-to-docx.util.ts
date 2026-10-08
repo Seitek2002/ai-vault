@@ -13,8 +13,12 @@ import {
   AlignmentType,
   UnderlineType,
   ThematicBreak,
+  Header,
+  HorizontalPositionRelativeFrom,
+  VerticalPositionRelativeFrom,
 } from 'docx';
 import { isBorderlessTable } from './table-borders.util';
+import { readPageLayout, pageDimensions, type PageLayout } from '@ai-vault/doc-placeholders';
 
 interface PmNode {
   type: string;
@@ -244,19 +248,30 @@ function nodeToBlocks(node: PmNode, images: ImageCache): DocxBlock[] {
 
 // ─── Entry point ──────────────────────────────────────────────────────────────
 
-export async function pmToDocx(doc: unknown, title?: string): Promise<Buffer> {
+export async function pmToDocx(doc: unknown, title?: string, layout: PageLayout = readPageLayout({}), background?: { data: Buffer; width: number; height: number }): Promise<Buffer> {
   const pmDoc = doc as PmNode;
   const images = await fetchImages(pmDoc);
   const blocks = nodeToBlocks(pmDoc, images);
+  const size = pageDimensions(layout), twips = (mm: number) => Math.round(mm * 1440 / 25.4);
 
   const document = new Document({
     creator: 'Vault',
     title: title ?? 'Документ',
     sections: [
       {
+        ...(background ? { headers: { default: new Header({ children: [new Paragraph({ children: [new ImageRun({
+          type: 'png', data: background.data,
+          transformation: { width: background.width * 96 / 25.4, height: background.height * 96 / 25.4 },
+          floating: {
+            horizontalPosition: { relative: HorizontalPositionRelativeFrom.PAGE, offset: Math.round((size.width - background.width) / 2 * 36000) },
+            verticalPosition: { relative: VerticalPositionRelativeFrom.PAGE, offset: Math.round((size.height - background.height) / 2 * 36000) },
+            behindDocument: true, allowOverlap: true,
+          },
+        })] })] }) } } : {}),
         properties: {
           page: {
-            margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 }, // 1 inch each
+            size: { width: twips(size.width), height: twips(size.height) },
+            margin: Object.fromEntries(Object.entries(layout.margins).map(([key, value]) => [key, twips(value)])),
           },
         },
         children: blocks,

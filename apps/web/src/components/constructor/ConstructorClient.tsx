@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, X, Pencil, Trash2, Wand2, FileStack } from "lucide-react";
 import { templatesApi } from "@/lib/api/templates";
@@ -14,6 +14,10 @@ import { RichEditor } from "@/components/editor/RichEditor";
 import { extractVariables, setVariableLabelInBody } from "@/lib/variableTokens";
 import { Button, Input, Select, Modal, Card, EmptyState, PageHeader, Spinner } from "@/components/ui";
 import { DocumentType } from "@ai-vault/types";
+import { PHOTO_ACT_TEMPLATE, readPageLayout } from '@ai-vault/doc-placeholders';
+import { PageLayoutFields } from '@/components/documents/PageLayoutFields';
+import { PdfBackgrounds } from './PdfBackgrounds';
+import { TemplatePreview } from './TemplatePreview';
 
 const CATEGORY_COLORS = ["#8B5CF6", "#3B82F6", "#10B981", "#F59E0B", "#EF4444", "#EC4899"];
 
@@ -151,14 +155,15 @@ function VariablePreview({
 
 // ─── Create / Edit modal ───────────────────────────────────────────────────────
 
-function ConstructorModal({ initial, onClose }: { initial?: TemplateDto; onClose: () => void }) {
+function ConstructorModal({ initial, actPreset = false, companySettings, onClose }: { initial?: TemplateDto; actPreset?: boolean; companySettings?: CompanySettings | undefined; onClose: () => void }) {
   const qc = useQueryClient();
-  const [name, setName] = useState(initial?.name ?? "");
+  const [name, setName] = useState(initial?.name ?? (actPreset ? 'Акт выполненных работ — по образцу' : ''));
   const [description, setDescription] = useState(initial?.description ?? "");
-  const [bodyJson, setBodyJson] = useState<unknown>(initial?.bodyJson ?? EMPTY_BODY);
+  const [bodyJson, setBodyJson] = useState<unknown>(initial?.bodyJson ?? (actPreset ? PHOTO_ACT_TEMPLATE : buildDefaultTemplateBody(companySettings)));
+  const [type, setType] = useState(initial?.type ?? (actPreset ? DocumentType.AVR : DocumentType.CUSTOM));
+  const [metaDefaults, setMetaDefaults] = useState<Record<string, unknown>>((initial?.metaDefaults as Record<string, unknown>) ?? {});
   const [categoryId, setCategoryId] = useState(initial?.categoryId ?? "");
   const [showCategoryCreate, setShowCategoryCreate] = useState(false);
-  const [defaultHeaderApplied, setDefaultHeaderApplied] = useState(false);
   const isEdit = !!initial;
 
   const { data: categories = [] } = useQuery({
@@ -166,36 +171,24 @@ function ConstructorModal({ initial, onClose }: { initial?: TemplateDto; onClose
     queryFn: documentCategoriesApi.list,
   });
 
-  const { data: companySettings } = useQuery({
-    queryKey: ["settings"],
-    queryFn: settingsApi.getSettings,
-    enabled: !isEdit,
-  });
-
-  // New templates start with the org's letterhead (logo + name/address) prefilled.
-  useEffect(() => {
-    if (!isEdit && companySettings && !defaultHeaderApplied) {
-      setBodyJson(buildDefaultTemplateBody(companySettings));
-      setDefaultHeaderApplied(true);
-    }
-  }, [isEdit, companySettings, defaultHeaderApplied]);
-
   const mutation = useMutation({
     mutationFn: () => {
       // NB: PATCH /templates uses forbidNonWhitelisted — UpdateTemplateDto has no
       // `type` field, so the update payload must omit it (only create carries type).
       const base = {
         name: name.trim() || "Свой шаблон",
-        ...(description.trim() ? { description: description.trim() } : {}),
+        description: description.trim(),
         ...(categoryId ? { categoryId } : {}),
         bodyJson,
+        metaDefaults,
       };
       return isEdit
         ? templatesApi.update(initial.id, base)
-        : templatesApi.create({ type: DocumentType.CUSTOM, ...base } satisfies CreateTemplateRequest);
+        : templatesApi.create({ type, ...base } satisfies CreateTemplateRequest);
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["constructor-templates"] });
+      qc.invalidateQueries({ queryKey: ["templates"] });
       onClose();
     },
   });
@@ -242,6 +235,14 @@ function ConstructorModal({ initial, onClose }: { initial?: TemplateDto; onClose
         </div>
 
         <div className="relative">
+          <label className="mb-4 block text-sm text-[var(--color-text-secondary)]">Тип документа
+            <Select value={type} onChange={v => setType(v as DocumentType)} disabled={isEdit} options={[
+              { value: DocumentType.CUSTOM, label: 'Свой документ' }, { value: DocumentType.AVR, label: 'Акт выполненных работ' },
+              { value: DocumentType.INVOICE_PAYMENT, label: 'Счёт на оплату' }, { value: DocumentType.CONTRACT, label: 'Договор' },
+              { value: DocumentType.KP, label: 'Коммерческое предложение' }, { value: DocumentType.INVOICE_FACTURA, label: 'Счёт-фактура' },
+            ]} />
+          </label>
+          <PageLayoutFields meta={metaDefaults} onChange={setMetaDefaults} />
           <label className="text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-wider block mb-1.5">
             Категория <span className="normal-case font-normal">(необязательно)</span>
           </label>
@@ -294,6 +295,7 @@ function ConstructorModal({ initial, onClose }: { initial?: TemplateDto; onClose
       </div>
 
       <div className="px-6 py-4 border-t border-[var(--color-border)] flex justify-end gap-3 shrink-0">
+        {mutation.error && <p role="alert" className="mr-auto text-sm text-[var(--color-danger)]">{mutation.error.message}</p>}
         <Button variant="ghost" onClick={onClose}>
           Отмена
         </Button>
@@ -347,7 +349,7 @@ function ConstructorCard({
           </div>
         )}
       </div>
-      <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+      <div className="flex items-center gap-1 shrink-0">
         <button
           onClick={onEdit}
           title="Редактировать"
@@ -484,6 +486,7 @@ function LetterheadsSection() {
   const { data: letterheads = [], isLoading } = useQuery({
     queryKey: ["letterheads"],
     queryFn: () => letterheadsApi.list(),
+    select: all => all.filter(b => (b.bodyJson as { kind?: string })?.kind !== 'pdf-background'),
   });
 
   const deleteMutation = useMutation({
@@ -549,12 +552,15 @@ function LetterheadsSection() {
 
 export function ConstructorClient() {
   const qc = useQueryClient();
+  const { data: companySettings } = useQuery({ queryKey: ['settings'], queryFn: settingsApi.getSettings });
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing] = useState<TemplateDto | null>(null);
+  const [actPreset, setActPreset] = useState(false);
+  const [preview, setPreview] = useState<TemplateDto | null>(null);
 
   const { data: templates = [], isLoading } = useQuery({
     queryKey: ["constructor-templates"],
-    queryFn: () => templatesApi.list(DocumentType.CUSTOM),
+    queryFn: () => templatesApi.list(),
   });
 
   const deleteMutation = useMutation({
@@ -563,15 +569,15 @@ export function ConstructorClient() {
   });
 
   return (
-    <div className="p-6 lg:p-8 h-full flex flex-col">
+    <div className="p-6 lg:p-8 h-full flex flex-col [&>div:first-child]:flex-wrap">
       <PageHeader
-        title="Конструктор шаблонов"
-        subtitle="Создавайте свои документы с переменными полями, которые появляются слева при заполнении"
+        title="Шаблоны"
+        subtitle="Акты, счета и другие документы. Редактируйте текст, формат страницы и фирменный фон."
         actions={
-          <Button onClick={() => setShowCreate(true)}>
+          <div className="flex flex-wrap gap-2"><Button variant="secondary" onClick={() => { setActPreset(true); setShowCreate(true); }}>Акт по образцу</Button><Button onClick={() => { setActPreset(false); setShowCreate(true); }}>
             <Plus className="w-4 h-4" strokeWidth={2.5} />
             Создать шаблон
-          </Button>
+          </Button></div>
         }
       />
 
@@ -595,7 +601,7 @@ export function ConstructorClient() {
         ) : (
           <div className="grid gap-2">
             {templates.map((tpl) => (
-              <ConstructorCard
+              <div key={tpl.id} className="min-w-0"><div className="flex flex-wrap items-center justify-between gap-2 pb-1 text-xs text-[var(--color-text-secondary)]"><span>{tpl.type === DocumentType.AVR ? 'Акт' : tpl.type === DocumentType.INVOICE_PAYMENT ? 'Счёт на оплату' : 'Шаблон'} · {readPageLayout(tpl.metaDefaults).paperSize} · {readPageLayout(tpl.metaDefaults).orientation === 'portrait' ? 'Книжная' : 'Альбомная'}</span><Button size="sm" variant="ghost" onClick={() => setPreview(tpl)}>Предпросмотр PDF</Button></div><ConstructorCard
                 key={tpl.id}
                 template={tpl}
                 onEdit={() => setEditing(tpl)}
@@ -604,16 +610,18 @@ export function ConstructorClient() {
                     deleteMutation.mutate(tpl.id);
                   }
                 }}
-              />
+              /></div>
             ))}
           </div>
         )}
 
+        <PdfBackgrounds />
         <LetterheadsSection />
       </div>
 
-      {showCreate && <ConstructorModal onClose={() => setShowCreate(false)} />}
+      {showCreate && <ConstructorModal actPreset={actPreset} companySettings={companySettings} onClose={() => setShowCreate(false)} />}
       {editing && <ConstructorModal initial={editing} onClose={() => setEditing(null)} />}
+      {preview && <TemplatePreview id={preview.id} title={preview.name} onClose={() => setPreview(null)} />}
     </div>
   );
 }

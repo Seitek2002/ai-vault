@@ -1,4 +1,6 @@
-import { Controller, Get, Post, Patch, Delete, Body, Param, Query } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, Query, Res } from '@nestjs/common';
+import type { FastifyReply } from 'fastify';
+import { ExportService } from '../export/export.service';
 import { Permission } from '../common/permissions';
 import { TemplatesService } from './templates.service';
 import { CreateTemplateDto, UpdateTemplateDto, ListTemplatesDto } from './dto/template.dto';
@@ -7,7 +9,13 @@ import { RequirePermission } from '../common/decorators/permissions.decorator';
 
 @Controller('templates')
 export class TemplatesController {
-  constructor(private service: TemplatesService) {}
+  constructor(private service: TemplatesService, private exporter: ExportService) {}
+
+  @Get(':id/preview/pdf')
+  async preview(@Param('id') id: string, @CurrentOrgId() organizationId: string, @Res() reply: FastifyReply) {
+    const { buffer } = await this.exporter.generateTemplatePdf(id, organizationId);
+    return reply.header('Content-Type', 'application/pdf').header('Cache-Control', 'private, no-store').send(buffer);
+  }
 
   @Get()
   findAll(@CurrentOrgId() organizationId: string, @Query() query: ListTemplatesDto) {

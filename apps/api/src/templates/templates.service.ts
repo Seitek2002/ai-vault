@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { validatePageLayout } from '../export/page-layout.util';
 import type { CreateTemplateDto, UpdateTemplateDto, ListTemplatesDto } from './dto/template.dto';
 
 @Injectable()
@@ -27,7 +28,8 @@ export class TemplatesService {
     return tpl;
   }
 
-  create(organizationId: string, dto: CreateTemplateDto) {
+  async create(organizationId: string, dto: CreateTemplateDto) {
+    await validatePageLayout(this.prisma, organizationId, dto.metaDefaults);
     return this.prisma.documentTemplate.create({
       data: {
         organizationId,
@@ -45,6 +47,7 @@ export class TemplatesService {
 
   async update(id: string, organizationId: string, dto: UpdateTemplateDto) {
     await this.findOne(id, organizationId);
+    await validatePageLayout(this.prisma, organizationId, dto.metaDefaults);
     const data: Prisma.DocumentTemplateUpdateInput = {};
     if (dto.name !== undefined) data.name = dto.name;
     if (dto.description !== undefined) data.description = dto.description;

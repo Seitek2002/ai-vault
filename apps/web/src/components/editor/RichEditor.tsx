@@ -240,7 +240,7 @@ function LetterheadDropdown({ editor }: { editor: Editor }) {
   const defaultNode = buildLetterheadNode(settings);
   const q = search.trim().toLowerCase();
   const defaultVisible = !!defaultNode && DEFAULT_LETTERHEAD_LABEL.toLowerCase().includes(q);
-  const filtered = letterheads.filter((l) => l.name.toLowerCase().includes(q));
+  const filtered = letterheads.filter((l) => (l.bodyJson as { kind?: string })?.kind !== 'pdf-background' && l.name.toLowerCase().includes(q));
   const hasAny = defaultVisible || filtered.length > 0;
 
   function close() {

@@ -4,3 +4,5 @@ export * from './contract-term';
 export * from './money-input';
 export * from './esf';
 export * from './settlement-templates';
+export * from './page-layout';
+export * from './photo-act-template';

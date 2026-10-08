@@ -7,6 +7,7 @@ import { ChevronLeft, Upload, FilePlus2, Save, SlidersHorizontal } from "lucide-
 import { Button, Input, Modal, Sheet, Badge, Spinner } from "@/components/ui";
 import { RichEditor } from "@/components/editor/RichEditor";
 import { MetaFields } from "./MetaFields";
+import { PageLayoutFields } from './PageLayoutFields';
 import { VariableFields } from "./VariableFields";
 import { setVariableInBody, setVariableLabelInBody } from "@/lib/variableTokens";
 import { useEditorStore } from "@/stores/editor.store";
@@ -464,6 +465,7 @@ export function DocumentEditor({ documentId }: DocumentEditorProps) {
           onChange={handleMetaChange}
         />
       )}
+      <div className="mt-5 border-t border-[var(--color-border)] pt-4"><PageLayoutFields meta={effectiveMeta} onChange={meta => handleMetaChange(meta as Partial<DocumentMeta>)} /></div>
     </div>
   );
 

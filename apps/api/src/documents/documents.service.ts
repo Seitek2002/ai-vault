@@ -5,6 +5,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { FilesService } from '../files/files.service';
 import { MAX_UPLOAD_SIZE_BYTES, MAX_UPLOAD_SIZE_MB } from '../files/upload-limits';
 import { StorageService } from '../storage/storage.service';
+import { validatePageLayout } from '../export/page-layout.util';
+import { substitutePlaceholders } from '@ai-vault/doc-placeholders';
 import type { CreateDocumentDto, UpdateDocumentDto, ListDocumentsDto, ReplaceFileDto } from './dto/document.dto';
 import type { ImportDocumentDto } from './dto/import.dto';
 
@@ -77,15 +79,33 @@ export class DocumentsService {
   }
 
   async create(organizationId: string, userId: string, dto: CreateDocumentDto) {
+    let meta = dto.meta ?? {};
     let bodyJson: Prisma.InputJsonValue = dto.bodyJson
       ? (dto.bodyJson as Prisma.InputJsonValue)
       : {};
 
-    if (!dto.bodyJson && dto.templateId) {
+    if (dto.templateId) {
       const template = await this.prisma.documentTemplate.findFirst({
         where: { id: dto.templateId, organizationId },
       });
-      if (template) bodyJson = template.bodyJson as Prisma.InputJsonValue;
+      if (!template) throw new NotFoundException('Шаблон организации не найден');
+      if (template.type !== dto.type) throw new BadRequestException('Тип документа не совпадает с шаблоном');
+      if (!dto.bodyJson) bodyJson = template.bodyJson as Prisma.InputJsonValue;
+      meta = { ...(template.metaDefaults as Record<string, unknown>), ...meta };
+    }
+    await validatePageLayout(this.prisma, organizationId, meta);
+    if (dto.templateId && dto.type !== 'CUSTOM') {
+      const settings = await this.prisma.companySettings.findUnique({ where: { organizationId } });
+      const company = dto.counterpartyId ? await this.prisma.counterparty.findFirst({ where: { id: dto.counterpartyId, organizationId } }) : null;
+      if (dto.counterpartyId && !company) throw new NotFoundException('Компания организации не найдена');
+      bodyJson = substitutePlaceholders(bodyJson, {
+        org: settings, company, dateIso: String(meta.actDate ?? meta.invoiceDate ?? '') || undefined,
+        number: String(meta.actNumber ?? meta.invoiceNumber ?? '') || undefined,
+        amount: typeof meta.totalAmount === 'number' ? meta.totalAmount : undefined,
+        service: String(meta.serviceName ?? ''), currency: meta.currency === 'KGS' ? 'сом' : String(meta.currency ?? 'сом'),
+        contractNumber: String(meta.contractNumber ?? ''), contractDate: String(meta.contractDate ?? '') || undefined,
+        periodStart: String(meta.periodStart ?? ''), periodEnd: String(meta.periodEnd ?? ''),
+      }) as Prisma.InputJsonValue;
     }
 
     const doc = await this.prisma.document.create({
@@ -95,7 +115,7 @@ export class DocumentsService {
         title: dto.title,
         ...(dto.counterpartyId ? { counterpartyId: dto.counterpartyId } : {}),
         ...(dto.categoryId ? { categoryId: dto.categoryId } : {}),
-        meta: (dto.meta ?? {}) as Prisma.InputJsonValue,
+        meta: meta as Prisma.InputJsonValue,
         bodyJson,
         createdById: userId,
       },
@@ -109,7 +129,8 @@ export class DocumentsService {
   }
 
   async update(id: string, organizationId: string, userId: string, dto: UpdateDocumentDto) {
-    await this.findOne(id, organizationId);
+    const current = await this.findOne(id, organizationId);
+    await validatePageLayout(this.prisma, organizationId, dto.meta);
 
     if (dto.bodyJson !== undefined) {
       const lastVersion = await this.prisma.documentVersion.findFirst({
@@ -129,7 +150,7 @@ export class DocumentsService {
     const data: Prisma.DocumentUpdateInput = {};
     if (dto.title !== undefined) data.title = dto.title;
     if (dto.status !== undefined) data.status = dto.status;
-    if (dto.meta !== undefined) data.meta = dto.meta as Prisma.InputJsonValue;
+    if (dto.meta !== undefined) data.meta = { ...(current.meta as Record<string, unknown>), ...dto.meta } as Prisma.InputJsonValue;
     if (dto.bodyJson !== undefined) data.bodyJson = dto.bodyJson as Prisma.InputJsonValue;
     if (dto.counterpartyId !== undefined) {
       data.counterparty = dto.counterpartyId

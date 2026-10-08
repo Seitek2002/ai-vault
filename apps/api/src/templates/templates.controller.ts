@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Delete, Body, Param, Query, Res } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, Query, Res, HttpCode } from '@nestjs/common';
 import type { FastifyReply } from 'fastify';
 import { ExportService } from '../export/export.service';
 import { Permission } from '../common/permissions';
@@ -12,6 +12,7 @@ export class TemplatesController {
   constructor(private service: TemplatesService, private exporter: ExportService) {}
 
   @Post('preview/pdf')
+  @HttpCode(200)
   @RequirePermission(Permission.MANAGE_TEMPLATES)
   async previewDraft(@Body() dto: PreviewTemplateDto, @CurrentOrgId() organizationId: string, @Res() reply: FastifyReply) {
     const { buffer } = await this.exporter.generateDraftTemplatePdf(dto, organizationId);

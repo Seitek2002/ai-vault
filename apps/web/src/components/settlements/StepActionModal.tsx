@@ -315,11 +315,11 @@ export function StepActionModal({ settlement, step, onClose }: Props) {
                         {selectedInvoice && !esfCoversSettlement(selectedInvoice, settlement.id) ? `Проверьте примечание, период и сумму: выбранная ЭСФ будет связана с расчётом за ${periodLabel}.` : !esfQuery.isPending && esfCandidates.length === 0 ? "Свободных отправленных или принятых ЭСФ этого партнёра нет. Создайте новую ЭСФ или добавьте ссылку / скан." : "В списке только свободные отправленные и принятые ЭСФ партнёра. Привязанные к расчётам ЭСФ скрыты из списка."}
                       </p>
                     )}
-                    {linkedInvoice?.status === "NEW" ? <EsfDraftPanel settlementId={settlement.id} stepNote={step.note} actPdfId={actPdfId} onBusyChange={setDraftBusy} onDetached={() => { setEsfInvoiceId(""); setNote(""); }} onPreview={previewFileInModal} /> : (
+                    {linkedInvoice?.status === "NEW" ? <EsfDraftPanel settlementId={settlement.id} stepNote={step.note} actPdfId={actPdfId} onBusyChange={setDraftBusy} onDetached={(prepareNew) => { setEsfInvoiceId(""); setNote(""); setPreparingEsf(prepareNew); }} onPreview={previewFileInModal} /> : (
                       <details className="mt-3 border-t border-[var(--color-border)] pt-2 text-xs text-[var(--color-text-secondary)]"
-                        onToggle={(event) => setPreparingEsf(event.currentTarget.open)}>
+                        open={preparingEsf} onToggle={(event) => setPreparingEsf(event.currentTarget.open)}>
                         <summary className="cursor-pointer py-2 font-medium text-[var(--color-accent)] focus-visible:outline-2 focus-visible:outline-[var(--color-accent)]">Создать новую ЭСФ на портале</summary>
-                        <div className="mt-2"><EsfDraftPanel settlementId={settlement.id} stepNote={step.note} actPdfId={actPdfId} onBusyChange={setDraftBusy} onDetached={() => { setEsfInvoiceId(""); setNote(""); }} onPreview={previewFileInModal} /></div>
+                        <div className="mt-2"><EsfDraftPanel settlementId={settlement.id} stepNote={step.note} actPdfId={actPdfId} onBusyChange={setDraftBusy} onDetached={(prepareNew) => { setEsfInvoiceId(""); setNote(""); setPreparingEsf(prepareNew); }} onPreview={previewFileInModal} /></div>
                       </details>
                     )}
                   </div>
@@ -560,7 +560,7 @@ function DoneStepFiles({ step, settlementId, onPreview }: { step: SettlementStep
  * датой, суммой и номером учётной системы. Подписать и отправить — только на портале,
  * после этого синхронизация закроет шаг сама.
  */
-function EsfDraftPanel({ settlementId, stepNote, actPdfId, onBusyChange, onDetached, onPreview }: { settlementId: string; stepNote: string | null; actPdfId: string | null; onBusyChange: (busy: boolean) => void; onDetached: () => void; onPreview: (id: string, title: string) => void }) {
+function EsfDraftPanel({ settlementId, stepNote, actPdfId, onBusyChange, onDetached, onPreview }: { settlementId: string; stepNote: string | null; actPdfId: string | null; onBusyChange: (busy: boolean) => void; onDetached: (prepareNew: boolean) => void; onPreview: (id: string, title: string) => void }) {
   const qc = useQueryClient();
   const [error, setError] = useState("");
   const esfQuery = useQuery({
@@ -571,20 +571,21 @@ function EsfDraftPanel({ settlementId, stepNote, actPdfId, onBusyChange, onDetac
   const draft = esfQuery.data?.find((invoice) => invoice.status === "NEW");
 
   const detach = useMutation({
-    mutationFn: () => {
-      if (!linkedInvoice) throw new Error("Связь с ЭСФ изменилась. Обновите расчёт.");
-      return esfApi.detach(linkedInvoice.id, settlementId);
+    mutationFn: ({ invoiceId }: { invoiceId: string; prepareNew: boolean }) => {
+      if (!esfQuery.data?.some((invoice) => invoice.id === invoiceId)) throw new Error("Связь с ЭСФ изменилась. Обновите расчёт.");
+      return esfApi.detach(invoiceId, settlementId);
     },
     onMutate: () => { setError(""); onBusyChange(true); },
     onSettled: () => onBusyChange(false),
-    onSuccess: async (invoice) => {
+    onSuccess: async (invoice, { prepareNew }) => {
       qc.setQueryData(esfInvoicesQuery.queryKey, (all: typeof esfQuery.data) =>
         all?.map((item) => item.id === invoice.id ? invoice : item));
-      onDetached();
+      onDetached(prepareNew);
       await Promise.all([
         qc.invalidateQueries({ queryKey: ["esf"] }),
         qc.invalidateQueries({ queryKey: ["settlements"] }),
         qc.invalidateQueries({ queryKey: ["settlement", settlementId] }),
+        qc.invalidateQueries({ queryKey: ["contract-history"] }),
       ]);
     },
     onError: (err) => setError(err instanceof Error ? err.message : "Не удалось отвязать ЭСФ. Попробуйте ещё раз."),
@@ -599,6 +600,7 @@ function EsfDraftPanel({ settlementId, stepNote, actPdfId, onBusyChange, onDetac
       void qc.invalidateQueries({ queryKey: ["esf"] });
       void qc.invalidateQueries({ queryKey: ["settlements"] });
       void qc.invalidateQueries({ queryKey: ["settlement", settlementId] });
+      void qc.invalidateQueries({ queryKey: ["contract-history"] });
     },
     onError: (err) => setError(err instanceof ApiError ? err.message : "Не удалось создать черновик"),
   });
@@ -628,6 +630,13 @@ function EsfDraftPanel({ settlementId, stepNote, actPdfId, onBusyChange, onDetac
           <ExternalLink className="w-3.5 h-3.5" />
           Открыть «Реализация» на портале
         </a>
+        <div className="mt-3 flex flex-wrap gap-2 border-t border-[var(--color-border)] pt-3">
+          <Button type="button" size="sm" variant="secondary" disabled={detach.isPending || create.isPending} onClick={() => detach.mutate({ invoiceId: draft.id, prepareNew: false })}>Отвязать от расчёта</Button>
+          <Button type="button" size="sm" variant="secondary" disabled={detach.isPending || create.isPending} onClick={() => detach.mutate({ invoiceId: draft.id, prepareNew: true })}>Создать новую вместо этой</Button>
+        </div>
+        <p className="mt-2 text-xs text-[var(--color-text-secondary)]">Снимется связь только с этим расчётом. Старый черновик останется на портале; его связи с другими месяцами сохранятся. Для новой ЭСФ откроется проверка строк по PDF акта.</p>
+        {detach.isPending && <p role="status" className="mt-2 text-xs text-[var(--color-text-secondary)]">Отвязываю черновик…</p>}
+        {error && <p role="alert" className="mt-2 text-xs text-[var(--color-danger)]">{error}</p>}
       </div>
     );
   }
@@ -638,7 +647,11 @@ function EsfDraftPanel({ settlementId, stepNote, actPdfId, onBusyChange, onDetac
     <div className="space-y-2 text-xs">
       <p>К этому расчёту уже привязана ЭСФ № {linkedInvoice.number ?? "—"}. Если она не подходит, сначала отвяжите её от этого расчёта.</p>
       <p>ЭСФ останется в кабинете и сохранит связи с другими месяцами. Затем можно подготовить новую по PDF акта.</p>
-      <Button type="button" size="sm" variant="secondary" loading={detach.isPending} loadingText="Отвязываю…" onClick={() => detach.mutate()}>Отвязать от этого расчёта</Button>
+      <div className="flex flex-wrap gap-2">
+        <Button type="button" size="sm" variant="secondary" disabled={detach.isPending || create.isPending} onClick={() => detach.mutate({ invoiceId: linkedInvoice.id, prepareNew: false })}>Отвязать от этого расчёта</Button>
+        <Button type="button" size="sm" variant="secondary" disabled={detach.isPending || create.isPending} onClick={() => detach.mutate({ invoiceId: linkedInvoice.id, prepareNew: true })}>Создать новую вместо этой</Button>
+      </div>
+      {detach.isPending && <p role="status">Отвязываю ЭСФ…</p>}
       {error && <p role="alert" className="text-[var(--color-danger)]">{error}</p>}
     </div>
   );

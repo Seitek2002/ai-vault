@@ -7,7 +7,7 @@ import { open as openSecret } from '../common/secret-box';
 import { EsfDraftClient } from './esf-draft.client';
 import { EsfPortalClient, EsfPortalError, type EsfListRow } from './esf-portal.client';
 import { EsfPdfService } from './esf-pdf';
-import { EsfLinksService, invoiceSettlementIds } from './esf-links.service';
+import { EsfLinksService, invoiceSettlementIds, MANUAL_ESF_DETACH_NOTE } from './esf-links.service';
 import { esfLineAmounts, esfServiceForPeriod } from '@ai-vault/doc-placeholders';
 import type { CreateEsfDraftDto } from './dto/esf.dto';
 import {
@@ -385,7 +385,7 @@ export class EsfService {
   /** Повторное сопоставление уже импортированной ЭСФ. true — привязалась. */
   private async rematch(invoiceId: string, organizationId: string, userId: string): Promise<boolean> {
     const inv = await this.prisma.esfInvoice.findFirst({ where: { id: invoiceId, organizationId }, include: { settlementLinks: true } });
-    if (!inv || invoiceSettlementIds(inv).length || inv.buyerInn === RETAIL_INN) return false;
+    if (!inv || invoiceSettlementIds(inv).length || inv.buyerInn === RETAIL_INN || inv.matchNote === MANUAL_ESF_DETACH_NOTE) return false;
 
     const counterparty =
       (inv.counterpartyId ? { id: inv.counterpartyId } : null) ??

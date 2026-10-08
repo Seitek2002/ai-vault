@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { statusClosesStep } from './esf-matching';
 
 const LINKS = { settlementLinks: { select: { settlementId: true } } } as const;
+export const MANUAL_ESF_DETACH_NOTE = 'Отвязана вручную';
 type Invoice = Prisma.EsfInvoiceGetPayload<{ include: typeof LINKS }>;
 
 export function hasManualEsfEvidence(
@@ -122,7 +123,7 @@ export class EsfLinksService {
     const added = ids.filter((id) => !linked.has(id));
     if (added.length) await tx.esfSettlementLink.createMany({ data: added.map((settlementId) => ({ invoiceId: invoice.id, settlementId })) });
     await tx.esfInvoice.update({ where: { id: invoice.id }, data: {
-      settlementId: ids[0] ?? null, matchNote: ids.length ? null : 'Отвязана вручную',
+      settlementId: ids[0] ?? null, matchNote: ids.length ? null : MANUAL_ESF_DETACH_NOTE,
       ...(userId ? { hiddenAt: null, counterpartyId: counterpartyId ?? invoice.counterpartyId } : {}),
     } });
     if (invoice.fileAssetId) {

@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import { Building2, Landmark, Copy, Check, X } from 'lucide-react';
 import type { CounterpartyDto } from '@ai-vault/types';
 import { Button, Modal } from '@/components/ui';
+import palette from './CompaniesPalette.module.css';
 
 export function CompanyRequisitesModal({ cp, onClose }: { cp: CounterpartyDto; onClose: () => void }) {
   const titleId = useId();
@@ -16,8 +17,8 @@ export function CompanyRequisitesModal({ cp, onClose }: { cp: CounterpartyDto; o
     ['Банк', cp.bankName], ['Расчётный счёт', cp.bankAccount], ['БИК', cp.bankBik],
   ] as const;
   const groups = [
-    { title: 'Регистрационные данные', icon: Building2, fields: details.slice(0, 3), wideLabel: 'Юридический адрес' },
-    { title: 'Банковские реквизиты', icon: Landmark, fields: details.slice(3), wideLabel: 'Банк' },
+    { title: 'Регистрационные данные', icon: Building2, fields: details.slice(0, 3), wideLabel: 'Юридический адрес', className: palette.registration },
+    { title: 'Банковские реквизиты', icon: Landmark, fields: details.slice(3), wideLabel: 'Банк', className: palette.banking },
   ];
 
   useEffect(() => {
@@ -46,34 +47,37 @@ export function CompanyRequisitesModal({ cp, onClose }: { cp: CounterpartyDto; o
     } catch { setCopyState('error'); }
   }
 
-  return <Modal onClose={onClose} className="max-w-2xl">
+  return <Modal onClose={onClose} className={`max-w-2xl ${palette.requisites}`}>
     <section ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={companyId}
       onKeyDown={trapFocus} className="flex max-h-[85dvh] flex-col">
       <header className="flex items-start justify-between gap-3 border-b border-[var(--color-border)] px-5 py-4">
-        <div className="min-w-0">
-          <h2 id={titleId} className="text-base font-semibold">Реквизиты компании</h2>
-          <p id={companyId} className="mt-1 text-sm text-[var(--color-text-secondary)] [overflow-wrap:anywhere]">{cp.name}</p>
+        <div className="flex min-w-0 items-start gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-100 text-blue-700"><Building2 className="h-5 w-5" aria-hidden="true" /></div>
+          <div className="min-w-0">
+            <h2 id={titleId} className="text-base font-semibold">Реквизиты компании</h2>
+            <p id={companyId} className="mt-1 text-sm font-medium text-[var(--color-text-secondary)] [overflow-wrap:anywhere]">{cp.name}</p>
+          </div>
         </div>
         <button ref={closeRef} type="button" onClick={onClose} aria-label="Закрыть реквизиты"
           className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-elevated)] hover:text-[var(--color-text-primary)] focus-visible:outline-2 focus-visible:outline-[var(--color-accent)]">
           <X className="h-4 w-4" aria-hidden="true" />
         </button>
       </header>
-      <div className="min-h-0 overflow-y-auto px-5 py-5">
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 sm:gap-6">
-          {groups.map(({ title, icon: Icon, fields, wideLabel }) => <section key={title}>
-            <h3 className="mb-3 flex items-center gap-2 text-xs font-medium text-[var(--color-text-secondary)]">
+      <div className="min-h-0 overflow-y-auto">
+        <div className="grid grid-cols-1 sm:grid-cols-2">
+          {groups.map(({ title, icon: Icon, fields, wideLabel, className }) => <section key={title} className={`min-w-0 px-5 py-5 ${className}`}>
+            <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-[var(--requisites-label)]">
               <Icon className="h-4 w-4 shrink-0" aria-hidden="true" /> {title}
             </h3>
             <dl className="grid grid-cols-2 gap-x-4 gap-y-4">
               {fields.map(([label, value]) => <div key={label} className={`min-w-0 ${label === wideLabel ? 'col-span-2' : ''}`}>
-                <dt className="mb-1 text-xs text-[var(--color-text-secondary)]">{label}</dt>
-                <dd className="text-sm tabular-nums text-[var(--color-text-primary)] [overflow-wrap:anywhere]">{value || 'Не указано'}</dd>
+                <dt className="mb-1 text-xs text-[var(--requisites-label)]">{label}</dt>
+                <dd className={`text-sm tabular-nums [overflow-wrap:anywhere] ${value ? 'font-medium text-[var(--color-text-primary)]' : 'text-[var(--color-text-secondary)]'}`}>{value || 'Не указано'}</dd>
               </div>)}
             </dl>
           </section>)}
         </div>
-        <p role="status" className={copyState === 'idle' ? 'sr-only' : 'mt-4 text-xs text-[var(--color-text-secondary)]'}>
+        <p role="status" className={copyState === 'idle' ? 'sr-only' : 'px-5 py-3 text-xs text-[var(--color-text-secondary)]'}>
           {copyState === 'error' ? 'Не удалось скопировать. Выделите реквизиты и скопируйте вручную.' : copyState === 'copied' ? 'Название и реквизиты скопированы' : ''}
         </p>
       </div>

@@ -1,0 +1,36 @@
+.list {
+  --company-row-alt: #182335;
+  --company-heading-bg: #142136;
+  --company-action-bg: #193f70;
+  --company-action-hover: #24558e;
+  --company-action-text: #dbeafe;
+  --company-contract-bg: #35254f;
+  --company-contract-hover: #493468;
+  --company-contract-text: #e9d5ff;
+  --company-contract-surface: #19172b;
+  --company-contact-text: #c3d6f1;
+}
+
+.requisites {
+  --color-bg-surface: #ffffff;
+  --color-bg-elevated: #e8edf5;
+  --color-text-primary: #172033;
+  --color-text-secondary: #475569;
+  --color-text-muted: #64748b;
+  --color-border: #cbd5e1;
+  --color-border-light: #94a3b8;
+  --color-accent: #2563eb;
+  --color-accent-2: #7c3aed;
+  --color-accent-border: #a5b4fc;
+  color: var(--color-text-primary);
+}
+
+.registration {
+  --requisites-label: #1e40af;
+  background: #eff6ff;
+}
+
+.banking {
+  --requisites-label: #6b21a8;
+  background: #f5f3ff;
+}

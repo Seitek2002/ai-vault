@@ -4,7 +4,7 @@ import { useState, type FormEvent } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
-import { Plus, Search, X, Pencil, Trash2, Building2, FileText, Phone, Mail, ChevronDown, ArrowUpDown } from 'lucide-react';
+import { Plus, Search, X, Pencil, Trash2, Building2, Landmark, FileText, Phone, Mail, ChevronDown, ArrowUpDown } from 'lucide-react';
 import { Button, Input, Modal, EmptyState } from '@/components/ui';
 import { counterpartiesApi, type CounterpartyFormData } from '@/lib/api/counterparties';
 import { contractsApi, type Contract } from '@/lib/api/contracts';
@@ -12,6 +12,7 @@ import { formatMoney } from '@/lib/api/settlements';
 import type { CounterpartyDto } from '@ai-vault/types';
 import { ApiError } from '@/lib/api/client';
 import { CompanyRequisitesModal } from './CompanyRequisitesModal';
+import palette from './CompaniesPalette.module.css';
 
 const ContractModal = dynamic(() => import('@/components/contracts/ContractsClient').then((m) => m.ContractModal));
 
@@ -256,7 +257,7 @@ function CompanyRow({ cp, contracts, contractsLoading, contractsError, onRetryCo
   const contractsHeadingId = `${contractsId}-heading`;
 
   return (
-    <li className="group border-b border-[var(--color-border)] last:border-b-0">
+    <li className="group border-b border-[var(--color-border)] even:bg-[var(--company-row-alt)] last:border-b-0">
       <div className="grid grid-cols-1 gap-3 px-4 py-3 sm:px-5 md:grid-cols-[minmax(0,1fr)_minmax(0,0.7fr)] xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.7fr)_auto] xl:items-center transition-colors hover:bg-[var(--color-bg-elevated)]/40">
         <div className="min-w-0">
           <Link href={`/companies/${cp.id}`} className="inline-block text-sm sm:text-base font-semibold leading-snug text-[var(--color-text-primary)] hover:text-[var(--color-accent)] underline-offset-4 hover:underline [overflow-wrap:anywhere]">
@@ -265,18 +266,18 @@ function CompanyRow({ cp, contracts, contractsLoading, contractsError, onRetryCo
           <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[var(--color-text-secondary)] tabular-nums">
             {cp.inn ? <span>ИНН <span className="text-[var(--color-text-primary)]">{cp.inn}</span></span> : <span>ИНН не указан</span>}
             {cp.bin && <span>ОКПО {cp.bin}</span>}
-            <Button type="button" size="sm" variant="ghost" className="min-h-10 px-2 text-xs"
+            <Button type="button" size="sm" variant="ghost" className="min-h-10 bg-[var(--company-contract-bg)] px-2 text-xs text-[var(--company-contract-text)] hover:bg-[var(--company-contract-hover)] hover:text-[var(--company-contract-text)]"
               title="Действующие договоры" aria-label={`Действующие договоры ${cp.name}`} aria-expanded={contractsExpanded} aria-controls={contractsId}
               onClick={() => setContractsExpanded(!contractsExpanded)}>
               <FileText className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
               Договоры
-              {!contractsLoading && !contractsError && <span className="tabular-nums text-[var(--color-text-primary)]">({contracts.length})</span>}
+              {!contractsLoading && !contractsError && <span className="tabular-nums">({contracts.length})</span>}
               <ChevronDown className={`w-4 h-4 shrink-0 transition-transform motion-reduce:transition-none ${contractsExpanded ? 'rotate-180' : ''}`} aria-hidden="true" />
             </Button>
           </div>
         </div>
 
-        <div className="flex min-w-0 flex-col gap-2 text-sm text-[var(--color-text-secondary)]">
+        <div className="flex min-w-0 flex-col gap-2 text-sm text-[var(--company-contact-text)]">
           {cp.phone && <a href={`tel:${cp.phone.replace(/[^+\d]/g, '')}`} className="flex w-fit max-w-full items-center gap-2 hover:text-[var(--color-accent)] underline-offset-4 hover:underline">
             <Phone className="w-3.5 h-3.5 shrink-0" aria-hidden="true" /><span className="break-all tabular-nums">{cp.phone}</span>
           </a>}
@@ -287,22 +288,22 @@ function CompanyRow({ cp, contracts, contractsLoading, contractsError, onRetryCo
         </div>
 
         <div className="flex flex-wrap items-center gap-2 md:col-span-2 xl:col-span-1 xl:justify-end xl:w-72">
-          <Button size="sm" variant="ghost" className="min-h-10 px-3" aria-haspopup="dialog"
+          <Button size="sm" variant="ghost" className="min-h-10 bg-[var(--company-action-bg)] px-3 text-[var(--company-action-text)] hover:bg-[var(--company-action-hover)] hover:text-[var(--company-action-text)]" aria-haspopup="dialog"
             onClick={() => setRequisitesOpen(true)}>
-            Реквизиты
+            <Landmark className="h-3.5 w-3.5" aria-hidden="true" /> Реквизиты
           </Button>
           <Button size="sm" variant="secondary" className="min-h-10 px-3" onClick={() => onEdit(cp)} aria-label={`Изменить ${cp.name}`}>
             <Pencil className="w-3.5 h-3.5" aria-hidden="true" /> Изменить
           </Button>
           <button type="button" onClick={() => onDelete(cp)} title={`Удалить ${cp.name}`} aria-label={`Удалить ${cp.name}`}
-            className="flex h-10 w-10 items-center justify-center rounded-lg text-[var(--color-text-secondary)] hover:text-[var(--color-danger)] hover:bg-[var(--color-bg-elevated)] transition-colors">
+            className="flex h-10 w-10 items-center justify-center rounded-lg text-red-300 hover:text-red-200 hover:bg-red-950/50 transition-colors">
             <Trash2 className="w-4 h-4" aria-hidden="true" />
           </button>
         </div>
       </div>
 
       <div id={contractsId} role="region" aria-labelledby={contractsHeadingId} hidden={!contractsExpanded} className="px-4 pb-3 sm:px-5">
-        <div className="border-t border-[var(--color-border)] bg-[var(--color-bg-base)] px-3">
+        <div className="border-t border-[var(--color-border)] bg-[var(--company-contract-surface)] px-3">
           <h3 id={contractsHeadingId} className="sr-only">Действующие договоры {cp.name}</h3>
           {contractsLoading ? <p role="status" className="py-3 text-sm text-[var(--color-text-secondary)]">Загрузка договоров…</p>
             : contractsError ? <div role="alert" className="flex flex-wrap items-center gap-3 py-3">
@@ -316,7 +317,7 @@ function CompanyRow({ cp, contracts, contractsLoading, contractsError, onRetryCo
                   <FileText className="mt-0.5 h-4 w-4 shrink-0 text-[var(--color-text-secondary)]" aria-hidden="true" />
                   <div className="min-w-0">
                     <p className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-sm text-[var(--color-text-primary)] [overflow-wrap:anywhere]">
-                      <span className="text-xs font-medium tabular-nums text-[var(--color-accent)]">№ {contract.number}</span>
+                      <span className="text-xs font-medium tabular-nums text-[var(--company-contract-text)]">№ {contract.number}</span>
                       <span className="font-medium">{contract.title}</span>
                     </p>
                     <p className="mt-0.5 text-xs text-[var(--color-text-secondary)] tabular-nums [overflow-wrap:anywhere]">{contractPeriod(contract)}</p>
@@ -415,7 +416,7 @@ export function CompaniesClient() {
   }).sort((a, b) => (sort === 'asc' ? 1 : -1) * a.name.localeCompare(b.name, 'ru'));
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 h-full min-h-0 flex flex-col">
+    <div className={`p-4 sm:p-6 lg:p-8 h-full min-h-0 flex flex-col ${palette.list}`}>
       <header className="mb-6 flex flex-col gap-4 shrink-0 sm:flex-row sm:items-center sm:justify-between">
         <div><h1 className="text-xl font-semibold">Компании</h1><p className="mt-1 text-sm text-[var(--color-text-secondary)]">Организации и партнёры</p></div>
         <Button className="min-h-11 w-full sm:w-auto" onClick={() => setCreateOpen(true)}><Plus className="w-4 h-4" aria-hidden="true" />Добавить компанию</Button>
@@ -455,7 +456,7 @@ export function CompaniesClient() {
           description={query ? 'Попробуйте название, ИНН или контакт компании' : 'Добавьте компанию, чтобы создавать для неё договоры и документы'}
           action={query ? <Button variant="secondary" onClick={() => setSearch('')}>Сбросить поиск</Button> : <Button onClick={() => setCreateOpen(true)}>Добавить компанию</Button>} />}
         {!isLoading && !isError && companies.length > 0 && <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-surface)]">
-          <div aria-hidden="true" className="hidden xl:grid grid-cols-[minmax(0,1.1fr)_minmax(0,0.7fr)_auto] gap-4 px-5 py-3 border-b border-[var(--color-border)] text-xs font-medium text-[var(--color-text-secondary)]">
+          <div aria-hidden="true" className="hidden rounded-t-xl bg-[var(--company-heading-bg)] xl:grid grid-cols-[minmax(0,1.1fr)_minmax(0,0.7fr)_auto] gap-4 px-5 py-3 border-b border-[var(--color-border)] text-xs font-medium text-[var(--company-contact-text)]">
             <span>Компания / ИНН</span><span>Контакты</span><span className="w-72 text-right">Действия</span>
           </div>
           <ul aria-label="Компании и партнёры">

@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { UpdateContractDto } from '../dto/contract.dto';
 
 describe('Валидация правок договора', () => {
-  it.each(['defaultAmount', 'title', 'counterpartyId'])('отклоняет null в обязательном поле %s вместо ошибки БД', async (field) => {
+  it.each(['defaultAmount', 'title', 'counterpartyId', 'billingPeriod', 'autoRenew'])('отклоняет null в обязательном поле %s вместо ошибки БД', async (field) => {
     expect((await validate(plainToInstance(UpdateContractDto, { [field]: null }))).some(error => error.property === field)).toBe(true);
   });
   it('позволяет явно убрать даты, срок и вложения', async () => {

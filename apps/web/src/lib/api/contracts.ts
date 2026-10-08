@@ -1,4 +1,5 @@
 import { api } from './client';
+import type { ContractBillingPeriod } from '@ai-vault/doc-placeholders';
 
 export interface ContractAttachment {
   id: string;
@@ -23,6 +24,11 @@ export interface Contract {
   paymentDueDays: number;
   esfRequired: boolean;
   active: boolean;
+  billingPeriod?: ContractBillingPeriod;
+  autoRenew?: boolean;
+  terminationDate?: string | null;
+  terminationPdf?: ContractAttachment | null;
+  effectiveEndDate?: string | null;
   startDate: string | null;
   endDate: string | null;
   termValue: number | null;
@@ -40,6 +46,10 @@ export interface ContractFormData {
   paymentDueDays?: number;
   esfRequired?: boolean;
   active?: boolean;
+  billingPeriod?: ContractBillingPeriod;
+  autoRenew?: boolean;
+  terminationDate?: string | null;
+  terminationPdfId?: string | null;
   startDate?: string | null;
   endDate?: string | null;
   termValue?: number | null;

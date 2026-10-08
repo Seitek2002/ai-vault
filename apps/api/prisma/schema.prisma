@@ -259,6 +259,7 @@ model FileAsset {
   contractPdfs   Contract[]       @relation("ContractPdf")
   contractExtras Contract[]       @relation("ContractExtras")
   contractNdas   Contract[]       @relation("ContractNda")
+  terminationNotices Contract[] @relation("ContractTermination")
   esfInvoice   EsfInvoice?
 
   @@index([organizationId])
@@ -370,6 +371,12 @@ enum ContractTermUnit {
   YEARS
 }
 
+enum ContractBillingPeriod {
+  MONTHLY
+  YEARLY
+  ONE_TIME
+}
+
 model Contract {
   id             String  @id @default(cuid())
   organizationId String
@@ -377,6 +384,7 @@ model Contract {
   documentId     String? @unique
   contractPdfId  String?
   ndaPdfId       String?
+  terminationPdfId String?
   number         String
   termValue      Int?
   termUnit       ContractTermUnit?
@@ -385,13 +393,16 @@ model Contract {
   defaultAmount  Decimal  @db.Decimal(14, 2)
   vatRate        Float    @default(12)
   currency       String   @default("KGS")
-  /// День месяца (1–28), когда создаётся расчёт за этот месяц.
+  /// День месяца (1–31); в коротком месяце — последний день.
   billingDay     Int      @default(1)
   /// Срок оплаты в днях от конца расчётного месяца.
   paymentDueDays Int      @default(10)
   esfRequired    Boolean  @default(true)
   active         Boolean  @default(true)
   startDate      DateTime?
+  billingPeriod  ContractBillingPeriod @default(MONTHLY)
+  autoRenew      Boolean @default(false)
+  terminationDate DateTime?
   endDate        DateTime?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -401,6 +412,7 @@ model Contract {
   document     Document?    @relation("ContractDocument", fields: [documentId], references: [id], onDelete: SetNull)
   contractPdf    FileAsset?   @relation("ContractPdf", fields: [contractPdfId], references: [id], onDelete: SetNull)
   ndaPdf         FileAsset?   @relation("ContractNda", fields: [ndaPdfId], references: [id], onDelete: SetNull)
+  terminationPdf FileAsset? @relation("ContractTermination", fields: [terminationPdfId], references: [id], onDelete: Restrict)
   additionalPdfs FileAsset[]  @relation("ContractExtras")
   settlements  Settlement[]
 

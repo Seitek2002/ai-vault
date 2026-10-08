@@ -10,14 +10,14 @@ function fixture(withTemplates = true) {
   const contract = {
     id: 'contract-1', organizationId: 'org-1', counterpartyId: 'bakai',
     defaultAmount: new Prisma.Decimal(20000), vatRate: 12, esfRequired: true,
-    currency: 'KGS', paymentDueDays: 10,
+    currency: 'KGS', paymentDueDays: 10, active: true,
   } as Contract;
   type Saved = { id: string; contractId: string; year: number; month: number; sequence: number; label: string | null; amount: Prisma.Decimal; vatAmount: Prisma.Decimal; steps: { create: unknown[] } };
   const rows: Saved[] = [];
   const locks = new Map<string, Promise<void>>();
   const settlement = {
-    findFirst: vi.fn(async ({ where }: { where: { contractId: string; year: number; month: number } }) =>
-      rows.filter(r => r.contractId === where.contractId && r.year === where.year && r.month === where.month)
+    findFirst: vi.fn(async ({ where }: { where: { contractId: string; year?: number; month?: number } }) =>
+      rows.filter(r => r.contractId === where.contractId && (where.year === undefined || r.year === where.year) && (where.month === undefined || r.month === where.month))
         .sort((a, b) => b.sequence - a.sequence)[0] ?? null),
     findUnique: vi.fn(async ({ where }: { where: { contractId_year_month_sequence: { contractId: string; year: number; month: number; sequence: number } } }) => {
       const key = where.contractId_year_month_sequence;
@@ -63,6 +63,17 @@ function fixture(withTemplates = true) {
 }
 
 describe('Несколько актов и счетов одного договора за месяц', () => {
+  it('разовый платёж не повторяется в другом месяце при одновременной генерации', async () => {
+    const f = fixture(); f.contract.billingPeriod = 'ONE_TIME';
+    await Promise.all([f.service.generateOne(f.contract, 2026, 10, 'user-1'), f.service.generateOne(f.contract, 2026, 11, 'user-1')]);
+    expect(f.rows).toHaveLength(1);
+    expect(new Set(f.lockCalls)).toEqual(new Set(['settlement:org-1:contract-1:one-time']));
+  });
+  it('ежегодный платёж создаётся только в месяц подписания', async () => {
+    const f = fixture(); f.contract.billingPeriod = 'YEARLY'; f.contract.startDate = new Date('2025-10-08');
+    expect(await f.service.generateOne(f.contract, 2026, 9, 'user-1')).toBeNull();
+    expect(await f.service.generateOne(f.contract, 2026, 10, 'user-1')).toBe('set-1');
+  });
   it('сохраняет основной комплект и создаёт второй с независимой суммой, НДС и документами', async () => {
     const f = fixture();
     await f.service.generateOne(f.contract, 2026, 10, 'user-1');

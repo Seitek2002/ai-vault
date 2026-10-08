@@ -23,17 +23,19 @@ export class SettlementsScheduler {
     const year = now.getUTCFullYear();
     const month = now.getUTCMonth() + 1;
     const day = now.getUTCDate();
+    const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
 
     const contracts = await this.prisma.contract.findMany({
       where: {
         active: true,
-        billingDay: { lte: day },
+        billingDay: { lte: day === lastDay ? 31 : day },
         AND: [
           { OR: [{ startDate: null }, { startDate: { lte: new Date(Date.UTC(year, month, 0)) } }] },
           {
             OR: [
               { endDate: null },
               { endDate: { gte: new Date(Date.UTC(year, month - 1, 1)) } },
+              { autoRenew: true },
             ],
           },
         ],

@@ -25,6 +25,23 @@ function setup(overrides: Record<string, unknown> = {}) {
 const input = { number: 'manual', counterpartyId: 'cp', title: 'Service', defaultAmount: 100 };
 
 describe('contract term storage', () => {
+  it('saves a manual end date when switching away from a duration', async () => {
+    const { tx, service } = setup();
+    await service.update('c', 'org', { termValue: null, termUnit: null, endDate: '2026-12-31', autoRenew: true });
+    expect(tx.contract.update.mock.calls[0]![0].data).toMatchObject({ termValue: null, termUnit: null, endDate: new Date('2026-12-31'), autoRenew: true });
+  });
+  it('requires a positive finite duration for automatic renewal', async () => {
+    const { service } = setup();
+    await expect(service.create('org', { ...input, autoRenew: true })).rejects.toThrow('Для автопродления');
+    await expect(service.update('c', 'org', { termValue: null, termUnit: null, autoRenew: true })).rejects.toThrow('Для автопродления');
+  });
+  it('defaults new contracts to monthly billing without hidden VAT', async () => {
+    const { tx, service } = setup();
+    await service.create('org', input);
+    expect(tx.contract.create.mock.calls[0]![0].data).toMatchObject({ billingPeriod: 'MONTHLY', vatRate: 0 });
+    await service.update('c', 'org', { title: 'Updated' });
+    expect(tx.contract.update.mock.calls[0]![0].data).not.toHaveProperty('vatRate');
+  });
   it('calculates expiration on the server and ignores a client supplied end date', async () => {
     const { tx, service } = setup();
     const result = await service.create('org', { ...input, startDate: '2026-01-31', termValue: 1,

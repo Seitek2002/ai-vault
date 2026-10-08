@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { contractBillsInMonth } from '@ai-vault/doc-placeholders';
 import {
   DocumentStatus,
   EsfStatus,
@@ -184,7 +185,7 @@ export class SettlementsService {
         ...(dto.contractId ? { id: dto.contractId } : {}),
         AND: [
           { OR: [{ startDate: null }, { startDate: { lte: periodEnd } }] },
-          { OR: [{ endDate: null }, { endDate: { gte: periodStart } }] },
+          { OR: [{ endDate: null }, { endDate: { gte: periodStart } }, { autoRenew: true }] },
         ],
       },
     });
@@ -208,8 +209,10 @@ export class SettlementsService {
 
   /** Возвращает id первого комплекта или null, если он уже существует. */
   async generateOne(contract: Contract, year: number, month: number, userId: string): Promise<string | null> {
+    if (!contractBillsInMonth(contract, year, month)) return null;
     return this.prisma.$transaction(async (tx) => {
       await this.lockPeriod(tx, contract, year, month);
+      if (contract.billingPeriod === 'ONE_TIME' && await tx.settlement.findFirst({ where: { contractId: contract.id }, select: { id: true } })) return null;
       const existing = await tx.settlement.findUnique({
         where: { contractId_year_month_sequence: { contractId: contract.id, year, month, sequence: 1 } },
         select: { id: true },
@@ -241,7 +244,8 @@ export class SettlementsService {
   }
 
   private async lockPeriod(tx: Prisma.TransactionClient, contract: Contract, year: number, month: number) {
-    const key = `settlement:${contract.organizationId}:${contract.id}:${year}:${month}`;
+    const period = contract.billingPeriod === 'ONE_TIME' ? 'one-time' : `${year}:${month}`;
+    const key = `settlement:${contract.organizationId}:${contract.id}:${period}`;
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${key}))`;
   }
 

@@ -30,6 +30,16 @@ function setup() {
 const input = { number: 'MANUAL', counterpartyId: 'partner', title: 'Service', defaultAmount: 100 };
 
 describe('contract PDF attachments', () => {
+  it('requires the notice PDF and disables billing and renewal on termination', async () => {
+    const { prisma, service } = setup();
+    await expect(service.update('contract', 'org', { terminationDate: '2026-10-08' })).rejects.toThrow('прикрепите PDF');
+    await expect(service.update('contract', 'org', { terminationPdfId: 'notice' })).rejects.toThrow('дату расторжения');
+    await service.update('contract', 'org', { terminationDate: '2026-10-08', terminationPdfId: 'notice', active: true, autoRenew: true });
+    expect(prisma.contract.update.mock.calls[0]![0].data).toMatchObject({
+      terminationDate: new Date('2026-10-08'), terminationPdf: { connect: { id: 'notice' } }, active: false, autoRenew: false,
+    });
+    expect(prisma.fileAsset.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'notice', organizationId: 'org' } }));
+  });
   it('attaches multiple additional PDFs and checks organization for each', async () => {
     const { prisma, service } = setup();
     await service.create('org', { ...input, additionalPdfIds: ['extra1', 'extra2'] });
@@ -67,7 +77,7 @@ describe('contract PDF attachments', () => {
     expect(result.contractPdf?.originalName).toBe('contract.pdf');
   });
 
-  it.each(['contractPdfId', 'ndaPdfId'] as const)('rejects foreign/missing %s on creation and update', async (slot) => {
+  it.each(['contractPdfId', 'ndaPdfId', 'terminationPdfId'] as const)('rejects foreign/missing %s on creation and update', async (slot) => {
     const { prisma, service } = setup();
     prisma.fileAsset.findFirst.mockResolvedValue(null as never);
     await expect(service.create('org', { ...input, [slot]: 'foreign' })).rejects.toThrow('Файл не найден');

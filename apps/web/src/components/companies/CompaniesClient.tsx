@@ -10,6 +10,7 @@ import { counterpartiesApi, type CounterpartyFormData } from '@/lib/api/counterp
 import { contractsApi, type Contract } from '@/lib/api/contracts';
 import { formatMoney } from '@/lib/api/settlements';
 import type { CounterpartyDto } from '@ai-vault/types';
+import { CONTRACT_AMOUNT_LABELS } from '@ai-vault/doc-placeholders';
 import { ApiError } from '@/lib/api/client';
 import { CompanyRequisitesModal } from './CompanyRequisitesModal';
 import palette from './CompaniesPalette.module.css';
@@ -246,7 +247,8 @@ const contractDate = new Intl.DateTimeFormat('ru-RU', { timeZone: 'UTC' });
 
 function contractPeriod(contract: Contract): string {
   const start = contract.startDate ? `С ${contractDate.format(new Date(contract.startDate))}` : 'Начало не указано';
-  const end = contract.endDate ? `до ${contractDate.format(new Date(contract.endDate))}` : 'без срока окончания';
+  const endDate = contract.effectiveEndDate ?? contract.endDate;
+  const end = endDate ? `до ${contractDate.format(new Date(endDate))}${contract.autoRenew ? ' · автопродление' : ''}` : 'без срока окончания';
   return `${start} · ${end}`;
 }
 
@@ -326,7 +328,7 @@ function CompanyRow({ cp, contracts, contractsLoading, contractsError, onRetryCo
                 <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 pl-[26px] sm:justify-end sm:gap-4 sm:pl-0">
                   <div className="flex min-w-0 flex-wrap items-baseline gap-x-1.5 text-sm">
                     <span className="font-medium tabular-nums text-[var(--color-text-primary)] [overflow-wrap:anywhere]">{formatMoney(contract.defaultAmount, contract.currency)}</span>
-                    <span className="text-xs text-[var(--color-text-secondary)]">в месяц</span>
+                            <span className="text-xs text-[var(--color-text-secondary)]">{CONTRACT_AMOUNT_LABELS[contract.billingPeriod ?? 'MONTHLY']}</span>
                   </div>
                   <Button type="button" size="sm" variant="ghost" className="min-h-10 shrink-0 px-2"
                     aria-label={`Открыть договор № ${contract.number} ${contract.title}`} onClick={() => onOpenContract(contract)}>Открыть</Button>

@@ -1,5 +1,5 @@
 import { PartialType } from '@nestjs/mapped-types';
-import { ContractTermUnit } from '@prisma/client';
+import { ContractBillingPeriod, ContractTermUnit } from '@prisma/client';
 import { Transform } from 'class-transformer';
 import {
   IsArray,
@@ -15,6 +15,7 @@ import {
   MaxLength,
   Min,
   MinLength,
+  ValidateIf,
 } from 'class-validator';
 
 export class CreateContractDto {
@@ -49,11 +50,11 @@ export class CreateContractDto {
   @MaxLength(3)
   currency?: string;
 
-  /** День месяца, когда создаётся расчёт. 28 — максимум, чтобы был в любом месяце. */
+  /** День месяца; 29–31 в коротком месяце переносятся на последний день. */
   @IsOptional()
   @IsInt()
   @Min(1)
-  @Max(28)
+  @Max(31)
   billingDay?: number;
 
   @IsOptional()
@@ -69,6 +70,23 @@ export class CreateContractDto {
   @IsOptional()
   @IsBoolean()
   active?: boolean;
+
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsEnum(ContractBillingPeriod)
+  billingPeriod?: ContractBillingPeriod;
+
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsBoolean()
+  autoRenew?: boolean;
+
+  @IsOptional()
+  @IsDateString()
+  terminationDate?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  terminationPdfId?: string | null;
 
   @IsOptional()
   @IsDateString()

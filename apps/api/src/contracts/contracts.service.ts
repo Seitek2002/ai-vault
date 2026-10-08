@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { calculateContractEndDate, formatContractNumber } from '@ai-vault/doc-placeholders';
+import { calculateContractEndDate, effectiveContractEndDate, formatContractNumber, type ContractBillingPeriod } from '@ai-vault/doc-placeholders';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { MAX_UPLOAD_SIZE_BYTES, MAX_UPLOAD_SIZE_MB } from '../files/upload-limits';
@@ -11,6 +11,7 @@ const CONTRACT_INCLUDE = {
   additionalPdfs: { select: ATTACHMENT_SELECT, orderBy: { createdAt: 'asc' as const } },
   contractPdf: { select: ATTACHMENT_SELECT },
   ndaPdf: { select: ATTACHMENT_SELECT },
+  terminationPdf: { select: ATTACHMENT_SELECT },
   counterparty: { select: { id: true, name: true, inn: true } },
 } satisfies Prisma.ContractInclude;
 
@@ -33,6 +34,11 @@ export interface ContractDto {
   paymentDueDays: number;
   esfRequired: boolean;
   active: boolean;
+  billingPeriod: ContractBillingPeriod;
+  autoRenew: boolean;
+  terminationDate: string | null;
+  terminationPdf: { id: string; originalName: string; size: number } | null;
+  effectiveEndDate: string | null;
   startDate: string | null;
   endDate: string | null;
   termValue: number | null;
@@ -57,6 +63,11 @@ export function toContractDto(contract: ContractWithCounterparty): ContractDto {
     paymentDueDays: contract.paymentDueDays,
     esfRequired: contract.esfRequired,
     active: contract.active,
+    billingPeriod: contract.billingPeriod ?? 'MONTHLY',
+    autoRenew: contract.autoRenew ?? false,
+    terminationDate: contract.terminationDate?.toISOString() ?? null,
+    terminationPdf: contract.terminationPdf ?? null,
+    effectiveEndDate: effectiveContractEndDate(contract),
     startDate: contract.startDate?.toISOString() ?? null,
     endDate: contract.endDate?.toISOString() ?? null,
     termValue: contract.termValue,
@@ -99,9 +110,11 @@ export class ContractsService {
     if (dto.documentId) await this.assertDocument(dto.documentId, organizationId);
     if (dto.contractPdfId) await this.assertPdf(dto.contractPdfId, organizationId);
     if (dto.ndaPdfId) await this.assertPdf(dto.ndaPdfId, organizationId);
+    if (dto.terminationPdfId) await this.assertPdf(dto.terminationPdfId, organizationId);
     for (const fileId of dto.additionalPdfIds ?? []) await this.assertPdf(fileId, organizationId);
 
     const dates = this.resolveDates(dto);
+    const lifecycle = this.resolveLifecycle(dto, dates);
     try {
       return await this.prisma.$transaction(async (tx) => {
         // Serialize numbering and manual reservations within this organization.
@@ -116,13 +129,15 @@ export class ContractsService {
             counterpartyId: dto.counterpartyId,
             title: dto.title,
             defaultAmount: new Prisma.Decimal(dto.defaultAmount),
-            ...(dto.vatRate !== undefined ? { vatRate: dto.vatRate } : {}),
+            vatRate: dto.vatRate ?? 0,
             ...(dto.currency ? { currency: dto.currency } : {}),
             ...(dto.billingDay !== undefined ? { billingDay: dto.billingDay } : {}),
             ...(dto.paymentDueDays !== undefined ? { paymentDueDays: dto.paymentDueDays } : {}),
             ...(dto.esfRequired !== undefined ? { esfRequired: dto.esfRequired } : {}),
-            ...(dto.active !== undefined ? { active: dto.active } : {}),
             ...dates,
+            ...lifecycle,
+            billingPeriod: dto.billingPeriod ?? 'MONTHLY',
+            terminationPdfId: dto.terminationPdfId ?? null,
             documentId: dto.documentId ?? null,
             contractPdfId: dto.contractPdfId ?? null,
             ndaPdfId: dto.ndaPdfId ?? null,
@@ -143,9 +158,12 @@ export class ContractsService {
     if (dto.documentId) await this.assertDocument(dto.documentId, organizationId);
     if (dto.contractPdfId) await this.assertPdf(dto.contractPdfId, organizationId);
     if (dto.ndaPdfId) await this.assertPdf(dto.ndaPdfId, organizationId);
+    if (dto.terminationPdfId) await this.assertPdf(dto.terminationPdfId, organizationId);
     for (const fileId of dto.additionalPdfIds ?? []) await this.assertPdf(fileId, organizationId);
 
     const data: Prisma.ContractUpdateInput = {};
+    const dates = this.resolveDates(dto, existing);
+    Object.assign(data, this.resolveLifecycle(dto, dates, existing));
     if (dto.number !== undefined) {
       const number = dto.number?.trim();
       if (!number) throw new BadRequestException('Номер договора не может быть пустым');
@@ -159,9 +177,9 @@ export class ContractsService {
     if (dto.billingDay !== undefined) data.billingDay = dto.billingDay;
     if (dto.paymentDueDays !== undefined) data.paymentDueDays = dto.paymentDueDays;
     if (dto.esfRequired !== undefined) data.esfRequired = dto.esfRequired;
-    if (dto.active !== undefined) data.active = dto.active;
+    if (dto.billingPeriod !== undefined) data.billingPeriod = dto.billingPeriod;
     if (dto.startDate !== undefined || dto.endDate !== undefined || dto.termValue !== undefined || dto.termUnit !== undefined) {
-      Object.assign(data, this.resolveDates(dto, existing));
+      Object.assign(data, dates);
     }
     if (dto.counterpartyId !== undefined) {
       data.counterparty = { connect: { id: dto.counterpartyId } };
@@ -175,6 +193,9 @@ export class ContractsService {
     }
     if (dto.ndaPdfId !== undefined) {
       data.ndaPdf = dto.ndaPdfId ? { connect: { id: dto.ndaPdfId } } : { disconnect: true };
+    }
+    if (dto.terminationPdfId !== undefined) {
+      data.terminationPdf = dto.terminationPdfId ? { connect: { id: dto.terminationPdfId } } : { disconnect: true };
     }
 
     if (dto.additionalPdfIds !== undefined && dto.additionalPdfIds !== null) {
@@ -197,7 +218,7 @@ export class ContractsService {
     const settlements = await this.prisma.settlement.count({ where: { contractId: id } });
     if (settlements > 0) {
       throw new BadRequestException(
-        'По договору есть расчёты. Сделайте договор неактивным вместо удаления.',
+        'По договору есть расчёты. Снимите галочку «Действующий» вместо удаления.',
       );
     }
     await this.prisma.contract.delete({ where: { id } });
@@ -218,13 +239,27 @@ export class ContractsService {
       if (!calculated) throw new BadRequestException('Срок должен быть целым числом от 1 до 1200 месяцев или от 1 до 100 лет');
       endDate = new Date(`${calculated}T00:00:00.000Z`);
     } else if (dto.termValue === null && dto.termUnit === null) {
-      endDate = null;
+      endDate = dto.endDate !== undefined ? (dto.endDate ? new Date(dto.endDate) : null) : null;
     }
     if ((startDate && Number.isNaN(startDate.getTime())) || (endDate && Number.isNaN(endDate.getTime()))) {
       throw new BadRequestException('Некорректная дата договора');
     }
     if (startDate && endDate && endDate < startDate) throw new BadRequestException('Окончание не может быть раньше начала договора');
     return { startDate, endDate, termValue, termUnit };
+  }
+
+  private resolveLifecycle(dto: UpdateContractDto, dates: { startDate: Date | null; endDate: Date | null }, existing?: ContractWithCounterparty) {
+    const terminationDate = dto.terminationDate !== undefined ? (dto.terminationDate ? new Date(dto.terminationDate) : null) : existing?.terminationDate ?? null;
+    const terminationPdfId = dto.terminationPdfId !== undefined ? dto.terminationPdfId : existing?.terminationPdfId;
+    const autoRenew = dto.autoRenew ?? existing?.autoRenew ?? false;
+    if (terminationDate && Number.isNaN(terminationDate.getTime())) throw new BadRequestException('Некорректная дата расторжения');
+    if (terminationDate && !terminationPdfId) throw new BadRequestException('Для расторжения прикрепите PDF уведомления');
+    if (!terminationDate && terminationPdfId) throw new BadRequestException('Укажите дату расторжения для PDF уведомления');
+    if (terminationDate && dates.startDate && terminationDate < dates.startDate) throw new BadRequestException('Расторжение не может быть раньше даты подписания');
+    if (!terminationDate && autoRenew && !(dates.startDate && dates.endDate && dates.endDate > dates.startDate)) {
+      throw new BadRequestException('Для автопродления укажите дату подписания и срок или дату окончания');
+    }
+    return { terminationDate, autoRenew: terminationDate ? false : autoRenew, active: terminationDate ? false : dto.active ?? existing?.active ?? true };
   }
 
   private normalizeNumber(number: string, startDate?: string | Date | null, createdAt?: Date): string {

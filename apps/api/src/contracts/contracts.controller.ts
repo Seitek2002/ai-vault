@@ -1,17 +1,23 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { Permission } from '../common/permissions';
 import { ContractsService } from './contracts.service';
+import { ContractHistoryService } from './contract-history.service';
 import { CreateContractDto, ListContractsDto, UpdateContractDto } from './dto/contract.dto';
 import { CurrentOrgId } from '../common/decorators/current-user.decorator';
 import { RequirePermission } from '../common/decorators/permissions.decorator';
 
 @Controller('contracts')
 export class ContractsController {
-  constructor(private service: ContractsService) {}
+  constructor(private service: ContractsService, private history: ContractHistoryService) {}
 
   @Get()
   findAll(@CurrentOrgId() organizationId: string, @Query() query: ListContractsDto) {
     return this.service.findAll(organizationId, query);
+  }
+
+  @Get(':id/history')
+  findHistory(@Param('id') id: string, @CurrentOrgId() organizationId: string) {
+    return this.history.find(id, organizationId);
   }
 
   @Get(':id')

@@ -1,5 +1,6 @@
 import { api } from './client';
 import type { ContractBillingPeriod } from '@ai-vault/doc-placeholders';
+import type { ContractHistoryData } from './contract-history';
 
 export interface ContractAttachment {
   id: string;
@@ -70,6 +71,7 @@ export const contractsApi = {
     return api.get<Contract[]>(`/contracts${qs ? `?${qs}` : ''}`);
   },
   get: (id: string) => api.get<Contract>(`/contracts/${id}`),
+  history: (id: string) => api.get<ContractHistoryData>(`/contracts/${id}/history`),
   create: (dto: ContractFormData) => api.post<Contract>('/contracts', dto),
   update: (id: string, dto: Partial<ContractFormData>) =>
     api.patch<Contract>(`/contracts/${id}`, dto),

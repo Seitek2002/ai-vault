@@ -12,7 +12,7 @@ describe('Номер учётной системы новых ЭСФ', () => {
     const prisma = {
       companySettings: { findUnique: vi.fn().mockResolvedValue({ esfLogin: 'test-login', esfPasswordEnc: seal('test-password') }) },
       settlement: { findFirst: vi.fn().mockResolvedValue({ id, contractId: 'contract', counterpartyId: 'company', year: 2026, month: 9, amount: new Prisma.Decimal(35000),
-        contract: { title: 'Services' }, counterparty: { name: 'Test company' }, steps: [{ type: SettlementStepType.ISSUE_ESF, doneAt: null },
+        contract: { title: 'Services', number: 'ДГ-000003/0326', startDate: new Date('2026-03-01T00:00:00Z') }, counterparty: { name: 'Test company' }, steps: [{ type: SettlementStepType.ISSUE_ESF, doneAt: null },
           { type: SettlementStepType.ISSUE_ACT, fileAssetId: 'act-pdf' }],
         documents: actNumber ? [{ type: 'AVR', number: actNumber }] : [] }) },
       fileAsset: { findFirst: vi.fn().mockResolvedValue({ mimeType: 'application/pdf', size: 100 }) },
@@ -25,7 +25,9 @@ describe('Номер учётной системы новых ЭСФ', () => {
     vi.spyOn(service, 'sync').mockResolvedValue({ fetched: 1, created: 1, updated: 0, matched: 1, unmatched: 0, errors: [] });
     vi.spyOn(service, 'findOneDto').mockResolvedValue({ id: 'new-esf' } as never);
     await service.createDraft('org', 'user', id, { sourceUuid: 'source-uuid', sourceSignature: 'a'.repeat(64), lines: [{ name: 'Services', quantity: 1, price: 35000 }] });
-    expect(draft.createByCopy).toHaveBeenCalledWith(expect.objectContaining({ crmRef: `ErkinAI.Docs-${id}`, amount: 35000, sourceUuid: 'source-uuid' }));
+    expect(draft.createByCopy).toHaveBeenCalledWith(expect.objectContaining({ crmRef: `ErkinAI.Docs-${id}`, amount: 35000, sourceUuid: 'source-uuid',
+      // Реквизиты договора и период услуг — наши, а не унаследованные от образца.
+      contractNumber: 'ДГ-0003/0326', contractDate: '01-03-2026', deliveryDate: '30-09-2026', note: 'Services — сентябрь 2026' }));
     expect(links.attach).not.toHaveBeenCalled();
   });
 });

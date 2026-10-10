@@ -10,7 +10,7 @@ function fixture() {
   vi.stubEnv('ESF_SECRET_KEY', 'ab'.repeat(32));
   const settlement = {
     id: 'set-1', contractId: 'contract', counterpartyId: 'company', year: 2026, month: 9, amount: new Prisma.Decimal(35000),
-    contract: { title: 'Services' }, counterparty: { name: 'Test company' },
+    contract: { title: 'Services', number: 'ДГ-000003/0326', startDate: new Date('2026-03-01T00:00:00Z') }, counterparty: { name: 'Test company' },
     steps: [{ type: SettlementStepType.ISSUE_ESF, doneAt: null, fileAssetId: null as string | null },
       { type: SettlementStepType.ISSUE_ACT, doneAt: new Date() as Date | null, fileAssetId: 'act-pdf' as string | null }],
     documents: [{ type: 'AVR', number: 'AVR-1' }],

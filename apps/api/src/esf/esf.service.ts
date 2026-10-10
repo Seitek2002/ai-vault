@@ -8,7 +8,7 @@ import { EsfDraftClient } from './esf-draft.client';
 import { EsfPortalClient, EsfPortalError, type EsfListRow } from './esf-portal.client';
 import { EsfPdfService } from './esf-pdf';
 import { EsfLinksService, invoiceSettlementIds, MANUAL_ESF_DETACH_NOTE } from './esf-links.service';
-import { esfLineAmounts, esfServiceForPeriod } from '@ai-vault/doc-placeholders';
+import { esfLineAmounts, esfServiceForPeriod, shortContractNumber } from '@ai-vault/doc-placeholders';
 import { draftDeliveryDate, draftDeliveryError, draftPeriod, draftPeriodError, isoDate, portalDate } from './esf-draft-period';
 import type { CreateEsfDraftDto } from './dto/esf.dto';
 import {
@@ -168,7 +168,7 @@ export class EsfService {
       settlementPeriod: `${MONTH_NAMES_RU[settlement.month - 1]} ${settlement.year}`,
       settlementYear: settlement.year, settlementMonth: settlement.month,
       deliveryDate: draftDeliveryDate(period, new Date()),
-      contractNumber: settlement.contract.number,
+      contractNumber: shortContractNumber(settlement.contract.number),
       contractDate: settlement.contract.startDate ? isoDate(settlement.contract.startDate) : null,
       contractTitle: settlement.contract.title,
       crmRef: esfAccountingRef(settlement.id) };
@@ -214,7 +214,7 @@ export class EsfService {
       crmRef,
       note,
       // Реквизиты договора — наши, а не унаследованные от ЭСФ-образца.
-      contractNumber: settlement.contract.number,
+      contractNumber: shortContractNumber(settlement.contract.number),
       ...(settlement.contract.startDate ? { contractDate: portalDate(isoDate(settlement.contract.startDate)) } : {}),
       sourceSignature: dto.sourceSignature,
       lines: dto.lines,

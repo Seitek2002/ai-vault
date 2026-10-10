@@ -3,8 +3,9 @@
 import { useState, type KeyboardEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { FileText, X } from 'lucide-react';
-import { esfDeliveryDate, esfLineAmounts } from '@ai-vault/doc-placeholders';
+import { esfDeliveryDate, esfLineAmounts, type EsfLineAmounts } from '@ai-vault/doc-placeholders';
 import { Button, Input, Modal, Select, Spinner } from '@/components/ui';
+import { cn } from '@/lib/cn';
 import { fieldClassName } from '@/components/ui/Input';
 import { esfApi, type CreateEsfDraft, type EsfDraftPreview } from '@/lib/api/esf';
 import { formatMoney } from '@/lib/api/settlements';
@@ -20,6 +21,7 @@ interface Props {
 }
 
 const ruDate = (iso: string) => iso.split('-').reverse().join('.');
+const money = (value: number) => value.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 /**
  * Отдельное окно для новой ЭСФ: строки услуг, период и дата поставки заполняются
@@ -47,7 +49,7 @@ export function EsfDraftModal({ settlementId, creating, error, onCreate, onPrevi
     close();
   }
 
-  return <Modal onClose={close} className="max-w-3xl flex max-h-[92vh] flex-col">
+  return <Modal onClose={close} className="max-w-5xl flex max-h-[92vh] flex-col">
     <div onKeyDown={onKeyDown} className="flex min-h-0 flex-1 flex-col">
       <div className="flex items-start justify-between gap-3 border-b border-[var(--color-border)] px-5 py-4">
         <div className="min-w-0">
@@ -89,6 +91,14 @@ function DraftForm({ preview, creating, error, reloading, onReload, onCreate, on
   const [confirmed, setConfirmed] = useState(false);
 
   const reviewed = reviewEsfLines(preview.lines, edited, preview.amount);
+  const rowAmounts = edited.map((_, index) => reviewed.lines[index] ? esfLineAmounts(reviewed.lines[index]!) : null);
+  const counted = rowAmounts.filter((amounts): amounts is EsfLineAmounts => amounts !== null);
+  const totals = counted.length === rowAmounts.length && counted.length > 0
+    ? counted.reduce((sum, amounts) => ({
+      net: sum.net + amounts.net, vat: sum.vat + amounts.vat,
+      salesTax: sum.salesTax + amounts.salesTax, total: sum.total + amounts.total,
+    }))
+    : null;
   const busy = creating || reloading;
   // Самый поздний допустимый период — расчётный месяц, но не будущий.
   const now = new Date();
@@ -155,29 +165,96 @@ function DraftForm({ preview, creating, error, reloading, onReload, onCreate, on
         <Button type="button" variant="ghost" size="sm" disabled={busy} onClick={onReload}>Загрузить заново</Button>
       </div>
 
-      <fieldset disabled={busy} className="min-w-0 divide-y divide-[var(--color-border)]">
+      <fieldset disabled={busy} className="mt-3 min-w-0">
         <legend className="sr-only">Строки услуг ЭСФ</legend>
-        {edited.map((line, index) => <div key={index} className="min-w-0 py-4">
-          <label className="block text-[var(--color-text-secondary)]">
-            Услуга {index + 1}
-            <textarea rows={2} maxLength={150} value={line.name} onChange={e => change(index, 'name', e.target.value)}
-              className={`${fieldClassName} mt-1 resize-y text-base leading-relaxed`} />
-          </label>
-          <p className="mt-1 text-[var(--color-text-secondary)]">
-            {preview.lines[index]!.unit} · ГКЭД {preview.lines[index]!.gked} · НДС {preview.lines[index]!.vatRate}% · НСП {preview.lines[index]!.salesTaxRate}%
-          </p>
-          <div className="mt-3 grid grid-cols-2 gap-3">
-            <label className="block text-[var(--color-text-secondary)]">Количество
-              <Input inputMode="decimal" value={line.quantity} onChange={e => change(index, 'quantity', e.target.value)} className="mt-1 text-base tabular-nums" />
+
+        {/* Те же колонки, что в кабинете ЭСФ, — сверять строки построчно. */}
+        <div className="hidden overflow-x-auto rounded-lg border border-[var(--color-border)] lg:block">
+          <table className="w-full min-w-[880px] border-collapse">
+            <thead>
+              <tr className="bg-[var(--color-bg-elevated)] text-left align-bottom text-xs text-[var(--color-text-secondary)]">
+                <th scope="col" className="px-2 py-2 font-medium">Номер</th>
+                <th scope="col" className="px-2 py-2 font-medium">Услуги</th>
+                <th scope="col" className="px-2 py-2 font-medium">Единицы измерения</th>
+                <th scope="col" className="px-2 py-2 font-medium">Код ГКЭД</th>
+                <th scope="col" className="px-2 py-2 font-medium">Факт. кол-во</th>
+                <th scope="col" className="px-2 py-2 font-medium">Цена</th>
+                <th scope="col" className="px-2 py-2 text-right font-medium">Сумма НДС</th>
+                <th scope="col" className="px-2 py-2 text-right font-medium">НСП</th>
+                <th scope="col" className="px-2 py-2 text-right font-medium">Сумма НСП</th>
+                <th scope="col" className="px-2 py-2 text-right font-medium">Стоимость без НДС и НсП</th>
+                <th scope="col" className="px-2 py-2 text-right font-medium">Общая стоимость</th>
+              </tr>
+            </thead>
+            <tbody>
+              {edited.map((line, index) => {
+                const source = preview.lines[index]!;
+                const amounts = rowAmounts[index];
+                return <tr key={index} className="border-t border-[var(--color-border)] align-top">
+                  <td className="px-2 py-3 tabular-nums text-[var(--color-text-secondary)]">{index + 1}</td>
+                  <td className="px-2 py-3">
+                    <textarea rows={3} maxLength={150} value={line.name} aria-label={`Название услуги ${index + 1}`}
+                      onChange={e => change(index, 'name', e.target.value)}
+                      className={cn(fieldClassName, 'w-48 resize-y leading-relaxed')} />
+                  </td>
+                  <td className="px-2 py-3 text-[var(--color-text-secondary)]">{source.unit}</td>
+                  <td className="px-2 py-3 tabular-nums text-[var(--color-text-secondary)]">{source.gked}</td>
+                  <td className="px-2 py-3">
+                    <Input inputMode="decimal" value={line.quantity} aria-label={`Количество, услуга ${index + 1}`}
+                      onChange={e => change(index, 'quantity', e.target.value)} className="w-20 tabular-nums" />
+                  </td>
+                  <td className="px-2 py-3">
+                    <Input inputMode="decimal" value={line.price} aria-label={`Цена, услуга ${index + 1}`}
+                      onChange={e => change(index, 'price', e.target.value)} className="w-28 tabular-nums" />
+                    <span className="mt-1 block text-xs text-[var(--color-text-secondary)]">{source.priceIncludesTaxes ? 'с налогами' : 'без налогов'}</span>
+                  </td>
+                  <td className="px-2 py-3 text-right tabular-nums">{amounts ? money(amounts.vat) : '—'}
+                    <span className="mt-1 block text-xs text-[var(--color-text-secondary)]">{source.vatRate}%</span>
+                  </td>
+                  <td className="px-2 py-3 text-right tabular-nums text-[var(--color-text-secondary)]">{source.salesTaxRate}%</td>
+                  <td className="px-2 py-3 text-right tabular-nums">{amounts ? money(amounts.salesTax) : '—'}</td>
+                  <td className="px-2 py-3 text-right tabular-nums">{amounts ? money(amounts.net) : '—'}</td>
+                  <td className="px-2 py-3 text-right tabular-nums">{amounts ? money(amounts.total) : '—'}</td>
+                </tr>;
+              })}
+            </tbody>
+            <tfoot>
+              <tr className="border-t border-[var(--color-border)] bg-[var(--color-bg-elevated)] font-semibold">
+                <td colSpan={6} className="px-2 py-2 text-right">Всего:</td>
+                <td className="px-2 py-2 text-right tabular-nums">{totals ? money(totals.vat) : '—'}</td>
+                <td />
+                <td className="px-2 py-2 text-right tabular-nums">{totals ? money(totals.salesTax) : '—'}</td>
+                <td className="px-2 py-2 text-right tabular-nums">{totals ? money(totals.net) : '—'}</td>
+                <td className="px-2 py-2 text-right tabular-nums">{totals ? money(totals.total) : '—'}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+
+        {/* На узком экране та же строка — карточкой. */}
+        <div className="divide-y divide-[var(--color-border)] lg:hidden">
+          {edited.map((line, index) => <div key={index} className="min-w-0 py-4">
+            <label className="block text-[var(--color-text-secondary)]">
+              Услуга {index + 1}
+              <textarea rows={2} maxLength={150} value={line.name} onChange={e => change(index, 'name', e.target.value)}
+                className={`${fieldClassName} mt-1 resize-y text-base leading-relaxed`} />
             </label>
-            <label className="block text-[var(--color-text-secondary)]">Цена {preview.lines[index]!.priceIncludesTaxes ? 'с налогами' : 'без налогов'}
-              <Input inputMode="decimal" value={line.price} onChange={e => change(index, 'price', e.target.value)} className="mt-1 text-base tabular-nums" />
-            </label>
-          </div>
-          {reviewed.lines[index] && <p className="mt-2 text-right text-base tabular-nums text-[var(--color-text-primary)]">
-            Сумма: {formatMoney(esfLineAmounts(reviewed.lines[index]!).total, preview.currency)}
-          </p>}
-        </div>)}
+            <p className="mt-1 text-[var(--color-text-secondary)]">
+              {preview.lines[index]!.unit} · ГКЭД {preview.lines[index]!.gked} · НДС {preview.lines[index]!.vatRate}% · НСП {preview.lines[index]!.salesTaxRate}%
+            </p>
+            <div className="mt-3 grid grid-cols-2 gap-3">
+              <label className="block text-[var(--color-text-secondary)]">Факт. кол-во
+                <Input inputMode="decimal" value={line.quantity} onChange={e => change(index, 'quantity', e.target.value)} className="mt-1 text-base tabular-nums" />
+              </label>
+              <label className="block text-[var(--color-text-secondary)]">Цена {preview.lines[index]!.priceIncludesTaxes ? 'с налогами' : 'без налогов'}
+                <Input inputMode="decimal" value={line.price} onChange={e => change(index, 'price', e.target.value)} className="mt-1 text-base tabular-nums" />
+              </label>
+            </div>
+            {rowAmounts[index] && <p className="mt-2 text-right text-base tabular-nums text-[var(--color-text-primary)]">
+              Общая стоимость: {formatMoney(rowAmounts[index]!.total, preview.currency)}
+            </p>}
+          </div>)}
+        </div>
       </fieldset>
 
       <Button type="button" variant="ghost" disabled={busy} onClick={onPreviewAct}>Открыть PDF акта для сверки</Button>

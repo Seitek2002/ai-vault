@@ -8,7 +8,18 @@ export interface EsfDraftPreview {
   lines: EsfDraftLine[];
   amount: number;
   currency: string;
+  /** Период услуг по умолчанию — предыдущий завершившийся месяц. */
   period: string;
+  periodYear: number;
+  periodMonth: number;
+  settlementPeriod: string;
+  settlementYear: number;
+  settlementMonth: number;
+  /** yyyy-mm-dd */
+  deliveryDate: string;
+  contractNumber: string;
+  contractDate: string | null;
+  contractTitle: string;
   crmRef: string;
 }
 
@@ -16,6 +27,10 @@ export interface CreateEsfDraft {
   sourceUuid: string;
   sourceSignature: string;
   lines: Pick<EsfDraftLine, 'name' | 'quantity' | 'price'>[];
+  periodYear?: number;
+  periodMonth?: number;
+  /** yyyy-mm-dd */
+  deliveryDate?: string;
 }
 
 export type EsfStatus = 'NEW' | 'SENT' | 'ACCEPTED' | 'REVOKED' | 'REJECTED' | 'UNKNOWN';

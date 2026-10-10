@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { esfLineAmounts, esfLinesTotal, esfServiceForPeriod } from './esf';
+import { esfLineAmounts, esfLinesTotal, esfPeriodLabel, esfServiceForPeriod, esfSuggestedPeriod } from './esf';
 
 const line = { name: 'Услуга', unit: 'Штука', gked: '62.02.0', quantity: 1, price: 30000, vatRate: 0, salesTaxRate: 0 };
 describe('Суммы и периоды строк ЭСФ', () => {
@@ -22,4 +22,21 @@ describe('Суммы и периоды строк ЭСФ', () => {
     ['Доступ к чат-центру за август 2026', 'Доступ к чат-центру за октябрь 2026'],
     ['Услуга без периода', 'Услуга без периода — октябрь 2026'],
   ])('обновляет период %s', (name, expected) => expect(esfServiceForPeriod(name, 2026, 10)).toBe(expected));
+});
+
+describe('Период услуг по умолчанию', () => {
+  const at = (iso: string) => new Date(`${iso}T09:00:00Z`);
+  it('в октябре предлагает сентябрь — месяц ещё не закончился', () => {
+    expect(esfSuggestedPeriod(2026, 10, at('2026-10-11'))).toEqual({ year: 2026, month: 9 });
+  });
+  it('расчёту за прошлый месяц оставляет его собственный период', () => {
+    expect(esfSuggestedPeriod(2026, 9, at('2026-10-11'))).toEqual({ year: 2026, month: 9 });
+    expect(esfSuggestedPeriod(2026, 8, at('2026-10-11'))).toEqual({ year: 2026, month: 8 });
+  });
+  it('в январе предлагает декабрь прошлого года', () => {
+    expect(esfSuggestedPeriod(2027, 1, at('2027-01-05'))).toEqual({ year: 2026, month: 12 });
+  });
+  it('подписывает период по-русски', () => {
+    expect(esfPeriodLabel({ year: 2026, month: 9 })).toBe('сентябрь 2026');
+  });
 });

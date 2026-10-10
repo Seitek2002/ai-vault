@@ -51,3 +51,31 @@ export function esfServiceForPeriod(name: string, year: number, month: number): 
   const re = /(?:январ[ья]|феврал[ья]|март[а]?|апрел[ья]|ма[йя]|июн[ья]|июл[ья]|август[а]?|сентябр[ья]|октябр[ья]|ноябр[ья]|декабр[ья])\s+20\d{2}/gi;
   return re.test(name) ? name.replace(re, period) : `${name.trim()} — ${period}`;
 }
+
+export interface EsfPeriod {
+  year: number;
+  /** 1..12 */
+  month: number;
+}
+
+/** «сентябрь 2026» — период услуг, как он пишется в строке ЭСФ. */
+export function esfPeriodLabel(period: EsfPeriod): string {
+  return `${MONTHS[period.month - 1] ?? period.month} ${period.year}`;
+}
+
+/**
+ * ЭСФ выставляют за завершившийся месяц: 11 октября услуги — за сентябрь.
+ * Поэтому предлагаем предыдущий месяц, но не позже расчётного периода.
+ */
+export function esfSuggestedPeriod(year: number, month: number, today: Date = new Date()): EsfPeriod {
+  const previousMonth = today.getUTCFullYear() * 12 + today.getUTCMonth() - 1;
+  const index = Math.min(previousMonth, year * 12 + month - 1);
+  return { year: Math.floor(index / 12), month: (index % 12) + 1 };
+}
+
+/** Дата поставки: конец периода услуг, но не позже сегодняшнего дня (yyyy-mm-dd). */
+export function esfDeliveryDate(period: EsfPeriod, today: Date = new Date()): string {
+  const periodEnd = new Date(Date.UTC(period.year, period.month, 0));
+  const day = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+  return (periodEnd > day ? day : periodEnd).toISOString().slice(0, 10);
+}

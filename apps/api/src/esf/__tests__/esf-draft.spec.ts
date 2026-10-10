@@ -9,6 +9,7 @@ const client = new EsfDraftClient(new EsfPortalClient()) as unknown as {
   parseRows(html: string): Array<{ uuid: string; status: string; actions: Record<string, string> }>;
   portalMoney(n: number): string;
   messages(html: string): string[];
+  fillContractFields(fields: Record<string, string>, req: { contractNumber?: string; contractDate?: string }): void;
 };
 
 const FORM = `
@@ -75,5 +76,24 @@ describe('EsfDraftClient — строки списка с действиями',
     expect(rows[0]!.actions['Редактировать']).toBe('form:table:0:j_idt162');
     expect(rows[1]!.actions['Создать копию']).toBe('form:table:1:j_idt163');
     expect(rows[1]!.actions).not.toHaveProperty('Редактировать');
+  });
+});
+
+describe('EsfDraftClient — реквизиты договора из Vault', () => {
+  it('подставляет свой номер и дату договора вместо унаследованных от образца', () => {
+    const fields: Record<string, string> = {
+      'mainform:deliveryContractNumber': '4',
+      'mainform:deliveryContractDate_input': '01-01-2020',
+      note: '',
+    };
+    client.fillContractFields(fields, { contractNumber: 'ДГ-000005/0426', contractDate: '08-04-2026' });
+    expect(fields['mainform:deliveryContractNumber']).toBe('ДГ-000005/0426');
+    expect(fields['mainform:deliveryContractDate_input']).toBe('08-04-2026');
+  });
+
+  it('не падает, когда портал не показывает эти поля', () => {
+    const fields: Record<string, string> = { note: '' };
+    expect(() => client.fillContractFields(fields, { contractNumber: 'ДГ-1', contractDate: '08-04-2026' })).not.toThrow();
+    expect(fields).toEqual({ note: '' });
   });
 });

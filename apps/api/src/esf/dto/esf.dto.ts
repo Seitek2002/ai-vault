@@ -1,5 +1,5 @@
 import { Transform, Type } from 'class-transformer';
-import { ArrayMaxSize, ArrayNotEmpty, ArrayUnique, IsArray, IsBoolean, IsHexadecimal, IsInt, IsNumber, IsOptional, IsString, IsUUID, Max, MaxLength, Min, MinLength, ValidateIf, ValidateNested } from 'class-validator';
+import { ArrayMaxSize, ArrayNotEmpty, ArrayUnique, IsArray, IsBoolean, IsHexadecimal, IsInt, IsNumber, IsOptional, IsString, IsUUID, Matches, Max, MaxLength, Min, MinLength, ValidateIf, ValidateNested } from 'class-validator';
 
 export class EsfDraftLineDto {
   @IsString()
@@ -33,6 +33,26 @@ export class CreateEsfDraftDto {
   @ValidateNested({ each: true })
   @Type(() => EsfDraftLineDto)
   declare lines: EsfDraftLineDto[];
+
+  /** Период услуг — по умолчанию предыдущий месяц, менеджер может его сменить. */
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(2000)
+  @Max(2100)
+  periodYear?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(12)
+  periodMonth?: number;
+
+  /** Дата поставки, yyyy-mm-dd. */
+  @IsOptional()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'Дата поставки указана неверно.' })
+  deliveryDate?: string;
 }
 
 export class ListEsfDto {

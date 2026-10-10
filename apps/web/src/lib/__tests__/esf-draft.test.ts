@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { reviewEsfLines } from '../esf-draft';
+import { applyEsfPeriod, esfPeriodOptions, parsePeriodValue, periodValue, reviewEsfLines } from '../esf-draft';
 
 const template = [
   { name: 'Робот', unit: 'Штука', gked: '62.02.0', quantity: 1, price: 30000, vatRate: 0, salesTaxRate: 0 },
@@ -18,5 +18,36 @@ describe('Проверка редактора услуг ЭСФ', () => {
   });
   it.each(['', '-1', '0', 'NaN', '1.123456', '1e5', '1000000001'])('отклоняет цену %s', price => {
     expect(reviewEsfLines(template, [{ ...input[0]!, price }, input[1]!], 35000).error).not.toBe('');
+  });
+});
+
+describe('Период услуг в строках ЭСФ', () => {
+  it('меняет месяц в названиях, сохраняя правки менеджера', () => {
+    const rows = [
+      { name: 'Пакет №1 «ИИ-робот» за период октябрь 2026', quantity: '1', price: '30000' },
+      { name: 'Доступ к чат-центру', quantity: '1', price: '5000' },
+    ];
+    expect(applyEsfPeriod(rows, { year: 2026, month: 9 })).toEqual([
+      { name: 'Пакет №1 «ИИ-робот» за период сентябрь 2026', quantity: '1', price: '30000' },
+      { name: 'Доступ к чат-центру — сентябрь 2026', quantity: '1', price: '5000' },
+    ]);
+  });
+
+  it('не плодит периоды при повторной смене', () => {
+    const once = applyEsfPeriod([{ name: 'Услуга', quantity: '1', price: '1' }], { year: 2026, month: 9 });
+    expect(applyEsfPeriod(once, { year: 2026, month: 8 })[0]!.name).toBe('Услуга — август 2026');
+  });
+
+  it('предлагает расчётный месяц и год до него', () => {
+    const options = esfPeriodOptions({ year: 2026, month: 10 });
+    expect(options).toHaveLength(13);
+    expect(options[0]).toEqual({ value: '2026-10', label: 'октябрь 2026' });
+    expect(options[1]).toEqual({ value: '2026-09', label: 'сентябрь 2026' });
+    expect(options[10]).toEqual({ value: '2025-12', label: 'декабрь 2025' });
+  });
+
+  it('переводит период в значение списка и обратно', () => {
+    expect(periodValue({ year: 2026, month: 9 })).toBe('2026-09');
+    expect(parsePeriodValue('2026-09')).toEqual({ year: 2026, month: 9 });
   });
 });

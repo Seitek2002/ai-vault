@@ -31,6 +31,10 @@ export interface DraftRequest {
   deliveryDate: string;
   /** «Номер учётной системы» — по нему Vault потом узнаёт свою ЭСФ. */
   crmRef: string;
+  /** Номер договора из Vault — на портале он не должен остаться от образца. */
+  contractNumber?: string;
+  /** Дата договора, dd-mm-yyyy. */
+  contractDate?: string;
   note: string;
   sourceSignature: string;
   lines: { name: string; quantity: number; price: number }[];
@@ -194,6 +198,7 @@ export class EsfDraftClient {
         note: req.note,
         [saveButton]: 'Сохранить',
       });
+      this.fillContractFields(fields, req);
 
       const saved = await session.post(formAction(formHtml, 'mainform'), new URLSearchParams(fields));
       const savedHtml = await saved.text();
@@ -210,6 +215,20 @@ export class EsfDraftClient {
     } catch (error) {
       throw new EsfPortalError(`Черновик ${draft.uuid} уже создан на портале, но заполнение не завершено. Откройте его и проверьте строки; не создавайте повторную копию. ${error instanceof Error ? error.message : 'Портал не обработал запрос.'}`, 'parse');
     }
+  }
+
+  /**
+   * Реквизиты договора на поставку. Копия тянет их из ЭСФ-образца, а у партнёра
+   * договоров может быть несколько — подставляем номер и дату из Vault.
+   * Названия полей портала меняются редко, но если поля нет — молча пропускаем,
+   * чтобы не ронять уже созданный черновик.
+   */
+  private fillContractFields(fields: Record<string, string>, req: DraftRequest): void {
+    const key = (re: RegExp) => Object.keys(fields).find((name) => re.test(name));
+    const numberKey = key(/(^|:)deliveryContractNumber$/i);
+    if (numberKey && req.contractNumber) fields[numberKey] = req.contractNumber.slice(0, 100);
+    const dateKey = key(/(^|:)deliveryContractDate_input$/i) ?? key(/(^|:)deliveryContractDate$/i);
+    if (dateKey && req.contractDate) fields[dateKey] = req.contractDate;
   }
 
   // ── Список ────────────────────────────────────────────────────────────────

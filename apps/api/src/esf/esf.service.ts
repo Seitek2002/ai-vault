@@ -9,6 +9,7 @@ import { EsfPortalClient, EsfPortalError, type EsfListRow } from './esf-portal.c
 import { EsfPdfService } from './esf-pdf';
 import { EsfLinksService, invoiceSettlementIds, MANUAL_ESF_DETACH_NOTE } from './esf-links.service';
 import { esfLineAmounts, esfServiceForPeriod } from '@ai-vault/doc-placeholders';
+import { draftDeliveryDate, draftDeliveryError, draftPeriod, draftPeriodError, isoDate, portalDate } from './esf-draft-period';
 import type { CreateEsfDraftDto } from './dto/esf.dto';
 import {
   RETAIL_INN,
@@ -150,7 +151,9 @@ export class EsfService {
     const { settings, settlement, source } = await this.draftContext(organizationId, settlementId);
     const template = await this.draft.getTemplate(settings.esfLogin!, openSecret(settings.esfPasswordEnc!), source.uuid)
       .catch(error => { if (error instanceof EsfPortalError) throw new BadRequestException(error.message); throw error; });
-    const lines = template.lines.map(line => ({ ...line, name: esfServiceForPeriod(line.name, settlement.year, settlement.month) }));
+    // ЭСФ выставляют за завершившийся месяц: в октябре услуги — за сентябрь.
+    const period = draftPeriod(settlement, undefined, new Date());
+    const lines = template.lines.map(line => ({ ...line, name: esfServiceForPeriod(line.name, period.year, period.month) }));
     if (lines.length === 1) {
       const line = lines[0]!;
       const taxFactor = line.priceIncludesTaxes ? 1 : 1 + (line.vatRate + line.salesTaxRate) / 100;
@@ -160,7 +163,15 @@ export class EsfService {
     }
     return { ...template, lines, sourceUuid: source.uuid, sourceNumber: source.number,
       amount: settlement.amount.toNumber(), currency: settlement.currency,
-      period: `${MONTH_NAMES_RU[settlement.month - 1]} ${settlement.year}`, crmRef: esfAccountingRef(settlement.id) };
+      period: `${MONTH_NAMES_RU[period.month - 1]} ${period.year}`,
+      periodYear: period.year, periodMonth: period.month,
+      settlementPeriod: `${MONTH_NAMES_RU[settlement.month - 1]} ${settlement.year}`,
+      settlementYear: settlement.year, settlementMonth: settlement.month,
+      deliveryDate: draftDeliveryDate(period, new Date()),
+      contractNumber: settlement.contract.number,
+      contractDate: settlement.contract.startDate ? isoDate(settlement.contract.startDate) : null,
+      contractTitle: settlement.contract.title,
+      crmRef: esfAccountingRef(settlement.id) };
   }
 
   async createDraft(organizationId: string, userId: string, settlementId: string, dto?: CreateEsfDraftDto): Promise<EsfInvoiceDto> {
@@ -180,14 +191,19 @@ export class EsfService {
     // Стабильный номер ErkinAI.Docs: не зависит от номера акта или ЭСФ-образца.
     const crmRef = esfAccountingRef(settlement.id);
 
-    // Дата поставки — конец месяца, но не позже сегодня.
-    const periodEnd = new Date(Date.UTC(settlement.year, settlement.month, 0));
+    // Период услуг выбирает менеджер; по умолчанию — предыдущий завершившийся месяц.
     const today = new Date();
-    const delivery = periodEnd > today ? today : periodEnd;
-    const deliveryDate = `${String(delivery.getUTCDate()).padStart(2, '0')}-${String(delivery.getUTCMonth() + 1).padStart(2, '0')}-${delivery.getUTCFullYear()}`;
+    const period = draftPeriod(settlement, dto, today);
+    const periodError = draftPeriodError(settlement, period, today);
+    if (periodError) throw new BadRequestException(periodError);
 
-    const monthName = MONTH_NAMES_RU[settlement.month - 1] ?? String(settlement.month);
-    const note = `${settlement.contract.title} — ${monthName} ${settlement.year}`;
+    const deliveryIso = dto.deliveryDate ?? draftDeliveryDate(period, today);
+    const deliveryError = draftDeliveryError(period, deliveryIso, today);
+    if (deliveryError) throw new BadRequestException(deliveryError);
+    const deliveryDate = portalDate(deliveryIso);
+
+    const monthName = MONTH_NAMES_RU[period.month - 1] ?? String(period.month);
+    const note = `${settlement.contract.title} — ${monthName} ${period.year}`;
 
     const { uuid } = await this.draft.createByCopy({
       login: settings.esfLogin!,
@@ -197,6 +213,9 @@ export class EsfService {
       deliveryDate,
       crmRef,
       note,
+      // Реквизиты договора — наши, а не унаследованные от ЭСФ-образца.
+      contractNumber: settlement.contract.number,
+      ...(settlement.contract.startDate ? { contractDate: portalDate(isoDate(settlement.contract.startDate)) } : {}),
       sourceSignature: dto.sourceSignature,
       lines: dto.lines,
     }).catch(error => { if (error instanceof EsfPortalError) throw new BadRequestException(error.message); throw error; });

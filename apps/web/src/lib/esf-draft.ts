@@ -1,4 +1,4 @@
-import { esfLinesTotal, type EsfDraftLine } from '@ai-vault/doc-placeholders';
+import { esfLinesTotal, esfPeriodLabel, esfServiceForPeriod, type EsfDraftLine, type EsfPeriod } from '@ai-vault/doc-placeholders';
 
 export interface EditableEsfLine { name: string; quantity: string; price: string }
 
@@ -21,4 +21,25 @@ export function reviewEsfLines(template: readonly EsfDraftLine[], edited: readon
   } catch (error) {
     return { error: error instanceof Error ? error.message : 'Проверьте суммы строк.', lines: [], total: null };
   }
+}
+
+export const periodValue = (period: EsfPeriod): string => `${period.year}-${String(period.month).padStart(2, '0')}`;
+
+export function parsePeriodValue(value: string): EsfPeriod {
+  return { year: Number(value.slice(0, 4)), month: Number(value.slice(5, 7)) };
+}
+
+/** Период в названии услуги меняется вместе с выбором менеджера, правки имени сохраняются. */
+export function applyEsfPeriod(rows: readonly EditableEsfLine[], period: EsfPeriod): EditableEsfLine[] {
+  return rows.map((row) => ({ ...row, name: esfServiceForPeriod(row.name, period.year, period.month) }));
+}
+
+/** Расчётный месяц и год до него — дальше выбирать незачем. */
+export function esfPeriodOptions(latest: EsfPeriod, count = 13): { value: string; label: string }[] {
+  const index = latest.year * 12 + latest.month - 1;
+  return Array.from({ length: count }, (_, step) => {
+    const at = index - step;
+    const period = { year: Math.floor(at / 12), month: (at % 12) + 1 };
+    return { value: periodValue(period), label: esfPeriodLabel(period) };
+  });
 }

@@ -340,13 +340,27 @@ export class EsfDraftClient {
     const gked = await this.lookup(session, html, goodsForm, 'cea', line.gked);
     const code = gked.choices.find(c => c.label.split(' - ')[0] === line.gked);
     if (!code) throw new EsfPortalError(`В справочнике не найден ГКЭД ${line.gked}`, 'parse');
+    // Единицу выбираем автокомплитом самой карточки услуги: id из строки ЭСФ —
+    // от другого компонента, портал его не принимает и ругается «обязательное поле».
+    const units = await this.lookup(session, html, goodsForm, 'unitClassification', line.unit);
+    const unit = units.choices.find(c => c.label === line.unit)
+      ?? units.choices.find(c => c.label.toLowerCase().startsWith(line.unit.toLowerCase()))
+      ?? (units.choices.length === 0 ? { id: copied.unitId, label: line.unit } : null);
+    if (!unit) throw new EsfPortalError(`В справочнике портала не найдена единица измерения «${line.unit}»`, 'parse');
     const save = this.findButton(formScope(html, goodsForm), 'Сохранить');
     if (!save) throw new EsfPortalError('Не найдено сохранение услуги в справочнике', 'parse');
     const saved = await session.post(formAction(html, goodsForm), new URLSearchParams({ ...gked.fields,
       cea_input: code.label, cea_hinput: code.id,
-      unitClassification_input: line.unit, unitClassification_hinput: copied.unitId, name: line.name, [save]: 'Сохранить' }));
+      unitClassification_input: unit.label, unitClassification_hinput: unit.id, name: line.name, [save]: 'Сохранить' }));
     const result = await saved.text();
-    if (!new URL(saved.url).pathname.endsWith('/goods_list.xhtml')) throw new EsfPortalError(`Не удалось добавить услугу: ${this.messages(result).join('; ') || 'проверьте справочник портала'}`, 'parse');
+    if (!new URL(saved.url).pathname.endsWith('/goods_list.xhtml')) {
+      const why = [...new Set([...this.fieldErrors(result), ...this.messages(result)])].join('; ');
+      throw new EsfPortalError(
+        `Не удалось добавить услугу «${line.name}» в справочник портала${why ? `: ${why}` : ''}. ` +
+        'Заведите её в «Справочник услуг» вручную (ГКЭД ' + line.gked + ', ед. ' + line.unit + ') и повторите создание.',
+        'parse',
+      );
+    }
     const restored = await session.get(oldPath);
     const exact = (await this.lookup(session, restored, 'mainform', copied.keys.name, line.name)).choices.filter(c => c.label === line.name);
     if (exact.length !== 1) throw new EsfPortalError('Новая услуга не найдена в справочнике портала', 'parse');
@@ -381,6 +395,27 @@ export class EsfDraftClient {
     return html.match(new RegExp(`<input[^>]*name="([^"]+)"[^>]*type="submit"[^>]*value="${label}"`))?.[1]
       ?? html.match(new RegExp(`<input[^>]*type="submit"[^>]*name="([^"]+)"[^>]*value="${label}"`))?.[1]
       ?? null;
+  }
+
+  /**
+   * Портал часто не пишет, какое поле пустое: сообщение «Это обязательное поле»
+   * висит рядом с полем. Склеиваем его с подписью поля, чтобы было видно, что чинить.
+   */
+  private fieldErrors(html: string): string[] {
+    const labels = new Map<string, string>();
+    for (const match of html.matchAll(/<label\b[^>]*for="([^"]+)"[^>]*>([\s\S]*?)<\/label>/g)) {
+      const text = htmlText(match[2]!).trim();
+      if (text) labels.set(match[1]!, text.replace(/\s*\*?\s*:?$/, ''));
+    }
+    const errors: string[] = [];
+    for (const match of html.matchAll(/<(?:div|span)\b[^>]*id="([^"]+)"[^>]*class="[^"]*ui-message-error[^"]*"[^>]*>([\s\S]*?)<\/(?:div|span)>/g)) {
+      const detail = htmlText(match[2]!).trim();
+      if (!detail) continue;
+      const id = match[1]!.replace(/_msg$/, '');
+      const label = labels.get(id) ?? labels.get(`${id}_input`) ?? labels.get(id.replace(/_input$/, ''));
+      errors.push(label ? `${label}: ${detail}` : detail);
+    }
+    return errors;
   }
 
   private messages(html: string): string[] {

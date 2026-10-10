@@ -10,6 +10,7 @@ const client = new EsfDraftClient(new EsfPortalClient()) as unknown as {
   portalMoney(n: number): string;
   messages(html: string): string[];
   fillContractFields(fields: Record<string, string>, req: { contractNumber?: string; contractDate?: string }): void;
+  fieldErrors(html: string): string[];
 };
 
 const FORM = `
@@ -95,5 +96,21 @@ describe('EsfDraftClient — реквизиты договора из Vault', ()
     const fields: Record<string, string> = { note: '' };
     expect(() => client.fillContractFields(fields, { contractNumber: 'ДГ-1', contractDate: '08-04-2026' })).not.toThrow();
     expect(fields).toEqual({ note: '' });
+  });
+});
+
+describe('EsfDraftClient — ошибки полей портала', () => {
+  it('называет поле, на котором портал ругается', () => {
+    const html = `
+      <label for="unitClassification_input">Единица измерения *</label>
+      <div id="unitClassification_msg" class="ui-message ui-message-error ui-widget">
+        <span class="ui-message-error-detail">Это обязательное поле</span>
+      </div>`;
+    expect(client.fieldErrors(html)).toEqual(['Единица измерения: Это обязательное поле']);
+  });
+
+  it('отдаёт текст и без подписи поля', () => {
+    const html = '<span id="j_idt99" class="ui-message-error-detail">Это обязательное поле</span>';
+    expect(client.fieldErrors(html)).toEqual(['Это обязательное поле']);
   });
 });

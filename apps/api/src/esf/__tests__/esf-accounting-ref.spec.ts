@@ -29,7 +29,7 @@ describe('Номер учётной системы новых ЭСФ', () => {
     await service.createDraft('org', 'user', id, { sourceUuid: 'source-uuid', sourceSignature: 'a'.repeat(64), lines: [{ name: 'Services', quantity: 1, price: 35000 }] });
     // Загрузка идёт файлом XML; даты в нём в ISO, как ждёт портал.
     const crmRef = esfAccountingRef({ id, year: 2026, month: 9 });
-    expect(crmRef).toMatch(/^ED-2609-[0-9A-Z]{6}$/);
+    expect(crmRef).toMatch(/^ErkinAI\.Docs-2609-[0-9A-Z]{6}$/);
     expect(xml.createDraft).toHaveBeenCalledWith(expect.objectContaining({ crmRef, amount: 35000, sourceUuid: 'source-uuid',
       contractNumber: 'ДГ-0003/0326', contractDate: '2026-03-01', deliveryDate: '2026-09-30', note: 'Services — сентябрь 2026' }));
     expect(draft.createByCopy).not.toHaveBeenCalled();

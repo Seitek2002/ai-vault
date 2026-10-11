@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { EsfStatus } from '@prisma/client';
 import {
+  edAccountingRef,
   esfAccountingRef,
   isAccountingRef,
   legacyAccountingRef,
@@ -259,10 +260,12 @@ describe('normalizeCompanyName', () => {
 });
 
 describe('Короткий номер учётной системы', () => {
-  it('выглядит как ED-ГГММ-XXXXXX и помещается в поле портала', () => {
-    const ref = esfAccountingRef({ id: 'cmup4kfzx003rp520mmvcigam', year: 2026, month: 9 });
-    expect(ref).toMatch(/^ED-2609-[0-9A-HJKMNP-TV-Z]{6}$/);
-    expect(ref.length).toBe(14);
+  it('выглядит как ErkinAI.Docs-ГГММ-XXXXXX и помещается в поле портала', () => {
+    const ref = esfAccountingRef({ id: 'cmup4kfzx003rp520mmvcigam', year: 2026, month: 10 });
+    expect(ref).toMatch(/^ErkinAI\.Docs-2610-[0-9A-HJKMNP-TV-Z]{6}$/);
+    expect(ref.length).toBe(24);
+    // Тот же код, что у короткого номера, которым Vault подписал черновик 11.10.2026.
+    expect(ref.slice(-11)).toBe(edAccountingRef({ id: 'cmup4kfzx003rp520mmvcigam', year: 2026, month: 10 }).slice(-11));
   });
 
   it('стабилен для расчёта и различает комплекты одного месяца', () => {
@@ -280,6 +283,11 @@ describe('Короткий номер учётной системы', () => {
 
   it('находит расчёт по короткому номеру', () => {
     const r = matchSettlement({ crmRef: esfAccountingRef(sept()), deliveryDate: null, amount: 30000 }, [sept()]);
+    expect(r).toEqual({ kind: 'matched', settlementId: 'sep', how: 'crmRef' });
+  });
+
+  it('узнаёт короткий номер ED-… в уже выставленных ЭСФ', () => {
+    const r = matchSettlement({ crmRef: edAccountingRef(sept()), deliveryDate: null, amount: 30000 }, [sept()]);
     expect(r).toEqual({ kind: 'matched', settlementId: 'sep', how: 'crmRef' });
   });
 

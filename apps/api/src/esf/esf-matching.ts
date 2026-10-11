@@ -41,8 +41,9 @@ export function parsePortalDate(raw: string | null | undefined): Date | null {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
-const LEGACY_REF_PREFIX = 'ErkinAI.Docs-';
-const REF_PREFIX = 'ED-';
+const REF_PREFIX = 'ErkinAI.Docs-';
+/** Короткий префикс, которым Vault подписывал ЭСФ 11.10.2026 — такие уже на портале. */
+const ED_PREFIX = 'ED-';
 /** Crockford base32: без I, L, O, U — не спутать при переписывании. */
 const REF_ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 
@@ -52,27 +53,36 @@ export interface RefSettlement {
   month: number;
 }
 
-/**
- * «Номер учётной системы» в ЭСФ: «ED-2609-K7Q2MX» — месяц расчёта и шесть
- * знаков, однозначно выведенных из его id. Различает договоры и несколько
- * комплектов в одном месяце, но помещается в поле портала и читается глазами.
- */
-export function esfAccountingRef(settlement: RefSettlement): string {
+/** «2610-B7KPEY»: месяц расчёта и шесть знаков, однозначно выведенных из его id. */
+function shortCode(settlement: RefSettlement): string {
   const digest = createHash('sha256').update(settlement.id).digest();
   let code = '';
   for (let i = 0; i < 6; i++) code += REF_ALPHABET[digest[i]! % 32];
   const period = `${String(settlement.year % 100).padStart(2, '0')}${String(settlement.month).padStart(2, '0')}`;
-  return `${REF_PREFIX}${period}-${code}`;
+  return `${period}-${code}`;
 }
 
-/** Так Vault подписывал ЭСФ раньше — полный id расчёта. Такие ЭСФ уже на портале. */
+/**
+ * «Номер учётной системы» в ЭСФ: «ErkinAI.Docs-2609-K7Q2MX». Узнаваемый
+ * префикс плюс короткий код расчёта: различает договоры и несколько
+ * комплектов в одном месяце, помещается в поле портала и читается глазами.
+ */
+export function esfAccountingRef(settlement: RefSettlement): string {
+  return `${REF_PREFIX}${shortCode(settlement)}`;
+}
+
+/** Номера, которыми Vault подписывал ЭСФ раньше. Такие ЭСФ уже на портале. */
 export function legacyAccountingRef(settlementId: string): string {
-  return `${LEGACY_REF_PREFIX}${settlementId}`;
+  return `${REF_PREFIX}${settlementId}`;
+}
+
+export function edAccountingRef(settlement: RefSettlement): string {
+  return `${ED_PREFIX}${shortCode(settlement)}`;
 }
 
 export function isAccountingRef(ref: string): boolean {
   const value = ref.trim();
-  return value.toLowerCase().startsWith(LEGACY_REF_PREFIX.toLowerCase()) || /^ED-\d{4}-[0-9A-Z]{6}$/i.test(value);
+  return value.toLowerCase().startsWith(REF_PREFIX.toLowerCase()) || /^ED-\d{4}-[0-9A-Z]{6}$/i.test(value);
 }
 
 export interface SettlementCandidate {
@@ -111,7 +121,7 @@ export function matchSettlement(input: MatchInput, candidates: SettlementCandida
     const ref = input.crmRef.trim().toLowerCase();
     const systemRef = isAccountingRef(ref);
     const byRef = candidates.filter((c) => systemRef
-      ? [esfAccountingRef(c), legacyAccountingRef(c.id)].some((own) => own.toLowerCase() === ref)
+      ? [esfAccountingRef(c), edAccountingRef(c), legacyAccountingRef(c.id)].some((own) => own.toLowerCase() === ref)
       : c.documentNumbers.some((n) => n.trim().toLowerCase() === ref));
     if (systemRef && byRef.length === 0) {
       return { kind: 'none', note: 'Расчёт из номера учётной системы ErkinAI.Docs не найден у этого партнёра' };

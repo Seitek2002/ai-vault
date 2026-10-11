@@ -19,7 +19,7 @@ function fixture(matchNote: string | null, status = 'Новый') {
   const links = { attach: vi.fn(), refreshStatus: vi.fn() };
   const portal = { fetchRealizationList: vi.fn().mockResolvedValue([{ uuid: invoice.uuid, status, number: '1', issuedOn: '08.10.2026' }]) };
   const pdf = { download: vi.fn() };
-  return { prisma, links, pdf, service: new EsfService(prisma as never, {} as never, portal as never, {} as never, pdf as never, links as never) };
+  return { prisma, links, pdf, service: new EsfService(prisma as never, {} as never, portal as never, {} as never, pdf as never, links as never, {} as never) };
 }
 
 describe('synchronization after manual ESF detach', () => {

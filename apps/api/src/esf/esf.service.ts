@@ -5,6 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
 import { open as openSecret } from '../common/secret-box';
 import { EsfDraftClient } from './esf-draft.client';
+import { EsfXmlClient, EsfXmlPrepareError } from './esf-xml.client';
 import { EsfPortalClient, EsfPortalError, type EsfListRow } from './esf-portal.client';
 import { EsfPdfService } from './esf-pdf';
 import { EsfLinksService, invoiceSettlementIds, MANUAL_ESF_DETACH_NOTE } from './esf-links.service';
@@ -82,6 +83,7 @@ export class EsfService {
     private draft: EsfDraftClient,
     private pdf: EsfPdfService,
     private links: EsfLinksService,
+    private xml: EsfXmlClient,
   ) {}
 
   // ── Черновик на портале ───────────────────────────────────────────────────
@@ -205,19 +207,36 @@ export class EsfService {
     const monthName = MONTH_NAMES_RU[period.month - 1] ?? String(period.month);
     const note = `${settlement.contract.title} — ${monthName} ${period.year}`;
 
-    const { uuid } = await this.draft.createByCopy({
+    // Пакетная загрузка XML — официальный путь интеграции и куда надёжнее
+    // заполнения формы портала: услуга в файле обычный текст, карточка в
+    // справочнике не нужна. Если образец не удалось выгрузить — старый путь.
+    const request = {
       login: settings.esfLogin!,
       password: openSecret(settings.esfPasswordEnc!),
       sourceUuid: source.uuid,
       amount: settlement.amount.toNumber(),
-      deliveryDate,
       crmRef,
       note,
       // Реквизиты договора — наши, а не унаследованные от ЭСФ-образца.
       contractNumber: shortContractNumber(settlement.contract.number),
-      ...(settlement.contract.startDate ? { contractDate: portalDate(isoDate(settlement.contract.startDate)) } : {}),
       sourceSignature: dto.sourceSignature,
       lines: dto.lines,
+    };
+    const contractDateIso = settlement.contract.startDate ? isoDate(settlement.contract.startDate) : null;
+    const { uuid } = await this.xml.createDraft({
+      ...request,
+      deliveryDate: deliveryIso,
+      ...(contractDateIso ? { contractDate: contractDateIso } : {}),
+    }).catch(async error => {
+      if (error instanceof EsfXmlPrepareError) {
+        this.logger.warn(`Пакетная загрузка ЭСФ недоступна (${error.message}) — заполняю форму портала`);
+        return this.draft.createByCopy({
+          ...request,
+          deliveryDate,
+          ...(contractDateIso ? { contractDate: portalDate(contractDateIso) } : {}),
+        });
+      }
+      throw error;
     }).catch(error => { if (error instanceof EsfPortalError) throw new BadRequestException(error.message); throw error; });
 
     // Подтягиваем черновик как обычную ЭСФ и привязываем к расчёту.

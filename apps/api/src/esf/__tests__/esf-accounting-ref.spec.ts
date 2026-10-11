@@ -20,14 +20,16 @@ describe('Номер учётной системы новых ЭСФ', () => {
         .mockResolvedValueOnce({ id: 'new-esf', uuid: 'new-uuid', settlementId: id, settlementLinks: [{ settlementId: id }] }) },
     };
     const draft = { createByCopy: vi.fn().mockResolvedValue({ uuid: 'new-uuid' }) };
+    const xml = { createDraft: vi.fn().mockResolvedValue({ uuid: 'new-uuid' }) };
     const links = { attach: vi.fn() };
-    const service = new EsfService(prisma as never, {} as never, {} as never, draft as never, {} as never, links as never);
+    const service = new EsfService(prisma as never, {} as never, {} as never, draft as never, {} as never, links as never, xml as never);
     vi.spyOn(service, 'sync').mockResolvedValue({ fetched: 1, created: 1, updated: 0, matched: 1, unmatched: 0, errors: [] });
     vi.spyOn(service, 'findOneDto').mockResolvedValue({ id: 'new-esf' } as never);
     await service.createDraft('org', 'user', id, { sourceUuid: 'source-uuid', sourceSignature: 'a'.repeat(64), lines: [{ name: 'Services', quantity: 1, price: 35000 }] });
-    expect(draft.createByCopy).toHaveBeenCalledWith(expect.objectContaining({ crmRef: `ErkinAI.Docs-${id}`, amount: 35000, sourceUuid: 'source-uuid',
-      // Реквизиты договора и период услуг — наши, а не унаследованные от образца.
-      contractNumber: 'ДГ-0003/0326', contractDate: '01-03-2026', deliveryDate: '30-09-2026', note: 'Services — сентябрь 2026' }));
+    // Загрузка идёт файлом XML; даты в нём в ISO, как ждёт портал.
+    expect(xml.createDraft).toHaveBeenCalledWith(expect.objectContaining({ crmRef: `ErkinAI.Docs-${id}`, amount: 35000, sourceUuid: 'source-uuid',
+      contractNumber: 'ДГ-0003/0326', contractDate: '2026-03-01', deliveryDate: '2026-09-30', note: 'Services — сентябрь 2026' }));
+    expect(draft.createByCopy).not.toHaveBeenCalled();
     expect(links.attach).not.toHaveBeenCalled();
   });
 });

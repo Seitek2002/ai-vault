@@ -135,6 +135,9 @@ export class EsfPortalClient {
       get: (path: string) => this.get(path, jar),
       post: (path: string, body: URLSearchParams, opts?: { headers?: Record<string, string> }) =>
         this.post(path, jar, body, { redirect: 'follow', ...(opts ?? {}) }),
+      /** Загрузка файла: границу multipart проставляет fetch, Content-Type не трогаем. */
+      postMultipart: (path: string, body: FormData, opts?: { headers?: Record<string, string> }) =>
+        this.request(path, jar, { method: 'POST', body, redirect: 'follow', headers: { ...(opts?.headers ?? {}) } }),
     };
   }
 

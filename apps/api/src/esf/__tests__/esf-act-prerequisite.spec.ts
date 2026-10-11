@@ -23,10 +23,11 @@ function fixture() {
       .mockResolvedValueOnce({ id: 'new-esf', uuid: 'new', settlementId: 'set-1', settlementLinks: [{ settlementId: 'set-1' }] }) },
   };
   const draft = { createByCopy: vi.fn().mockResolvedValue({ uuid: 'new' }) };
-  const service = new EsfService(prisma as never, {} as never, {} as never, draft as never, {} as never, {} as never);
+  const xml = { createDraft: vi.fn().mockResolvedValue({ uuid: 'new' }) };
+  const service = new EsfService(prisma as never, {} as never, {} as never, draft as never, {} as never, {} as never, xml as never);
   const sync = vi.spyOn(service, 'sync').mockResolvedValue({ fetched: 1, created: 1, updated: 0, matched: 1, unmatched: 0, errors: [] });
   vi.spyOn(service, 'findOneDto').mockResolvedValue({ id: 'new-esf' } as never);
-  return { settlement, prisma, draft, service, sync, create: () => service.createDraft('org', 'user', 'set-1', {
+  return { settlement, prisma, draft, xml, service, sync, create: () => service.createDraft('org', 'user', 'set-1', {
     sourceUuid: 'source', sourceSignature: 'a'.repeat(64), lines: [{ name: 'Services', quantity: 1, price: 35000 }],
   }) };
 }
@@ -77,7 +78,7 @@ describe('Создание ЭСФ после загрузки акта', () => {
     const f = fixture();
     f.settlement.documents = [];
     await expect(f.create()).resolves.toEqual({ id: 'new-esf' });
-    expect(f.draft.createByCopy).toHaveBeenCalledOnce();
+    expect(f.xml.createDraft).toHaveBeenCalledOnce();
     expect(f.sync).toHaveBeenCalledOnce();
   });
 

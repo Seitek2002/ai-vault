@@ -169,7 +169,9 @@ export class EsfXmlClient {
     body.set('javax.faces.partial.render', `${uploadForm}:messages filesForm`);
     body.set(uploadForm, uploadForm);
     body.set('javax.faces.ViewState', this.portal.viewStateOf(page, uploadForm));
-    body.set(`${uploadForm}:upLoad_input`, new Blob([xml], { type: 'text/xml' }), filename);
+    // Ajax-загрузчик PrimeFaces шлёт файл под id компонента, а не под именем
+    // поля ввода (`…:upLoad_input`) — с ним портал молча не видит файла.
+    body.set(`${uploadForm}:upLoad`, new Blob([xml], { type: 'text/xml' }), filename);
 
     const attached = await session.postMultipart(formAction(page, uploadForm), body, {
       headers: { 'Faces-Request': 'partial/ajax', 'X-Requested-With': 'XMLHttpRequest' },
@@ -178,6 +180,9 @@ export class EsfXmlClient {
     const messages = this.messages(partial);
     if (attached.status >= 400 || !partial.includes('<partial-response')) {
       throw new EsfPortalError(`Портал не принял файл ЭСФ${messages.length ? `: ${messages.join('; ')}` : ''}`, 'parse');
+    }
+    if (!partial.includes(filename)) {
+      throw new EsfPortalError(`Портал не принял файл ЭСФ${messages.length ? `: ${messages.join('; ')}` : ' — он не появился в списке прикреплённых'}`, 'parse');
     }
 
     const save = this.formWithName(page, ':saveBtn');

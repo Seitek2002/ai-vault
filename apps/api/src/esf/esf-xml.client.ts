@@ -109,7 +109,8 @@ export class EsfXmlClient {
     }
 
     const messages = await this.upload(session, xml, `vault-${req.crmRef}.xml`);
-    const created = await this.findByCrmRef(session, req.crmRef);
+    // Пакет портал разбирает в фоне — даём ему время появиться в списке.
+    const created = await this.waitForCrmRef(session, req.crmRef);
     if (!created) {
       throw new EsfPortalError(
         `Портал не создал черновик из файла${messages.length ? `: ${messages.join('; ')}` : '. Проверьте «Реализацию» на портале.'}`,
@@ -201,6 +202,15 @@ export class EsfXmlClient {
       throw new EsfPortalError(`Портал отклонил файл ЭСФ${saveMessages.length ? `: ${saveMessages.join('; ')}` : ''}`, 'parse');
     }
     return saveMessages;
+  }
+
+  private async waitForCrmRef(session: Session, crmRef: string): Promise<ListRow | null> {
+    for (let attempt = 0; attempt < 6; attempt++) {
+      const found = await this.findByCrmRef(session, crmRef);
+      if (found) return found;
+      await new Promise((resolve) => setTimeout(resolve, 2500));
+    }
+    return this.findByCrmRef(session, crmRef);
   }
 
   /** Своя ЭСФ после загрузки узнаётся по номеру учётной системы. */

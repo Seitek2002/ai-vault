@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildReceiptXml, firstReceipt, receiptField } from '../esf-xml';
+import { buildReceiptXml, exchangeCode, firstReceipt, receiptField } from '../esf-xml';
 
 /** Сокращённая выгрузка портала «Выгрузить выделенные в XML-файл». */
 const SAMPLE = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -79,9 +79,18 @@ describe('Файл пакетной загрузки ЭСФ', () => {
   });
 
   it('не тащит в черновик номер и статус выставленной ЭСФ', () => {
-    for (const tag of ['invoiceNumber', 'invoiceDate', 'documentStatusName', 'exchangeCode']) {
+    for (const tag of ['invoiceNumber', 'invoiceDate', 'documentStatusName']) {
       expect(xml).not.toContain(`<${tag}>`);
     }
+  });
+
+  it('даёт свой exchangeCode: он обязателен и не должен быть кодом образца', () => {
+    const code = receiptField(receipt, 'exchangeCode');
+    expect(code).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    expect(code).not.toBe('28957f05-7687-4267-8390-f80ba27d931a');
+    // Повторная загрузка того же расчёта — тот же код, другой расчёт — другой.
+    expect(code).toBe(exchangeCode(patch.crmRef));
+    expect(exchangeCode('ErkinAI.Docs-other')).not.toBe(code);
   });
 
   it('заменяет услуги, сохраняя коды налогов строки', () => {

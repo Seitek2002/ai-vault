@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 /**
  * Пакетная загрузка ЭСФ: кабинет умеет выгружать ЭСФ в XML и принимать такой
  * же файл обратно («Загрузить файл» в «Реализации»). Это официальный путь
@@ -32,13 +34,27 @@ export interface ReceiptPatch {
 
 /** Поля выставленной ЭСФ, которые новому черновику не принадлежат. */
 const DROP_TAGS = new Set([
-  'invoiceNumber', 'invoiceDate', 'documentStatusName', 'exchangeCode',
+  'invoiceNumber', 'invoiceDate', 'documentStatusName',
   'paidAmount', 'amountToBePaid', 'closingBalances', 'openingBalances',
 ]);
 
 const GOOD_OWN_TAGS = new Set(['baseCount', 'goodsName', 'price', 'vatAmount', 'stAmount']);
 
 export class EsfXmlError extends Error {}
+
+/**
+ * `exchangeCode` — обязательный идентификатор документа у отправителя.
+ * Выводим его из номера учётной системы, чтобы повторная загрузка того же
+ * расчёта несла тот же код, а не плодила документы.
+ */
+export function exchangeCode(crmRef: string): string {
+  const hex = createHash('sha256').update(`esf:${crmRef}`).digest('hex');
+  const bytes = hex.slice(0, 32).split('');
+  bytes[12] = '4';
+  bytes[16] = ['8', '9', 'a', 'b'][parseInt(hex[16]!, 16) % 4]!;
+  const uuid = bytes.join('');
+  return `${uuid.slice(0, 8)}-${uuid.slice(8, 12)}-${uuid.slice(12, 16)}-${uuid.slice(16, 20)}-${uuid.slice(20, 32)}`;
+}
 
 export function escapeXml(value: string): string {
   return value
@@ -114,6 +130,7 @@ export function buildReceiptXml(sourceXml: string, patch: ReceiptPatch): string 
     note: `<note>${escapeXml(patch.note)}</note>`,
     totalCost: `<totalCost>${decimal(patch.totalCost, 2)}</totalCost>`,
     goods: `<goods>${patch.goods.map((line) => good(sourceGood, line)).join('')}</goods>`,
+    exchangeCode: `<exchangeCode>${exchangeCode(patch.crmRef)}</exchangeCode>`,
     ...(patch.contractNumber ? { deliveryContractNumber: `<deliveryContractNumber>${escapeXml(patch.contractNumber)}</deliveryContractNumber>` } : {}),
     ...(patch.contractDate ? { deliveryContractDate: `<deliveryContractDate>${contractDate(patch.contractDate)}</deliveryContractDate>` } : {}),
   };

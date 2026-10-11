@@ -4,7 +4,7 @@ import { useState, type KeyboardEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { FileText, Plus, Trash2, X } from 'lucide-react';
 import { esfDeliveryDate, esfLineAmounts, esfReplacePeriod, type EsfLineAmounts } from '@ai-vault/doc-placeholders';
-import { Button, Input, Modal, Select, Spinner } from '@/components/ui';
+import { Button, Input, Modal, Select } from '@/components/ui';
 import { cn } from '@/lib/cn';
 import { fieldClassName } from '@/components/ui/Input';
 import { esfApi, type CreateEsfDraft, type EsfDraftPreview } from '@/lib/api/esf';
@@ -64,12 +64,10 @@ export function EsfDraftModal({ settlementId, creating, error, onCreate, onPrevi
         </button>
       </div>
 
-      {preview.isPending && <div className="flex items-center gap-3 px-5 py-10 text-sm text-[var(--color-text-secondary)]">
-        <Spinner /> Загружаем услуги из прошлой ЭСФ партнёра…
-      </div>}
+      {preview.isPending && <DraftSkeleton />}
 
       {preview.isError && <div className="space-y-3 px-5 py-6 text-sm">
-        <p role="alert" className="text-[var(--color-danger)]">{preview.error instanceof Error ? preview.error.message : 'Не удалось загрузить строки услуг.'}</p>
+        <p role="alert" className="text-[var(--color-danger-text)]">{preview.error instanceof Error ? preview.error.message : 'Не удалось загрузить строки услуг.'}</p>
         <Button type="button" variant="secondary" onClick={() => void preview.refetch()}>Повторить</Button>
       </div>}
 
@@ -161,7 +159,7 @@ function DraftForm({ preview, creating, error, reloading, onReload, onCreate, on
         </label>
       </div>
       <p className="mt-2 text-[var(--color-text-secondary)]">
-        ЭСФ выставляем за завершившийся месяц — по умолчанию {preview.period}. Выбранный период подставляется в названия услуг.
+        ЭСФ выставляется за завершившийся месяц, по умолчанию {preview.period}. Выбранный месяц подставится в названия услуг.
       </p>
 
       <label className="mt-4 block text-[var(--color-text-secondary)]">
@@ -170,7 +168,7 @@ function DraftForm({ preview, creating, error, reloading, onReload, onCreate, on
           onChange={e => { setNote(e.target.value); setConfirmed(false); }}
           placeholder="Например: Акт оказанных услуг от 30.09.2026 г."
           className={cn(fieldClassName, 'mt-1 resize-y text-base leading-relaxed')} />
-        <span className="mt-1 block text-xs">Попадёт в поле «Примечание» ЭСФ на портале. Пусто — Vault напишет договор и период.</span>
+        <span className="mt-1 block text-xs">Попадёт в поле «Примечание» ЭСФ на портале. Если оставить пустым, Vault напишет договор и период.</span>
       </label>
 
       <dl className="mt-4 space-y-1 rounded-lg bg-[var(--color-bg-elevated)] px-3 py-3 text-[var(--color-text-secondary)]">
@@ -259,7 +257,7 @@ function DraftForm({ preview, creating, error, reloading, onReload, onCreate, on
                   <td className="px-2 py-3 text-right">
                     <button type="button" onClick={() => removeLine(index)} disabled={edited.length === 1}
                       aria-label={`Удалить услугу ${index + 1}`} title={edited.length === 1 ? 'В ЭСФ должна остаться хотя бы одна услуга' : 'Удалить строку'}
-                      className="rounded-lg p-1.5 text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-elevated)] hover:text-[var(--color-danger)] disabled:cursor-not-allowed disabled:opacity-40">
+                      className="rounded-lg p-1.5 text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-elevated)] hover:text-[var(--color-danger-text)] active:scale-95 transition-[color,transform] disabled:cursor-not-allowed disabled:opacity-40">
                       <Trash2 className="h-4 w-4" aria-hidden="true" />
                     </button>
                   </td>
@@ -286,7 +284,7 @@ function DraftForm({ preview, creating, error, reloading, onReload, onCreate, on
             <div className="flex items-start justify-between gap-2">
               <span className="text-[var(--color-text-secondary)]">Услуга {index + 1}</span>
               <button type="button" onClick={() => removeLine(index)} disabled={edited.length === 1} aria-label={`Удалить услугу ${index + 1}`}
-                className="rounded-lg p-1 text-[var(--color-text-secondary)] hover:text-[var(--color-danger)] disabled:opacity-40">
+                className="rounded-lg p-1 text-[var(--color-text-secondary)] hover:text-[var(--color-danger-text)] active:scale-95 transition-[color,transform] disabled:opacity-40">
                 <Trash2 className="h-4 w-4" aria-hidden="true" />
               </button>
             </div>
@@ -326,7 +324,7 @@ function DraftForm({ preview, creating, error, reloading, onReload, onCreate, on
         <Button type="button" variant="secondary" size="sm" disabled={busy || edited.length >= 50} onClick={addLine}>
           <Plus className="h-4 w-4 shrink-0" aria-hidden="true" />Добавить услугу
         </Button>
-        <span className="text-xs text-[var(--color-text-secondary)]">Если услуги нет в справочнике портала, Vault заведёт её сам. Ставки налогов — как в образце.</span>
+        <span className="text-xs text-[var(--color-text-secondary)]">Если услуги нет в справочнике портала, Vault заведёт её сам. Ставки налогов берутся из образца.</span>
       </div>
 
       <Button type="button" variant="ghost" disabled={busy} onClick={onPreviewAct}>Открыть PDF акта для сверки</Button>
@@ -342,7 +340,7 @@ function DraftForm({ preview, creating, error, reloading, onReload, onCreate, on
           <span>Сумма расчёта</span>
           <span>{formatMoney(preview.amount, preview.currency)}</span>
         </div>
-        {reviewed.error && <p className="mt-2 text-sm text-[var(--color-danger)]">{reviewed.error}</p>}
+        {reviewed.error && <p className="mt-2 text-sm text-[var(--color-danger-text)]">{reviewed.error}</p>}
       </div>
       <label className="flex items-start gap-2 text-base text-[var(--color-text-primary)]">
         <input type="checkbox" checked={confirmed} disabled={busy || !!reviewed.error}
@@ -363,8 +361,27 @@ function DraftForm({ preview, creating, error, reloading, onReload, onCreate, on
         }}>
         <FileText className="h-4 w-4 shrink-0" aria-hidden="true" />Создать черновик ЭСФ на портале
       </Button>
-      <p className="text-[var(--color-text-secondary)]">Черновик останется в статусе «Новый». Подпись и отправка — на портале.</p>
-      {error && <p role="alert" className="text-[var(--color-danger)]">{error}</p>}
+      <p className="text-[var(--color-text-secondary)]">Черновик останется в статусе «Новый». Подписать и отправить его нужно на портале.</p>
+      {error && <p role="alert" className="text-[var(--color-danger-text)]">{error}</p>}
     </div>
   </>;
+}
+
+/** Пока портал отдаёт образец (несколько секунд) — каркас того, что сейчас появится. */
+function DraftSkeleton() {
+  const bar = 'rounded-lg bg-[var(--color-bg-elevated)] motion-safe:animate-pulse';
+  return <div role="status" aria-label="Загружаем услуги из прошлой ЭСФ партнёра" className="space-y-4 px-5 py-4">
+    <div className="grid gap-3 sm:grid-cols-2">
+      <div className="space-y-2"><div className={`${bar} h-3 w-24`} /><div className={`${bar} h-10`} /></div>
+      <div className="space-y-2"><div className={`${bar} h-3 w-28`} /><div className={`${bar} h-10`} /></div>
+    </div>
+    <div className={`${bar} h-16`} />
+    <div className="space-y-2 rounded-lg border border-[var(--color-border)] p-3">
+      <div className={`${bar} h-4 w-1/3`} />
+      {[0, 1].map((row) => <div key={row} className="grid grid-cols-[3fr_1fr_1fr_1fr] gap-3">
+        <div className={`${bar} h-14`} /><div className={`${bar} h-10`} /><div className={`${bar} h-10`} /><div className={`${bar} h-10`} />
+      </div>)}
+    </div>
+    <p className="text-sm text-[var(--color-text-secondary)]">Загружаем услуги из прошлой ЭСФ партнёра…</p>
+  </div>;
 }

@@ -2,7 +2,7 @@
 
 import { useMemo, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ExternalLink, Eye, EyeOff, Link2, Link2Off, Lock } from "lucide-react";
+import { CheckCircle2, ExternalLink, Eye, EyeOff, Link2, Link2Off, Lock } from "lucide-react";
 import { ApiError } from "@/lib/api/client";
 import { esfInvoicesQuery } from "@/lib/queries/esf";
 import { Button, Card, Input } from "@/components/ui";
@@ -13,12 +13,12 @@ import { MONTH_NAMES, formatMoney } from "@/lib/api/settlements";
 import { EsfLinkModal } from "./EsfLinkModal";
 
 const STATUS_CLASS: Record<EsfInvoice["status"], string> = {
-  ACCEPTED: "text-[#4ADE80]",
+  ACCEPTED: "text-[var(--color-success)]",
   SENT: "text-[var(--color-accent)]",
-  NEW: "text-[var(--color-text-muted)]",
-  REVOKED: "text-[#F87171]",
-  REJECTED: "text-[#F87171]",
-  UNKNOWN: "text-[var(--color-text-muted)]",
+  NEW: "text-[var(--color-text-secondary)]",
+  REVOKED: "text-[var(--color-danger-text)]",
+  REJECTED: "text-[var(--color-danger-text)]",
+  UNKNOWN: "text-[var(--color-text-secondary)]",
 };
 
 function fmtDate(iso: string | null): string {
@@ -66,19 +66,27 @@ function EsfCard({
             </span>
           </div>
           {inv.counterpartyName && (
-            <p className="text-[11px] text-[var(--color-text-muted)] truncate" title={inv.buyerName}>
-              {inv.buyerName}
-              {inv.buyerInn ? ` · ИНН ${inv.buyerInn}` : ""}
+            <p className="text-xs text-[var(--color-text-secondary)] truncate" title={inv.buyerName}>
+              {inv.buyerName}{inv.buyerInn ? `, ИНН ${inv.buyerInn}` : ""}
             </p>
           )}
-          <p className="text-xs text-[var(--color-text-muted)]">
-            {inv.number ? `№ ${inv.number}` : "без номера"} · поставка {fmtDate(inv.deliveryDate)} ·{" "}
-            {formatMoney(inv.amount)}
-            {inv.crmRef ? ` · ${inv.crmRef}` : ""}
-            {inv.note ? ` · ${inv.note}` : ""}
+          <p className="mt-1 text-xs text-[var(--color-text-secondary)] tabular-nums">
+            {inv.number ? `№ ${inv.number}` : "Без номера"}, поставка {fmtDate(inv.deliveryDate)}
           </p>
-          {inv.matchNote && <p className="text-xs text-[#FBBF24] mt-0.5">{inv.matchNote}</p>}
+          {(inv.crmRef || inv.note) && (
+            <p className="text-xs text-[var(--color-text-secondary)] [overflow-wrap:anywhere]">
+              {inv.crmRef && <span className="font-mono">{inv.crmRef}</span>}
+              {inv.crmRef && inv.note ? ". " : ""}
+              {inv.note}
+            </p>
+          )}
+          {inv.matchNote && <p className="mt-1 text-xs text-[var(--color-warning)]">{inv.matchNote}</p>}
         </div>
+
+        {/* Сумма — главный признак при сверке с расчётом, поэтому она крупно и справа. */}
+        <p className="self-center text-sm font-semibold tabular-nums text-[var(--color-text-primary)]">
+          {formatMoney(inv.amount)}
+        </p>
 
         <div className="flex flex-wrap items-center gap-2">
           <a
@@ -86,7 +94,8 @@ function EsfCard({
             target="_blank"
             rel="noreferrer"
             title="Открыть PDF на портале"
-            className="p-1.5 rounded-lg text-[var(--color-text-muted)] hover:text-[var(--color-accent)] transition-colors"
+            aria-label="Открыть PDF ЭСФ на портале"
+            className="p-1.5 rounded-lg text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] active:scale-95 transition-[color,transform]"
           >
             <ExternalLink className="w-4 h-4" />
           </a>
@@ -99,10 +108,12 @@ function EsfCard({
             Выбрать месяцы
           </Button>
           <button
+            type="button"
             onClick={() => hide.mutate()}
             disabled={hide.isPending}
-            title="Скрыть — не наша, розница и т.п."
-            className="p-1.5 rounded-lg text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] transition-colors"
+            title="Скрыть: не наша ЭСФ, розница и т.п."
+            aria-label="Скрыть ЭСФ из списка"
+            className="p-1.5 rounded-lg text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] active:scale-95 transition-[color,transform] disabled:opacity-50"
           >
             <EyeOff className="w-4 h-4" />
           </button>
@@ -128,7 +139,8 @@ function MonthList({
 }) {
   if (items.length === 0) {
     return (
-      <p className="text-xs text-[var(--color-text-muted)] py-2">
+      <p className="flex items-center gap-2 py-2 text-xs text-[var(--color-text-secondary)]">
+        <CheckCircle2 className="h-4 w-4 shrink-0 text-[var(--color-success)]" aria-hidden="true" />
         За {MONTH_NAMES[month - 1]?.toLowerCase()} {year} все ЭСФ привязаны
       </p>
     );
@@ -201,7 +213,7 @@ function HiddenEsf() {
     <div className="mt-3">
       <button
         onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-1.5 text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] transition-colors"
+        className="flex items-center gap-1.5 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors"
       >
         {pinRequired && <Lock className="w-3 h-3" />}
         {open ? "Спрятать скрытые" : `Скрытые (${count})`}
@@ -235,7 +247,7 @@ function HiddenEsf() {
           {hidden.map((inv) => (
             <div
               key={inv.id}
-              className="flex items-center gap-3 px-3 py-2 rounded-lg border border-[var(--color-border)] text-xs text-[var(--color-text-muted)]"
+              className="flex items-center gap-3 px-3 py-2 rounded-lg border border-[var(--color-border)] text-xs text-[var(--color-text-secondary)]"
             >
               <span className="flex-1 min-w-0 truncate">
                 {inv.buyerName} · {inv.number ? `№ ${inv.number}` : "без номера"} · поставка{" "}
@@ -245,7 +257,7 @@ function HiddenEsf() {
                 onClick={() => unhide.mutate(inv.id)}
                 disabled={unhide.isPending}
                 title="Вернуть в список"
-                className="p-1 rounded text-[var(--color-text-muted)] hover:text-[var(--color-accent)] transition-colors shrink-0"
+                className="p-1 rounded-lg text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] transition-colors shrink-0"
               >
                 <Eye className="w-3.5 h-3.5" />
               </button>
@@ -309,11 +321,11 @@ export function EsfInbox({
       <div className="flex items-baseline justify-between gap-3 mb-2">
         <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">
           ЭСФ без расчёта{" "}
-          <span className="text-[var(--color-text-muted)] font-normal">
+          <span className="text-[var(--color-text-secondary)] font-normal">
             ({current.length} за {MONTH_NAMES[month - 1]?.toLowerCase()})
           </span>
         </h2>
-        <p className="text-xs text-[var(--color-text-muted)]">
+        <p className="text-xs text-[var(--color-text-secondary)]">
           Пришли из кабинета, но к расчёту не подошли — привяжите вручную
         </p>
       </div>
@@ -324,7 +336,7 @@ export function EsfInbox({
 
       {others.length > 0 && (
         <div className="mt-3 flex flex-wrap items-center gap-1.5">
-          <span className="text-xs text-[var(--color-text-muted)] mr-1">Непривязанные ЭСФ в других месяцах:</span>
+          <span className="text-xs text-[var(--color-text-secondary)] mr-1">Непривязанные ЭСФ в других месяцах:</span>
           {others.map((g) => (
             <button
               key={`${g.year}-${g.month}`}
@@ -370,7 +382,7 @@ export function EsfOnSettlement({ settlementId, readOnly = false }: { settlement
           ЭСФ № {inv.number ?? "—"}{" "}
           <span className={cn("text-xs", STATUS_CLASS[inv.status])}>{ESF_STATUS_LABELS[inv.status]}</span>
         </span>
-        <span className="block text-xs text-[var(--color-text-muted)]">
+        <span className="block text-xs text-[var(--color-text-secondary)]">
           оформлена {fmtDate(inv.issuedOn)} · {formatMoney(inv.amount)}
         </span>
         {(inv.settlements?.length ?? 0) > 1 && <span className="mt-1 block text-xs text-[var(--color-text-secondary)]">
@@ -391,7 +403,7 @@ export function EsfOnSettlement({ settlementId, readOnly = false }: { settlement
         onClick={() => detach.mutate(inv.id)}
         disabled={detach.isPending}
         title="Отвязать только от этого расчёта" aria-label="Отвязать ЭСФ только от этого расчёта"
-        className="p-1 rounded text-[var(--color-text-muted)] hover:text-[var(--color-danger)] transition-colors shrink-0"
+        className="p-1 rounded-lg text-[var(--color-text-secondary)] hover:text-[var(--color-danger)] transition-colors shrink-0"
       >
         <Link2Off className="w-3.5 h-3.5" />
       </button>}

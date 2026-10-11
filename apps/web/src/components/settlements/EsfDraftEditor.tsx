@@ -24,7 +24,7 @@ export function EsfDraftEditor({ settlementId, actPdfId, creating, error, onCrea
       <FileText className="h-4 w-4 shrink-0" aria-hidden="true" />Заполнить новую ЭСФ
     </Button>
     <p className="text-[var(--color-text-secondary)]">Откроем отдельное окно: услуги из прошлой ЭСФ партнёра, период по умолчанию — предыдущий месяц. Проверьте строки по PDF акта перед созданием.</p>
-    {error && !open && <p role="alert" className="text-[var(--color-danger)]">{error}</p>}
+    {error && !open && <p role="alert" className="text-[var(--color-danger-text)]">{error}</p>}
     {open && <EsfDraftModal settlementId={settlementId} creating={creating} error={error}
       onCreate={onCreate} onPreviewAct={onPreviewAct} onClose={() => setOpen(false)} />}
   </div>;

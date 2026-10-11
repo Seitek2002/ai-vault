@@ -126,7 +126,7 @@ export function EsfLinkModal({ inv, onClose }: { inv: EsfInvoice; onClose: () =>
                   {[...chosen].sort((a, b) => a.year - b.year || a.month - b.month || a.sequence - b.sequence).map((s) => (
                     <span key={s.key} className="inline-flex max-w-full items-center gap-2 rounded-lg border border-[var(--color-border)] px-2.5 py-1.5 text-xs text-[var(--color-text-primary)]">
                       <span className="min-w-0 break-words">{period(s)} · № {s.contractNumber}{s.create ? " · новый" : ` · комплект ${s.sequence}`}</span>
-                      <button type="button" onClick={() => remove(s.key)} aria-label={`Убрать ${period(s)}, договор ${s.contractNumber}, ${s.create ? "новый расчёт" : `комплект ${s.sequence}`}`} className="shrink-0 rounded p-1 text-[var(--color-text-secondary)] hover:text-[var(--color-danger)]"><X className="h-3.5 w-3.5" /></button>
+                      <button type="button" onClick={() => remove(s.key)} aria-label={`Убрать ${period(s)}, договор ${s.contractNumber}, ${s.create ? "новый расчёт" : `комплект ${s.sequence}`}`} className="shrink-0 rounded-lg p-1 text-[var(--color-text-secondary)] hover:text-[var(--color-danger)]"><X className="h-3.5 w-3.5" /></button>
                     </span>
                   ))}
                 </div>
@@ -140,7 +140,7 @@ export function EsfLinkModal({ inv, onClose }: { inv: EsfInvoice; onClose: () =>
                 </label>
               </div>
               <p className="mt-2 text-xs text-[var(--color-text-secondary)]">Отметьте месяцы. Новые расчёты будут созданы при сохранении.</p>
-              {!validYear && <p role="alert" className="mt-2 text-sm text-[var(--color-danger)]">Введите год от 2000 до 2100.</p>}
+              {!validYear && <p role="alert" className="mt-2 text-sm text-[var(--color-danger-text)]">Введите год от 2000 до 2100.</p>}
               {!loading && !loadError && validYear && <div className="mt-3 grid gap-2 sm:grid-cols-2">
                 {MONTH_NAMES.map((name, i) => {
                   const m = i + 1;
@@ -168,19 +168,19 @@ export function EsfLinkModal({ inv, onClose }: { inv: EsfInvoice; onClose: () =>
             </div>}
           </fieldset>
           {loading && <div className="flex items-center gap-2 py-3 text-sm text-[var(--color-text-secondary)]"><Spinner />Загружаю договоры и расчёты…</div>}
-          {loadError && <div role="alert" className="mt-3 text-sm text-[var(--color-danger)]">Не удалось загрузить данные.
+          {loadError && <div role="alert" className="mt-3 text-sm text-[var(--color-danger-text)]">Не удалось загрузить данные.
             <Button type="button" variant="ghost" onClick={() => { void contractsQuery.refetch(); void setsQuery.refetch(); void invoicesQuery.refetch(); }}>Повторить</Button>
           </div>}
         </div>
         <div className="shrink-0 space-y-3 border-t border-[var(--color-border)] px-5 py-4 sm:px-6">
           {chosen.length > 0 ? <div aria-live="polite" className="text-sm">
             <div className="flex flex-wrap items-baseline justify-between gap-1 text-[var(--color-text-primary)]"><span>Итого по {chosen.length} расчётам</span><strong>{formatMoney(total, currency)}</strong></div>
-            {invalidAmount ? <p className="mt-1 text-[var(--color-danger)]">Проверьте суммы новых расчётов.</p> : mismatch ? <>
+            {invalidAmount ? <p className="mt-1 text-[var(--color-danger-text)]">Проверьте суммы новых расчётов.</p> : mismatch ? <>
               <p className="mt-1 text-[var(--color-text-secondary)]">{difference > 0 ? "Расчёты больше ЭСФ" : "ЭСФ больше расчётов"} на {formatMoney(Math.abs(difference), currency)}.</p>
               <label className="mt-2 flex cursor-pointer items-start gap-2 text-xs text-[var(--color-text-primary)]"><input type="checkbox" checked={acknowledged} disabled={link.isPending} onChange={(e) => setAcknowledged(e.target.checked)} className="mt-0.5 accent-[var(--color-accent)]" />Привязать несмотря на разницу в суммах</label>
             </> : <p className="mt-1 text-[var(--color-text-secondary)]">Сумма совпадает с ЭСФ.</p>}
           </div> : <p className="text-sm text-[var(--color-text-secondary)]">{wasLinked ? "Будут убраны все привязки этой ЭСФ." : "Выберите один или несколько месяцев."}</p>}
-          {error && <p role="alert" className="text-sm text-[var(--color-danger)]">{error} Уже созданные расчёты сохраняются для повторной попытки.</p>}
+          {error && <p role="alert" className="text-sm text-[var(--color-danger-text)]">{error} Уже созданные расчёты сохраняются для повторной попытки.</p>}
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <Button type="button" variant="ghost" disabled={link.isPending} onClick={onClose}>Отмена</Button>
             <Button type="submit" loading={link.isPending} loadingText="Сохраняю…" disabled={loading || loadError || invalidAmount || (!chosen.length && !wasLinked) || (chosen.length > 0 && mismatch && !acknowledged)}>{!chosen.length && wasLinked ? "Убрать все привязки" : "Сохранить привязку"}</Button>

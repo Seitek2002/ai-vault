@@ -28,6 +28,8 @@
   --color-success: #22C55E;
   --color-warning: #F59E0B;
   --color-danger:  #EF4444;
+  /* Мелкий текст ошибок: #EF4444 на поверхности даёт 3.9:1, ниже WCAG AA (4.5:1). */
+  --color-danger-text: #F87171;
   --color-info:    #38BDF8;
 
   /* ── AI Diff (must not use accent #87CEEB) ── */

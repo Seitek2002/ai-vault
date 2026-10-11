@@ -611,7 +611,7 @@ function EsfDraftPanel({ settlementId, stepNote, actPdfId, onBusyChange, onDetac
         <p className="text-sm text-[var(--color-text-primary)]">
           {draft.status === "NEW" ? "Черновик на портале" : `ЭСФ № ${draft.number ?? "—"}`}
           {draft.status === "NEW" && (
-            <span className="text-xs text-[#FBBF24] ml-2">ждёт подписи</span>
+            <span className="text-xs text-[var(--color-warning)] ml-2">ждёт подписи</span>
           )}
         </p>
         <p className="mt-1 text-xs text-[var(--color-text-secondary)]">ID ЭСФ на портале: <span className="font-mono break-all select-all text-[var(--color-text-primary)]">{draft.uuid}</span></p>

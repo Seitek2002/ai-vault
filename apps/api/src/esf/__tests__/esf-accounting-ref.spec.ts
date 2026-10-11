@@ -2,6 +2,7 @@ import { Prisma, SettlementStepType } from '@prisma/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { seal } from '../../common/secret-box';
 import { EsfService } from '../esf.service';
+import { esfAccountingRef } from '../esf-matching';
 
 afterEach(() => vi.unstubAllEnvs());
 
@@ -27,7 +28,9 @@ describe('Номер учётной системы новых ЭСФ', () => {
     vi.spyOn(service, 'findOneDto').mockResolvedValue({ id: 'new-esf' } as never);
     await service.createDraft('org', 'user', id, { sourceUuid: 'source-uuid', sourceSignature: 'a'.repeat(64), lines: [{ name: 'Services', quantity: 1, price: 35000 }] });
     // Загрузка идёт файлом XML; даты в нём в ISO, как ждёт портал.
-    expect(xml.createDraft).toHaveBeenCalledWith(expect.objectContaining({ crmRef: `ErkinAI.Docs-${id}`, amount: 35000, sourceUuid: 'source-uuid',
+    const crmRef = esfAccountingRef({ id, year: 2026, month: 9 });
+    expect(crmRef).toMatch(/^ED-2609-[0-9A-Z]{6}$/);
+    expect(xml.createDraft).toHaveBeenCalledWith(expect.objectContaining({ crmRef, amount: 35000, sourceUuid: 'source-uuid',
       contractNumber: 'ДГ-0003/0326', contractDate: '2026-03-01', deliveryDate: '2026-09-30', note: 'Services — сентябрь 2026' }));
     expect(draft.createByCopy).not.toHaveBeenCalled();
     expect(links.attach).not.toHaveBeenCalled();

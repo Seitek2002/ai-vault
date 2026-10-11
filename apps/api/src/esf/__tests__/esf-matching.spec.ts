@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { EsfStatus } from '@prisma/client';
 import {
+  esfAccountingRef,
+  isAccountingRef,
+  legacyAccountingRef,
   mapPortalStatus,
   matchSettlement,
   parsePortalAmount,
@@ -252,5 +255,36 @@ describe('normalizeCompanyName', () => {
   it('форма внутри слова не режется', () => {
     // «ип» — часть слова, а не «индивидуальный предприниматель»
     expect(normalizeCompanyName('Типография')).toBe('типография');
+  });
+});
+
+describe('Короткий номер учётной системы', () => {
+  it('выглядит как ED-ГГММ-XXXXXX и помещается в поле портала', () => {
+    const ref = esfAccountingRef({ id: 'cmup4kfzx003rp520mmvcigam', year: 2026, month: 9 });
+    expect(ref).toMatch(/^ED-2609-[0-9A-HJKMNP-TV-Z]{6}$/);
+    expect(ref.length).toBe(14);
+  });
+
+  it('стабилен для расчёта и различает комплекты одного месяца', () => {
+    const a = esfAccountingRef({ id: 'set-first', year: 2026, month: 9 });
+    expect(esfAccountingRef({ id: 'set-first', year: 2026, month: 9 })).toBe(a);
+    expect(esfAccountingRef({ id: 'set-second', year: 2026, month: 9 })).not.toBe(a);
+  });
+
+  it('не путает с номерами из чужих учётных систем', () => {
+    expect(isAccountingRef('ED-2609-K7Q2MX')).toBe(true);
+    expect(isAccountingRef('ErkinAI.Docs-cmup4kfzx003rp520mmvcigam')).toBe(true);
+    expect(isAccountingRef('CRM-15-a81a719d')).toBe(false);
+    expect(isAccountingRef('АВР-2026-003')).toBe(false);
+  });
+
+  it('находит расчёт по короткому номеру', () => {
+    const r = matchSettlement({ crmRef: esfAccountingRef(sept()), deliveryDate: null, amount: 30000 }, [sept()]);
+    expect(r).toEqual({ kind: 'matched', settlementId: 'sep', how: 'crmRef' });
+  });
+
+  it('по-прежнему узнаёт длинный номер в уже выставленных ЭСФ', () => {
+    const r = matchSettlement({ crmRef: legacyAccountingRef('sep'), deliveryDate: null, amount: 30000 }, [sept()]);
+    expect(r).toEqual({ kind: 'matched', settlementId: 'sep', how: 'crmRef' });
   });
 });

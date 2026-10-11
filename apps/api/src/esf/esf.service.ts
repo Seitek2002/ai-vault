@@ -173,7 +173,7 @@ export class EsfService {
       contractNumber: shortContractNumber(settlement.contract.number),
       contractDate: settlement.contract.startDate ? isoDate(settlement.contract.startDate) : null,
       contractTitle: settlement.contract.title,
-      crmRef: esfAccountingRef(settlement.id) };
+      crmRef: esfAccountingRef(settlement) };
   }
 
   async createDraft(organizationId: string, userId: string, settlementId: string, dto?: CreateEsfDraftDto): Promise<EsfInvoiceDto> {
@@ -191,7 +191,7 @@ export class EsfService {
     if (dto.sourceUuid !== source.uuid) throw new BadRequestException('ЭСФ-образец изменился. Загрузите строки заново и проверьте их.');
 
     // Стабильный номер ErkinAI.Docs: не зависит от номера акта или ЭСФ-образца.
-    const crmRef = esfAccountingRef(settlement.id);
+    const crmRef = esfAccountingRef(settlement);
 
     // Период услуг выбирает менеджер; по умолчанию — предыдущий завершившийся месяц.
     const today = new Date();

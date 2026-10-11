@@ -2,14 +2,14 @@
 
 import { useState, type KeyboardEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { FileText, X } from 'lucide-react';
+import { FileText, Plus, Trash2, X } from 'lucide-react';
 import { esfDeliveryDate, esfLineAmounts, esfReplacePeriod, type EsfLineAmounts } from '@ai-vault/doc-placeholders';
 import { Button, Input, Modal, Select, Spinner } from '@/components/ui';
 import { cn } from '@/lib/cn';
 import { fieldClassName } from '@/components/ui/Input';
 import { esfApi, type CreateEsfDraft, type EsfDraftPreview } from '@/lib/api/esf';
 import { formatMoney } from '@/lib/api/settlements';
-import { applyEsfPeriod, esfPeriodOptions, parsePeriodValue, periodValue, reviewEsfLines, type EditableEsfLine } from '@/lib/esf-draft';
+import { applyEsfPeriod, esfLineBase, esfPeriodOptions, newEsfLine, parsePeriodValue, periodValue, reviewEsfLines, type EditableEsfLine } from '@/lib/esf-draft';
 
 interface Props {
   settlementId: string;
@@ -49,7 +49,7 @@ export function EsfDraftModal({ settlementId, creating, error, onCreate, onPrevi
     close();
   }
 
-  return <Modal onClose={close} className="max-w-5xl flex max-h-[92vh] flex-col">
+  return <Modal onClose={close} className="max-w-6xl flex max-h-[92vh] flex-col">
     <div onKeyDown={onKeyDown} className="flex min-h-0 flex-1 flex-col">
       <div className="flex items-start justify-between gap-3 border-b border-[var(--color-border)] px-5 py-4">
         <div className="min-w-0">
@@ -87,12 +87,22 @@ function DraftForm({ preview, creating, error, reloading, onReload, onCreate, on
   const [period, setPeriod] = useState({ year: preview.periodYear, month: preview.periodMonth });
   const [delivery, setDelivery] = useState(preview.deliveryDate);
   const [note, setNote] = useState(preview.note);
+  // Строки образца помнят, откуда они: при удалении и добавлении порядок меняется.
   const [edited, setEdited] = useState<EditableEsfLine[]>(
-    preview.lines.map(line => ({ name: line.name, quantity: String(line.quantity), price: String(line.price) })));
+    preview.lines.map((line, index) => ({ name: line.name, quantity: String(line.quantity), price: String(line.price), source: index })));
+  const [rowKeys, setRowKeys] = useState<number[]>(() => preview.lines.map((_, index) => index));
   const [confirmed, setConfirmed] = useState(false);
 
   const reviewed = reviewEsfLines(preview.lines, edited, preview.amount);
-  const rowAmounts = edited.map((_, index) => reviewed.lines[index] ? esfLineAmounts(reviewed.lines[index]!) : null);
+  const bases = edited.map((line) => esfLineBase(preview.lines, line));
+  // Суммы считаем по каждой строке отдельно — пустая новая строка не гасит остальные.
+  const rowAmounts = edited.map((line, index) => {
+    const base = bases[index];
+    const quantity = Number(line.quantity.replace(/\s/g, '').replace(',', '.'));
+    const price = Number(line.price.replace(/\s/g, '').replace(',', '.'));
+    if (!base || !line.quantity.trim() || !line.price.trim() || !(quantity > 0) || !(price > 0)) return null;
+    try { return esfLineAmounts({ ...base, quantity, price }); } catch { return null; }
+  });
   const counted = rowAmounts.filter((amounts): amounts is EsfLineAmounts => amounts !== null);
   const totals = counted.length === rowAmounts.length && counted.length > 0
     ? counted.reduce((sum, amounts) => ({
@@ -116,8 +126,20 @@ function DraftForm({ preview, creating, error, reloading, onReload, onCreate, on
     setConfirmed(false);
   }
 
-  function change(index: number, field: keyof EditableEsfLine, value: string) {
+  function change(index: number, field: 'name' | 'quantity' | 'price' | 'unit' | 'gked', value: string) {
     setEdited(rows => rows.map((row, i) => i === index ? { ...row, [field]: value } : row));
+    setConfirmed(false);
+  }
+
+  function addLine() {
+    setEdited(rows => [...rows, newEsfLine(preview.lines)]);
+    setRowKeys(keys => [...keys, Math.max(-1, ...keys) + 1]);
+    setConfirmed(false);
+  }
+
+  function removeLine(index: number) {
+    setEdited(rows => rows.filter((_, i) => i !== index));
+    setRowKeys(keys => keys.filter((_, i) => i !== index));
     setConfirmed(false);
   }
 
@@ -195,21 +217,29 @@ function DraftForm({ preview, creating, error, reloading, onReload, onCreate, on
                 <th scope="col" className="px-2 py-2 text-right font-medium">Сумма НСП</th>
                 <th scope="col" className="px-2 py-2 text-right font-medium">Стоимость без НДС и НсП</th>
                 <th scope="col" className="px-2 py-2 text-right font-medium">Общая стоимость</th>
+                <th scope="col" className="w-10 px-2 py-2"><span className="sr-only">Действия</span></th>
               </tr>
             </thead>
             <tbody>
               {edited.map((line, index) => {
-                const source = preview.lines[index]!;
+                const source = bases[index] ?? preview.lines[0]!;
                 const amounts = rowAmounts[index];
-                return <tr key={index} className="border-t border-[var(--color-border)] align-top">
+                const added = line.source === undefined;
+                return <tr key={rowKeys[index]} className="border-t border-[var(--color-border)] align-top">
                   <td className="px-2 py-3 tabular-nums text-[var(--color-text-secondary)]">{index + 1}</td>
                   <td className="px-2 py-3">
                     <textarea rows={3} maxLength={150} value={line.name} aria-label={`Название услуги ${index + 1}`}
                       onChange={e => change(index, 'name', e.target.value)}
                       className={cn(fieldClassName, 'w-48 resize-y leading-relaxed')} />
                   </td>
-                  <td className="px-2 py-3 text-[var(--color-text-secondary)]">{source.unit}</td>
-                  <td className="px-2 py-3 tabular-nums text-[var(--color-text-secondary)]">{source.gked}</td>
+                  <td className="px-2 py-3 text-[var(--color-text-secondary)]">
+                    {added ? <Input value={line.unit ?? ''} aria-label={`Единица измерения, услуга ${index + 1}`}
+                      onChange={e => change(index, 'unit', e.target.value)} className="w-20" /> : source.unit}
+                  </td>
+                  <td className="px-2 py-3 tabular-nums text-[var(--color-text-secondary)]">
+                    {added ? <Input value={line.gked ?? ''} aria-label={`Код ГКЭД, услуга ${index + 1}`} placeholder="62.02.0"
+                      onChange={e => change(index, 'gked', e.target.value)} className="w-20 tabular-nums" /> : source.gked}
+                  </td>
                   <td className="px-2 py-3">
                     <Input inputMode="decimal" value={line.quantity} aria-label={`Количество, услуга ${index + 1}`}
                       onChange={e => change(index, 'quantity', e.target.value)} className="w-20 tabular-nums" />
@@ -226,6 +256,13 @@ function DraftForm({ preview, creating, error, reloading, onReload, onCreate, on
                   <td className="px-2 py-3 text-right tabular-nums">{amounts ? money(amounts.salesTax) : '—'}</td>
                   <td className="px-2 py-3 text-right tabular-nums">{amounts ? money(amounts.net) : '—'}</td>
                   <td className="px-2 py-3 text-right tabular-nums">{amounts ? money(amounts.total) : '—'}</td>
+                  <td className="px-2 py-3 text-right">
+                    <button type="button" onClick={() => removeLine(index)} disabled={edited.length === 1}
+                      aria-label={`Удалить услугу ${index + 1}`} title={edited.length === 1 ? 'В ЭСФ должна остаться хотя бы одна услуга' : 'Удалить строку'}
+                      className="rounded-lg p-1.5 text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-elevated)] hover:text-[var(--color-danger)] disabled:cursor-not-allowed disabled:opacity-40">
+                      <Trash2 className="h-4 w-4" aria-hidden="true" />
+                    </button>
+                  </td>
                 </tr>;
               })}
             </tbody>
@@ -237,6 +274,7 @@ function DraftForm({ preview, creating, error, reloading, onReload, onCreate, on
                 <td className="px-2 py-2 text-right tabular-nums">{totals ? money(totals.salesTax) : '—'}</td>
                 <td className="px-2 py-2 text-right tabular-nums">{totals ? money(totals.net) : '—'}</td>
                 <td className="px-2 py-2 text-right tabular-nums">{totals ? money(totals.total) : '—'}</td>
+                <td />
               </tr>
             </tfoot>
           </table>
@@ -244,20 +282,36 @@ function DraftForm({ preview, creating, error, reloading, onReload, onCreate, on
 
         {/* На узком экране та же строка — карточкой. */}
         <div className="divide-y divide-[var(--color-border)] lg:hidden">
-          {edited.map((line, index) => <div key={index} className="min-w-0 py-4">
-            <label className="block text-[var(--color-text-secondary)]">
-              Услуга {index + 1}
+          {edited.map((line, index) => <div key={rowKeys[index]} className="min-w-0 py-4">
+            <div className="flex items-start justify-between gap-2">
+              <span className="text-[var(--color-text-secondary)]">Услуга {index + 1}</span>
+              <button type="button" onClick={() => removeLine(index)} disabled={edited.length === 1} aria-label={`Удалить услугу ${index + 1}`}
+                className="rounded-lg p-1 text-[var(--color-text-secondary)] hover:text-[var(--color-danger)] disabled:opacity-40">
+                <Trash2 className="h-4 w-4" aria-hidden="true" />
+              </button>
+            </div>
+            <label className="mt-1 block text-[var(--color-text-secondary)]">
+              <span className="sr-only">Название услуги {index + 1}</span>
               <textarea rows={2} maxLength={150} value={line.name} onChange={e => change(index, 'name', e.target.value)}
                 className={`${fieldClassName} mt-1 resize-y text-base leading-relaxed`} />
             </label>
-            <p className="mt-1 text-[var(--color-text-secondary)]">
-              {preview.lines[index]!.unit} · ГКЭД {preview.lines[index]!.gked} · НДС {preview.lines[index]!.vatRate}% · НСП {preview.lines[index]!.salesTaxRate}%
-            </p>
+            {line.source === undefined
+              ? <div className="mt-3 grid grid-cols-2 gap-3">
+                <label className="block text-[var(--color-text-secondary)]">Единица измерения
+                  <Input value={line.unit ?? ''} onChange={e => change(index, 'unit', e.target.value)} className="mt-1 text-base" />
+                </label>
+                <label className="block text-[var(--color-text-secondary)]">Код ГКЭД
+                  <Input value={line.gked ?? ''} placeholder="62.02.0" onChange={e => change(index, 'gked', e.target.value)} className="mt-1 text-base tabular-nums" />
+                </label>
+              </div>
+              : <p className="mt-1 text-[var(--color-text-secondary)]">
+                {bases[index]?.unit} · ГКЭД {bases[index]?.gked} · НДС {bases[index]?.vatRate}% · НСП {bases[index]?.salesTaxRate}%
+              </p>}
             <div className="mt-3 grid grid-cols-2 gap-3">
               <label className="block text-[var(--color-text-secondary)]">Факт. кол-во
                 <Input inputMode="decimal" value={line.quantity} onChange={e => change(index, 'quantity', e.target.value)} className="mt-1 text-base tabular-nums" />
               </label>
-              <label className="block text-[var(--color-text-secondary)]">Цена {preview.lines[index]!.priceIncludesTaxes ? 'с налогами' : 'без налогов'}
+              <label className="block text-[var(--color-text-secondary)]">Цена {bases[index]?.priceIncludesTaxes ? 'с налогами' : 'без налогов'}
                 <Input inputMode="decimal" value={line.price} onChange={e => change(index, 'price', e.target.value)} className="mt-1 text-base tabular-nums" />
               </label>
             </div>
@@ -267,6 +321,13 @@ function DraftForm({ preview, creating, error, reloading, onReload, onCreate, on
           </div>)}
         </div>
       </fieldset>
+
+      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1">
+        <Button type="button" variant="secondary" size="sm" disabled={busy || edited.length >= 50} onClick={addLine}>
+          <Plus className="h-4 w-4 shrink-0" aria-hidden="true" />Добавить услугу
+        </Button>
+        <span className="text-xs text-[var(--color-text-secondary)]">Если услуги нет в справочнике портала, Vault заведёт её сам. Ставки налогов — как в образце.</span>
+      </div>
 
       <Button type="button" variant="ghost" disabled={busy} onClick={onPreviewAct}>Открыть PDF акта для сверки</Button>
     </div>
@@ -294,7 +355,10 @@ function DraftForm({ preview, creating, error, reloading, onReload, onCreate, on
           onCreate({
             sourceUuid: preview.sourceUuid, sourceSignature: preview.sourceSignature,
             periodYear: period.year, periodMonth: period.month, deliveryDate: delivery, note: note.trim(),
-            lines: reviewed.lines.map(({ name, quantity, price }) => ({ name, quantity, price })),
+            lines: reviewed.lines.map(({ name, quantity, price, unit, gked }, index) => {
+              const source = edited[index]!.source;
+              return source === undefined ? { name, quantity, price, unit, gked } : { name, quantity, price, source };
+            }),
           });
         }}>
         <FileText className="h-4 w-4 shrink-0" aria-hidden="true" />Создать черновик ЭСФ на портале

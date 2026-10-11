@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { esfLineAmounts, esfLinesTotal, type EsfDraftLine } from '@ai-vault/doc-placeholders';
 import { EsfDraftClient } from './esf-draft.client';
+import { DraftLinesError, mergeDraftLines, type DraftLineInput } from './esf-draft-lines';
 import { decodeHtml, formAction, formFields, htmlText } from './esf-form';
 import { EsfPortalClient, EsfPortalError } from './esf-portal.client';
 import { buildReceiptXml, EsfXmlError, type EsfXmlGood } from './esf-xml';
@@ -48,7 +49,7 @@ export interface XmlDraftRequest {
   contractNumber?: string;
   /** yyyy-mm-dd */
   contractDate?: string;
-  lines: { name: string; quantity: number; price: number }[];
+  lines: DraftLineInput[];
   /** Сумма расчёта — сверяем перед отправкой. */
   amount: number;
 }
@@ -67,28 +68,24 @@ export class EsfXmlClient {
   constructor(private readonly portal: EsfPortalClient, private readonly draft: EsfDraftClient) {}
 
   async createDraft(req: XmlDraftRequest): Promise<{ uuid: string }> {
-    // Единицы, ГКЭД и ставки налогов остаются от образца — менеджер правил
-    // только название, количество и цену, и подтверждал именно эти строки.
+    // Строки образца сохраняют свои единицы, ГКЭД и ставки; добавленные менеджером
+    // строки несут единицу и ГКЭД сами. Образец должен быть тем, что он видел.
     const template = await this.draft.getTemplate(req.login, req.password, req.sourceUuid);
     if (template.sourceSignature !== req.sourceSignature) {
       throw new EsfXmlPrepareError('ЭСФ-образец изменился. Загрузите строки заново и проверьте их.', 'parse');
     }
-    if (req.lines.length !== template.lines.length) {
-      throw new EsfXmlPrepareError('Проверьте все строки услуг ЭСФ-образца.', 'parse');
+    let lines: EsfDraftLine[];
+    try {
+      lines = mergeDraftLines(template.lines, req.lines);
+    } catch (error) {
+      // Ошибка в строках — исправлять менеджеру, запасной путь тут не поможет.
+      if (error instanceof DraftLinesError) throw new EsfPortalError(error.message, 'parse');
+      throw error;
     }
-    const lines: EsfDraftLine[] = template.lines.map((line, index) => {
-      const input = req.lines[index]!;
-      if (!input.name?.trim() || input.name.trim().length > 150 ||
-        !Number.isFinite(input.quantity) || input.quantity <= 0 || input.quantity > 1e9 ||
-        !Number.isFinite(input.price) || input.price <= 0 || input.price > 1e9) {
-        throw new EsfXmlPrepareError(`Проверьте название, количество и цену строки ${index + 1}.`, 'parse');
-      }
-      return { ...line, name: input.name.trim(), quantity: input.quantity, price: input.price };
-    });
 
     const total = esfLinesTotal(lines);
     if (Math.round(total * 100) !== Math.round(req.amount * 100)) {
-      throw new EsfXmlPrepareError('Сумма строк ЭСФ должна совпадать с суммой расчёта.', 'parse');
+      throw new EsfPortalError('Сумма строк ЭСФ должна совпадать с суммой расчёта.', 'parse');
     }
     const session = await this.portal.openSession(req.login, req.password);
 

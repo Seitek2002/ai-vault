@@ -16,6 +16,24 @@ export class EsfDraftLineDto {
   @Min(0.00001)
   @Max(1e9)
   declare price: number;
+
+  /** Номер строки ЭСФ-образца; нет — строку добавил менеджер. */
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(99)
+  source?: number;
+
+  /** Единица и ГКЭД — только у добавленных строк. */
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(50)
+  unit?: string;
+
+  @IsOptional()
+  @Matches(/^\d{2}\.\d{2}(\.\d{1,2})?$/, { message: 'Код ГКЭД указан неверно, например 62.02.0.' })
+  gked?: string;
 }
 
 export class CreateEsfDraftDto {
@@ -29,7 +47,7 @@ export class CreateEsfDraftDto {
 
   @IsArray()
   @ArrayNotEmpty()
-  @ArrayMaxSize(100)
+  @ArrayMaxSize(50)
   @ValidateNested({ each: true })
   @Type(() => EsfDraftLineDto)
   declare lines: EsfDraftLineDto[];

@@ -6,6 +6,7 @@ import { StorageService } from '../storage/storage.service';
 import { open as openSecret } from '../common/secret-box';
 import { EsfDraftClient } from './esf-draft.client';
 import { EsfXmlClient, EsfXmlPrepareError } from './esf-xml.client';
+import { linesFollowTemplate } from './esf-draft-lines';
 import { EsfPortalClient, EsfPortalError, type EsfListRow } from './esf-portal.client';
 import { EsfPdfService } from './esf-pdf';
 import { EsfLinksService, invoiceSettlementIds, MANUAL_ESF_DETACH_NOTE } from './esf-links.service';
@@ -229,7 +230,9 @@ export class EsfService {
       deliveryDate: deliveryIso,
       ...(contractDateIso ? { contractDate: contractDateIso } : {}),
     }).catch(async error => {
-      if (error instanceof EsfXmlPrepareError) {
+      // Запасной путь копирует строки образца один в один — с добавленными или
+      // удалёнными строками он не справится, тогда показываем исходную ошибку.
+      if (error instanceof EsfXmlPrepareError && linesFollowTemplate(dto.lines)) {
         this.logger.warn(`Пакетная загрузка ЭСФ недоступна (${error.message}) — заполняю форму портала`);
         return this.draft.createByCopy({
           ...request,

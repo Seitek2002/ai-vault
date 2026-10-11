@@ -28,7 +28,8 @@ export interface EsfDraftPreview {
 export interface CreateEsfDraft {
   sourceUuid: string;
   sourceSignature: string;
-  lines: Pick<EsfDraftLine, 'name' | 'quantity' | 'price'>[];
+  /** `source` — строка образца; у добавленных строк вместо него единица и ГКЭД. */
+  lines: (Pick<EsfDraftLine, 'name' | 'quantity' | 'price'> & { source?: number; unit?: string; gked?: string })[];
   periodYear?: number;
   periodMonth?: number;
   /** yyyy-mm-dd */

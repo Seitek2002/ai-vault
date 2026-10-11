@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildReceiptXml, exchangeCode, firstReceipt, receiptField } from '../esf-xml';
+import { EsfXmlClient } from '../esf-xml.client';
 
 /** Сокращённая выгрузка портала «Выгрузить выделенные в XML-файл». */
 const SAMPLE = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -124,5 +125,22 @@ describe('Файл пакетной загрузки ЭСФ', () => {
 
   it('не собирает ЭСФ без услуг', () => {
     expect(() => buildReceiptXml(SAMPLE, { ...patch, goods: [] })).toThrow();
+  });
+});
+
+describe('Недостающие услуги справочника', () => {
+  const client = new EsfXmlClient({} as never, {} as never) as unknown as {
+    missingServices(messages: string[]): string[];
+  };
+
+  it('вытаскивает названия услуг из ответа портала', () => {
+    expect(client.missingServices([
+      'exchangeCode: fce2c562 - Товара/услуги с наименованием "Пакет №1 за сентябрь 2026" не существует в базе!',
+      'Товара/услуги с наименованием "Доступ к чат-центру" не существует в базе!',
+    ])).toEqual(['Пакет №1 за сентябрь 2026', 'Доступ к чат-центру']);
+  });
+
+  it('не выдумывает услуг на обычных сообщениях', () => {
+    expect(client.missingServices(['Файл успешно загружен', 'Отсутствует обязательное поле (exchangeCode)'])).toEqual([]);
   });
 });

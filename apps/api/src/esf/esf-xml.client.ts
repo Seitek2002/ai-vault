@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { esfLineAmounts, esfLinesTotal, type EsfDraftLine } from '@ai-vault/doc-placeholders';
 import { EsfDraftClient } from './esf-draft.client';
-import { formAction, formFields } from './esf-form';
+import { decodeHtml, formAction, formFields, htmlText } from './esf-form';
 import { EsfPortalClient, EsfPortalError } from './esf-portal.client';
 import { buildReceiptXml, EsfXmlError, type EsfXmlGood } from './esf-xml';
 
@@ -17,6 +17,9 @@ import { buildReceiptXml, EsfXmlError, type EsfXmlGood } from './esf-xml';
  */
 
 const LIST_PATH = '/esf/view/document/realization_list.xhtml';
+const GOODS_PATH = '/esf/view/profile/goods_list.xhtml';
+const CARD_FORM = 'add-card-form';
+const ADD_SERVICE_LABEL = 'Добавить новую услугу';
 const EXPORT_LABEL = 'Выгрузить выделенные в XML-файл';
 const UPLOAD_LABEL = 'Загрузить файл';
 
@@ -108,7 +111,25 @@ export class EsfXmlClient {
       throw new EsfPortalError(`ЭСФ с номером учётной системы ${req.crmRef} уже есть на портале`, 'parse');
     }
 
-    const messages = await this.upload(session, xml, `vault-${req.crmRef}.xml`);
+    const filename = `vault-${req.crmRef}.xml`;
+    let messages = await this.upload(session, xml, filename);
+
+    // Название услуги в ЭСФ — позиция справочника портала. Какой не хватает,
+    // портал говорит сам: заводим её карточку и загружаем файл ещё раз.
+    const missing = this.missingServices(messages);
+    if (missing.length) {
+      for (const name of missing) {
+        const line = lines.find((item) => item.name === name);
+        if (!line) throw new EsfPortalError(`Портал не нашёл услугу «${name}» в справочнике`, 'parse');
+        await this.createService(session, line);
+      }
+      messages = await this.upload(session, xml, filename);
+      const stillMissing = this.missingServices(messages);
+      if (stillMissing.length) {
+        throw new EsfPortalError(`Портал не видит услуг в справочнике: ${stillMissing.join('; ')}`, 'parse');
+      }
+    }
+
     // Пакет портал разбирает в фоне — даём ему время появиться в списке.
     const created = await this.waitForCrmRef(session, req.crmRef);
     if (!created) {
@@ -202,6 +223,68 @@ export class EsfXmlClient {
       throw new EsfPortalError(`Портал отклонил файл ЭСФ${saveMessages.length ? `: ${saveMessages.join('; ')}` : ''}`, 'parse');
     }
     return saveMessages;
+  }
+
+  /** «Товара/услуги с наименованием "X" не существует в базе!» */
+  private missingServices(messages: string[]): string[] {
+    return [...new Set(messages.flatMap((message) =>
+      [...message.matchAll(/наименованием\s+[«"']([^«»"']+)[»"']\s+не существует/gi)].map((match) => match[1]!.trim())))];
+  }
+
+  /**
+   * Карточка услуги в справочнике портала: ГКЭД и единицу выбираем
+   * автокомплитами самой карточки — идентификаторы из строки ЭСФ она не берёт.
+   */
+  private async createService(session: Session, line: EsfDraftLine): Promise<void> {
+    const list = await session.get(GOODS_PATH);
+    const link = [...list.matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/g)].find((match) => htmlText(match[2]!) === ADD_SERVICE_LABEL);
+    const onclick = decodeHtml(link?.[1]?.match(/onclick="([^"]+)"/)?.[1] ?? '');
+    const formId = onclick.match(/getElementById\('([^']+)'\)/)?.[1];
+    const submit = onclick.match(/\{'([^']+)'/)?.[1];
+    if (!formId || !submit) throw new EsfPortalError('На портале нет создания услуги в справочнике', 'parse');
+    const opened = await session.post(formAction(list, formId), new URLSearchParams({ ...formFields(list, formId), [submit]: submit }));
+    const card = await opened.text();
+    if (!card.includes(`id="${CARD_FORM}"`)) throw new EsfPortalError('Портал не открыл карточку услуги', 'parse');
+
+    const gked = (await this.suggest(session, card, 'cea', line.gked))
+      .find((choice) => choice.label.split(' - ')[0]!.trim() === line.gked);
+    if (!gked) throw new EsfPortalError(`В справочнике портала нет ГКЭД ${line.gked}`, 'parse');
+    const unit = (await this.suggest(session, card, 'unitClassification', line.unit))
+      .find((choice) => choice.label === line.unit);
+    if (!unit) throw new EsfPortalError(`В справочнике портала нет единицы измерения «${line.unit}»`, 'parse');
+
+    const save = this.buttonName(card, 'Сохранить');
+    if (!save) throw new EsfPortalError('В карточке услуги нет кнопки «Сохранить»', 'parse');
+    const response = await session.post(formAction(card, CARD_FORM), new URLSearchParams({
+      ...formFields(card, CARD_FORM), [CARD_FORM]: CARD_FORM,
+      cea_input: gked.label, cea_hinput: gked.id,
+      unitClassification_input: unit.label, unitClassification_hinput: unit.id,
+      name: line.name, [save]: 'Сохранить',
+    }));
+    const result = await response.text();
+    if (!new URL(response.url).pathname.endsWith('goods_list.xhtml')) {
+      const why = this.messages(result);
+      throw new EsfPortalError(
+        `Не удалось добавить услугу «${line.name}» в справочник портала${why.length ? `: ${why.join('; ')}` : ''}`,
+        'parse',
+      );
+    }
+    this.logger.log(`В справочник портала добавлена услуга «${line.name}» (ГКЭД ${line.gked}, ${line.unit})`);
+  }
+
+  /** Подсказки автокомплита портала. */
+  private async suggest(session: Session, html: string, key: string, query: string): Promise<{ id: string; label: string }[]> {
+    const response = await session.post(formAction(html, CARD_FORM), new URLSearchParams({
+      ...formFields(html, CARD_FORM), [CARD_FORM]: CARD_FORM,
+      'javax.faces.partial.ajax': 'true', 'javax.faces.source': key,
+      'javax.faces.partial.execute': key, 'javax.faces.partial.render': key,
+      [`${key}_query`]: query,
+    }), { headers: { 'Faces-Request': 'partial/ajax', 'X-Requested-With': 'XMLHttpRequest' } });
+    const xml = await response.text();
+    return [...xml.matchAll(/<(?:tr|li)\b([^>]*data-item-value="[^"]+"[^>]*)>/g)].map((match) => ({
+      id: decodeHtml(match[1]!.match(/data-item-value="([^"]+)"/)?.[1] ?? ''),
+      label: decodeHtml(match[1]!.match(/data-item-label="([^"]*)"/)?.[1] ?? ''),
+    }));
   }
 
   private async waitForCrmRef(session: Session, crmRef: string): Promise<ListRow | null> {

@@ -46,10 +46,22 @@ export function esfLinesTotal(lines: readonly EsfDraftLine[]): number {
 const MONTHS = ['январь', 'февраль', 'март', 'апрель', 'май', 'июнь', 'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь'];
 
 /** Refresh an explicit month/year in the service title; never infer price allocation. */
+const PERIOD_RE = /(?:январ[ья]|феврал[ья]|март[а]?|апрел[ья]|ма[йя]|июн[ья]|июл[ья]|август[а]?|сентябр[ья]|октябр[ья]|ноябр[ья]|декабр[ья])\s+20\d{2}/gi;
+
 export function esfServiceForPeriod(name: string, year: number, month: number): string {
   const period = `${MONTHS[month - 1]} ${year}`;
-  const re = /(?:январ[ья]|феврал[ья]|март[а]?|апрел[ья]|ма[йя]|июн[ья]|июл[ья]|август[а]?|сентябр[ья]|октябр[ья]|ноябр[ья]|декабр[ья])\s+20\d{2}/gi;
-  return re.test(name) ? name.replace(re, period) : `${name.trim()} — ${period}`;
+  const re = new RegExp(PERIOD_RE.source, 'gi');
+  return re.test(name) ? name.replace(new RegExp(PERIOD_RE.source, 'gi'), period) : `${name.trim()} — ${period}`;
+}
+
+/** Меняет месяц и год в тексте, если они там есть, и ничего не дописывает. */
+export function esfReplacePeriod(text: string, year: number, month: number): string {
+  return text.replace(new RegExp(PERIOD_RE.source, 'gi'), `${MONTHS[month - 1]} ${year}`);
+}
+
+/** Примечание ЭСФ по умолчанию: «Пакет на ИИ чат-бота Aivio — сентябрь 2026». */
+export function esfDefaultNote(contractTitle: string, year: number, month: number): string {
+  return `${contractTitle.trim()} — ${MONTHS[month - 1]} ${year}`;
 }
 
 export interface EsfPeriod {

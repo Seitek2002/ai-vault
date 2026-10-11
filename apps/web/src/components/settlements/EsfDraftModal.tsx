@@ -3,7 +3,7 @@
 import { useState, type KeyboardEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { FileText, X } from 'lucide-react';
-import { esfDeliveryDate, esfLineAmounts, type EsfLineAmounts } from '@ai-vault/doc-placeholders';
+import { esfDeliveryDate, esfLineAmounts, esfReplacePeriod, type EsfLineAmounts } from '@ai-vault/doc-placeholders';
 import { Button, Input, Modal, Select, Spinner } from '@/components/ui';
 import { cn } from '@/lib/cn';
 import { fieldClassName } from '@/components/ui/Input';
@@ -86,6 +86,7 @@ function DraftForm({ preview, creating, error, reloading, onReload, onCreate, on
 }) {
   const [period, setPeriod] = useState({ year: preview.periodYear, month: preview.periodMonth });
   const [delivery, setDelivery] = useState(preview.deliveryDate);
+  const [note, setNote] = useState(preview.note);
   const [edited, setEdited] = useState<EditableEsfLine[]>(
     preview.lines.map(line => ({ name: line.name, quantity: String(line.quantity), price: String(line.price) })));
   const [confirmed, setConfirmed] = useState(false);
@@ -110,6 +111,7 @@ function DraftForm({ preview, creating, error, reloading, onReload, onCreate, on
     const next = parsePeriodValue(value);
     setPeriod(next);
     setEdited(rows => applyEsfPeriod(rows, next));
+    setNote(text => esfReplacePeriod(text, next.year, next.month));
     setDelivery(esfDeliveryDate(next));
     setConfirmed(false);
   }
@@ -139,6 +141,15 @@ function DraftForm({ preview, creating, error, reloading, onReload, onCreate, on
       <p className="mt-2 text-[var(--color-text-secondary)]">
         ЭСФ выставляем за завершившийся месяц — по умолчанию {preview.period}. Выбранный период подставляется в названия услуг.
       </p>
+
+      <label className="mt-4 block text-[var(--color-text-secondary)]">
+        Примечание
+        <textarea rows={2} maxLength={250} value={note} disabled={busy}
+          onChange={e => { setNote(e.target.value); setConfirmed(false); }}
+          placeholder="Например: Акт оказанных услуг от 30.09.2026 г."
+          className={cn(fieldClassName, 'mt-1 resize-y text-base leading-relaxed')} />
+        <span className="mt-1 block text-xs">Попадёт в поле «Примечание» ЭСФ на портале. Пусто — Vault напишет договор и период.</span>
+      </label>
 
       <dl className="mt-4 space-y-1 rounded-lg bg-[var(--color-bg-elevated)] px-3 py-3 text-[var(--color-text-secondary)]">
         <div className="flex flex-wrap gap-x-2">
@@ -282,7 +293,7 @@ function DraftForm({ preview, creating, error, reloading, onReload, onCreate, on
           if (blocked) return;
           onCreate({
             sourceUuid: preview.sourceUuid, sourceSignature: preview.sourceSignature,
-            periodYear: period.year, periodMonth: period.month, deliveryDate: delivery,
+            periodYear: period.year, periodMonth: period.month, deliveryDate: delivery, note: note.trim(),
             lines: reviewed.lines.map(({ name, quantity, price }) => ({ name, quantity, price })),
           });
         }}>

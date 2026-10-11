@@ -53,6 +53,12 @@ export class CreateEsfDraftDto {
   @IsOptional()
   @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'Дата поставки указана неверно.' })
   deliveryDate?: string;
+
+  /** «Примечание» ЭСФ; пусто — Vault подставит договор и период. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(250)
+  note?: string;
 }
 
 export class ListEsfDto {

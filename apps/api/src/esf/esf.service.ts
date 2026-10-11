@@ -9,7 +9,7 @@ import { EsfXmlClient, EsfXmlPrepareError } from './esf-xml.client';
 import { EsfPortalClient, EsfPortalError, type EsfListRow } from './esf-portal.client';
 import { EsfPdfService } from './esf-pdf';
 import { EsfLinksService, invoiceSettlementIds, MANUAL_ESF_DETACH_NOTE } from './esf-links.service';
-import { esfLineAmounts, esfServiceForPeriod, shortContractNumber } from '@ai-vault/doc-placeholders';
+import { esfDefaultNote, esfLineAmounts, esfServiceForPeriod, shortContractNumber } from '@ai-vault/doc-placeholders';
 import { draftDeliveryDate, draftDeliveryError, draftPeriod, draftPeriodError, isoDate, portalDate } from './esf-draft-period';
 import type { CreateEsfDraftDto } from './dto/esf.dto';
 import {
@@ -173,6 +173,7 @@ export class EsfService {
       contractNumber: shortContractNumber(settlement.contract.number),
       contractDate: settlement.contract.startDate ? isoDate(settlement.contract.startDate) : null,
       contractTitle: settlement.contract.title,
+      note: esfDefaultNote(settlement.contract.title, period.year, period.month),
       crmRef: esfAccountingRef(settlement) };
   }
 
@@ -204,8 +205,8 @@ export class EsfService {
     if (deliveryError) throw new BadRequestException(deliveryError);
     const deliveryDate = portalDate(deliveryIso);
 
-    const monthName = MONTH_NAMES_RU[period.month - 1] ?? String(period.month);
-    const note = `${settlement.contract.title} — ${monthName} ${period.year}`;
+    // Примечание менеджер может переписать в окне ЭСФ; пусто — договор и период.
+    const note = dto.note?.trim() || esfDefaultNote(settlement.contract.title, period.year, period.month);
 
     // Пакетная загрузка XML — официальный путь интеграции и куда надёжнее
     // заполнения формы портала: услуга в файле обычный текст, карточка в

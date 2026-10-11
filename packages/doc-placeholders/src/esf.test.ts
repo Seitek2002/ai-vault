@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { esfLineAmounts, esfLinesTotal, esfPeriodLabel, esfServiceForPeriod, esfSuggestedPeriod } from './esf';
+import { esfDefaultNote, esfLineAmounts, esfLinesTotal, esfPeriodLabel, esfReplacePeriod, esfServiceForPeriod, esfSuggestedPeriod } from './esf';
 
 const line = { name: 'Услуга', unit: 'Штука', gked: '62.02.0', quantity: 1, price: 30000, vatRate: 0, salesTaxRate: 0 };
 describe('Суммы и периоды строк ЭСФ', () => {
@@ -38,5 +38,21 @@ describe('Период услуг по умолчанию', () => {
   });
   it('подписывает период по-русски', () => {
     expect(esfPeriodLabel({ year: 2026, month: 9 })).toBe('сентябрь 2026');
+  });
+});
+
+describe('Примечание ЭСФ', () => {
+  it('по умолчанию — договор и период', () => {
+    expect(esfDefaultNote(' Пакет на ИИ чат-бота Aivio ', 2026, 9)).toBe('Пакет на ИИ чат-бота Aivio — сентябрь 2026');
+  });
+  it('при смене периода меняет месяц в тексте менеджера', () => {
+    expect(esfReplacePeriod('Акт оказанных услуг за сентябрь 2026', 2026, 8)).toBe('Акт оказанных услуг за август 2026');
+  });
+  it('ничего не дописывает, если месяца в тексте нет', () => {
+    expect(esfReplacePeriod('Акт оказанных услуг от 30.09.2026 г.', 2026, 8)).toBe('Акт оказанных услуг от 30.09.2026 г.');
+  });
+  it('старое поведение названий услуг сохранено', () => {
+    expect(esfServiceForPeriod('Услуга без периода', 2026, 10)).toBe('Услуга без периода — октябрь 2026');
+    expect(esfServiceForPeriod('Пакет за август 2026', 2026, 9)).toBe('Пакет за сентябрь 2026');
   });
 });

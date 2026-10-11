@@ -20,6 +20,8 @@ export interface EsfDraftPreview {
   contractNumber: string;
   contractDate: string | null;
   contractTitle: string;
+  /** «Примечание» по умолчанию — договор и период услуг. */
+  note: string;
   crmRef: string;
 }
 
@@ -31,6 +33,7 @@ export interface CreateEsfDraft {
   periodMonth?: number;
   /** yyyy-mm-dd */
   deliveryDate?: string;
+  note?: string;
 }
 
 export type EsfStatus = 'NEW' | 'SENT' | 'ACCEPTED' | 'REVOKED' | 'REJECTED' | 'UNKNOWN';

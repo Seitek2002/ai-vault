@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { esfLineAmounts, esfLinesTotal, type EsfDraftLine } from '@ai-vault/doc-placeholders';
 import { EsfDraftClient } from './esf-draft.client';
-import { formFields } from './esf-form';
+import { formAction, formFields } from './esf-form';
 import { EsfPortalClient, EsfPortalError } from './esf-portal.client';
 import { buildReceiptXml, EsfXmlError, type EsfXmlGood } from './esf-xml';
 
@@ -142,21 +142,25 @@ export class EsfXmlClient {
     return body;
   }
 
+  /**
+   * Диалог «Форма загрузки файла»: прикрепить файл (ajax multipart) и нажать
+   * «Сохранить» — только после этого портал разбирает пакет. Формы диалога
+   * живут на своей странице, поэтому постим на их собственный action.
+   */
   private async upload(session: Session, xml: string, filename: string): Promise<string[]> {
     const list = await session.get(LIST_PATH);
-    const form = this.formWith(list, UPLOAD_LABEL);
-    if (!form) throw new EsfPortalError(`На портале нет кнопки «${UPLOAD_LABEL}»`, 'parse');
+    const opener = this.formWith(list, UPLOAD_LABEL);
+    if (!opener) throw new EsfXmlPrepareError(`На портале нет кнопки «${UPLOAD_LABEL}»`, 'parse');
     const opened = await session.post(`${LIST_PATH}?cid=1`, new URLSearchParams({
-      [form.id]: form.id,
-      [form.button]: UPLOAD_LABEL,
-      'javax.faces.ViewState': this.portal.viewStateOf(list, form.id),
+      [opener.id]: opener.id,
+      [opener.button]: UPLOAD_LABEL,
+      'javax.faces.ViewState': this.portal.viewStateOf(list, opener.id),
     }));
     const page = await opened.text();
     const uploadForm = 'provisionFileUploadForm';
     if (!page.includes(`${uploadForm}:upLoad_input`)) {
-      throw new EsfPortalError('Портал не открыл страницу загрузки файла', 'parse');
+      throw new EsfXmlPrepareError('Портал не открыл форму загрузки файла', 'parse');
     }
-    const action = new URL(opened.url).pathname + new URL(opened.url).search;
 
     const body = new FormData();
     body.set('javax.faces.partial.ajax', 'true');
@@ -167,16 +171,31 @@ export class EsfXmlClient {
     body.set('javax.faces.ViewState', this.portal.viewStateOf(page, uploadForm));
     body.set(`${uploadForm}:upLoad_input`, new Blob([xml], { type: 'text/xml' }), filename);
 
-    const response = await session.postMultipart(action, body, {
+    const attached = await session.postMultipart(formAction(page, uploadForm), body, {
       headers: { 'Faces-Request': 'partial/ajax', 'X-Requested-With': 'XMLHttpRequest' },
     });
-    const result = await response.text();
-    const messages = this.messages(result);
-    this.logger.log(`Загрузка ЭСФ-файла: HTTP ${response.status}${messages.length ? ` — ${messages.join('; ')}` : ''}`);
-    if (response.status >= 400) {
-      throw new EsfPortalError(`Портал отклонил файл ЭСФ${messages.length ? `: ${messages.join('; ')}` : ''}`, 'parse');
+    const partial = await attached.text();
+    const messages = this.messages(partial);
+    if (attached.status >= 400 || !partial.includes('<partial-response')) {
+      throw new EsfPortalError(`Портал не принял файл ЭСФ${messages.length ? `: ${messages.join('; ')}` : ''}`, 'parse');
     }
-    return messages;
+
+    const save = this.formWithName(page, ':saveBtn');
+    if (!save) throw new EsfPortalError('В форме загрузки нет кнопки «Сохранить»', 'parse');
+    const viewState = partial.match(/javax\.faces\.ViewState[^>]*><!\[CDATA\[([\s\S]*?)\]\]>/)?.[1]
+      ?? this.portal.viewStateOf(page, save.id);
+    const response = await session.post(formAction(page, save.id), new URLSearchParams({
+      [save.id]: save.id,
+      [`${save.id}:saveBtn`]: 'Сохранить',
+      'javax.faces.ViewState': viewState,
+    }));
+    const result = await response.text();
+    const saveMessages = [...new Set([...messages, ...this.messages(result)])];
+    this.logger.log(`Пакетная загрузка ЭСФ: HTTP ${response.status}${saveMessages.length ? ` — ${saveMessages.join('; ')}` : ''}`);
+    if (response.status >= 400) {
+      throw new EsfPortalError(`Портал отклонил файл ЭСФ${saveMessages.length ? `: ${saveMessages.join('; ')}` : ''}`, 'parse');
+    }
+    return saveMessages;
   }
 
   /** Своя ЭСФ после загрузки узнаётся по номеру учётной системы. */
@@ -199,6 +218,14 @@ export class EsfXmlClient {
       const uuid = cells.find((text) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(text)) ?? '';
       return { rowKey: match[1]!, uuid, status: cells[7] ?? '', crmRef: cells[5] ?? '' };
     }).filter((row) => row.uuid);
+  }
+
+  /** Форма, в которой есть поле с таким суффиксом имени (id формы у портала плавает). */
+  private formWithName(html: string, suffix: string): { id: string } | null {
+    for (const form of html.matchAll(/<form\b[^>]*\bid="([^"]+)"[^>]*>([\s\S]*?)<\/form>/g)) {
+      if (form[2]!.includes(`${form[1]}${suffix}`)) return { id: form[1]! };
+    }
+    return null;
   }
 
   private buttonName(html: string, label: string): string | null {

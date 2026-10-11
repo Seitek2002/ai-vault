@@ -25,6 +25,12 @@ const UPLOAD_LABEL = 'Загрузить файл';
 
 type Session = Awaited<ReturnType<EsfPortalClient['openSession']>>;
 
+/** Сравнение названий услуг без учёта регистра и лишних пробелов. */
+function sameName(a: string, b: string): boolean {
+  const norm = (value: string) => value.replace(/\s+/g, ' ').trim().toLowerCase();
+  return norm(a) === norm(b);
+}
+
 /** Сбой до загрузки файла: на портале ничего не создано, можно пробовать иначе. */
 export class EsfXmlPrepareError extends EsfPortalError {}
 
@@ -119,7 +125,7 @@ export class EsfXmlClient {
     const missing = this.missingServices(messages);
     if (missing.length) {
       for (const name of missing) {
-        const line = lines.find((item) => item.name === name);
+        const line = lines.find((item) => sameName(item.name, name));
         if (!line) throw new EsfPortalError(`Портал не нашёл услугу «${name}» в справочнике`, 'parse');
         await this.createService(session, line);
       }
@@ -228,7 +234,8 @@ export class EsfXmlClient {
   /** «Товара/услуги с наименованием "X" не существует в базе!» */
   private missingServices(messages: string[]): string[] {
     return [...new Set(messages.flatMap((message) =>
-      [...message.matchAll(/наименованием\s+[«"']([^«»"']+)[»"']\s+не существует/gi)].map((match) => match[1]!.trim())))];
+      // Портал берёт название в прямые кавычки; внутри бывают «ёлочки» — режем до `" не существует`.
+      [...message.matchAll(/наименованием\s+"(.+?)"\s+не существует/gi)].map((match) => match[1]!.trim())))];
   }
 
   /**

@@ -70,13 +70,15 @@ export function StepCell({ step, onClick }: { step: SettlementStep; onClick: () 
       title={title}
       aria-label={title}
       className={cn(
-        "w-full flex flex-col items-center justify-center gap-0.5 py-2 px-1 rounded-lg border transition-colors",
+        "h-10 w-full flex flex-col items-center justify-center gap-0.5 py-1 px-0.5 rounded-lg border transition-colors",
         "hover:border-[var(--color-accent-border)] hover:text-[var(--color-accent)]",
         STATE_STYLES[state],
       )}
     >
-      <Glyph state={state} />
-      {portal && <span className="text-[10px] leading-none font-medium">{portal}</span>}
+      <span className="flex items-center justify-center gap-0.5 whitespace-nowrap [&>svg]:shrink-0">
+        <Glyph state={state} />
+        {portal && <span className="text-[10px] leading-none font-medium">{portal}</span>}
+      </span>
       {showDeadline(step, state) && <span className={cn("text-[10px] leading-none font-medium", portal && step.overdue && 'text-[#F87171]')}>{formatDueDate(step.dueDate)}</span>}
     </button>
   );

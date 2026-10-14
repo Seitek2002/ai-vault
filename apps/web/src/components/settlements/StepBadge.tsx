@@ -3,7 +3,7 @@
 import { Check, FilePenLine, Send, CircleX, CircleHelp } from "lucide-react";
 import { cn } from "@/lib/cn";
 import type { SettlementStep } from "@/lib/api/settlements";
-import { STEP_LABELS, formatDueDate } from "@/lib/api/settlements";
+import { STEP_LABELS } from "@/lib/api/settlements";
 
 export type StepState = "done" | "overdue" | "pending";
 type DisplayStepState = StepState | "draft" | "sent" | "accepted" | "rejected" | "revoked" | "unknown";
@@ -43,16 +43,12 @@ function Glyph({ state }: { state: DisplayStepState }) {
   return <span className="w-2 h-2 rounded-full border border-current" aria-hidden />;
 }
 
-function showDeadline(step: SettlementStep, state: DisplayStepState) {
-  return !!step.dueDate && !step.doneAt && state !== 'accepted' && state !== 'sent';
-}
-
 function stepTitle(step: SettlementStep, state: DisplayStepState) {
   const portal = PORTAL_LABELS[state];
-  if (portal) return `ЭСФ — ${portal}${showDeadline(step, state) ? `, до ${formatDueDate(step.dueDate)}` : ''}${step.overdue && showDeadline(step, state) ? ', срок просрочен' : ''}`;
+  if (portal) return `ЭСФ — ${portal}`;
   return step.doneAt
     ? `${STEP_LABELS[step.type]} — готово${step.doneByName ? `, ${step.doneByName}` : ''}`
-    : `${STEP_LABELS[step.type]} — до ${formatDueDate(step.dueDate)}`;
+    : `${STEP_LABELS[step.type]} — ${step.overdue ? 'просрочено' : 'ожидает выполнения'}`;
 }
 
 /**
@@ -77,9 +73,8 @@ export function StepCell({ step, onClick }: { step: SettlementStep; onClick: () 
     >
       <span className="flex items-center justify-center gap-0.5 whitespace-nowrap [&>svg]:shrink-0">
         <Glyph state={state} />
-        {portal && <span className="text-[10px] leading-none font-medium">{portal}</span>}
+        {portal && state !== 'accepted' && <span className="text-[10px] leading-none font-medium">{portal}</span>}
       </span>
-      {showDeadline(step, state) && <span className={cn("text-[10px] leading-none font-medium", portal && step.overdue && 'text-[#F87171]')}>{formatDueDate(step.dueDate)}</span>}
     </button>
   );
 }
@@ -99,10 +94,7 @@ export function StepChip({ step, onClick }: { step: SettlementStep; onClick: () 
     >
       <Glyph state={state} />
       {STEP_LABELS[step.type]}
-      {PORTAL_LABELS[state] && <span>· {PORTAL_LABELS[state]}</span>}
-      {showDeadline(step, state) && (
-        <span className="opacity-70">· {formatDueDate(step.dueDate)}</span>
-      )}
+      {PORTAL_LABELS[state] && state !== 'accepted' && <span>· {PORTAL_LABELS[state]}</span>}
     </button>
   );
 }

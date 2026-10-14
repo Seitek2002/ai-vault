@@ -33,6 +33,8 @@ const SETTLEMENT_INCLUDE = {
     include: { doneBy: { select: { id: true, name: true } } },
   },
   payments: { orderBy: { paidAt: 'asc' as const } },
+  esfInvoices: { orderBy: { importedAt: 'desc' as const }, select: { status: true, organizationId: true, hiddenAt: true } },
+  esfLinks: { select: { invoice: { select: { status: true, organizationId: true, hiddenAt: true } } } },
 } satisfies Prisma.SettlementInclude;
 
 type SettlementRow = Prisma.SettlementGetPayload<{ include: typeof SETTLEMENT_INCLUDE }>;
@@ -50,6 +52,7 @@ export interface SettlementStepDto {
   evidenceUrl: string | null;
   note: string | null;
   overdue: boolean;
+  esfStatus: EsfStatus | null;
 }
 
 export interface PaymentDto {
@@ -698,6 +701,9 @@ export class SettlementsService {
   private toDto(row: SettlementRow, now: Date): SettlementDto {
     const paid = row.payments.reduce((sum, p) => sum + p.amount.toNumber(), 0);
     const amount = row.amount.toNumber();
+    // The multi-period link is authoritative; legacy primary links remain readable.
+    const invoice = [...(row.esfLinks ?? []).map((link) => link.invoice), ...(row.esfInvoices ?? [])]
+      .find((item) => item.organizationId === row.organizationId && !item.hiddenAt);
 
     return {
       id: row.id,
@@ -729,6 +735,7 @@ export class SettlementsService {
         paymentId: step.paymentId,
         evidenceUrl: step.evidenceUrl,
         note: step.note,
+        esfStatus: step.type === SettlementStepType.ISSUE_ESF ? invoice?.status ?? null : null,
         overdue:
           step.doneAt === null &&
           step.dueDate !== null &&

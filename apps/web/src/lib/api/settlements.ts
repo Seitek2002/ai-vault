@@ -1,5 +1,6 @@
 import { formatAmount } from '@ai-vault/doc-placeholders';
 import { api } from './client';
+import type { EsfStatus } from './esf';
 
 export type SettlementStepType =
   | 'ISSUE_ACT'
@@ -24,6 +25,8 @@ export interface SettlementStep {
   evidenceUrl: string | null;
   note: string | null;
   overdue: boolean;
+  /** Current portal status of the linked invoice, independent of checklist completion. */
+  esfStatus?: EsfStatus | null;
 }
 
 export interface SettlementPayment {

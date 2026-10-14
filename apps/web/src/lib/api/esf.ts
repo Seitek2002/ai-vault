@@ -130,8 +130,8 @@ export const esfApi = {
   portalListUrl: 'https://esf.salyk.kg/esf/view/document/realization_list.xhtml',
   checkConnection: (login: string, password: string) =>
     api.post<{ ok: true }>('/esf/check-connection', { login, password }),
-  attach: (id: string, settlementId: string) =>
-    api.post<EsfInvoice>(`/esf/invoices/${id}/attach`, { settlementId }),
+  attach: (id: string, settlementId: string, replaceInvoiceId?: string) =>
+    api.post<EsfInvoice>(`/esf/invoices/${id}/attach`, { settlementId, ...(replaceInvoiceId ? { replaceInvoiceId } : {}) }),
   attachMany: (id: string, settlementIds: string[]) =>
     api.post<EsfInvoice>(`/esf/invoices/${id}/attach`, { settlementIds }),
   detach: (id: string, settlementId?: string) => api.post<EsfInvoice>(`/esf/invoices/${id}/detach`, settlementId ? { settlementId } : {}),

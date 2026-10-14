@@ -87,6 +87,7 @@ export function StepActionModal({ settlement, step, onClose }: Props) {
 
   // Поля разных шагов; каждый использует только своё.
   const [note, setNote] = useState(step.note ?? "");
+  const [noteEdited, setNoteEdited] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const uploadedFile = useRef<{ file: File; id: string } | null>(null);
   const [amount, setAmount] = useState(String(settlement.dueAmount || settlement.amount));
@@ -108,6 +109,10 @@ export function StepActionModal({ settlement, step, onClose }: Props) {
   const selectedInvoiceId = esfInvoiceId || currentInvoice?.id || "";
   const selectedInvoice = esfCandidates.find((invoice) => invoice.id === selectedInvoiceId) ??
     (currentInvoice?.id === selectedInvoiceId ? currentInvoice : undefined);
+  const replacingInvoice = linkedInvoice && selectedInvoice && linkedInvoice.id !== selectedInvoice.id;
+  const displayedNote = isEsfStep && esfMode === "portal" && selectedInvoice && !noteEdited
+    ? `ЭСФ № ${selectedInvoice.number ?? "—"}${selectedInvoice.issuedOn ? ` от ${new Date(selectedInvoice.issuedOn).toLocaleDateString("ru-RU", { timeZone: "UTC" })}` : ""}`
+    : note;
   const actPdfId = settlement.steps.find((s) => s.type === "ISSUE_ACT")?.fileAssetId ?? null;
   const requiresPdfScan = step.type === "ISSUE_ACT" || step.type === "ISSUE_INVOICE";
   const scanDocument = step.type === "ISSUE_ACT" ? "акта" : "счёта на оплату";
@@ -116,6 +121,7 @@ export function StepActionModal({ settlement, step, onClose }: Props) {
     void qc.invalidateQueries({ queryKey: ["settlements"] });
     void qc.invalidateQueries({ queryKey: ["settlement", settlement.id] });
     void qc.invalidateQueries({ queryKey: ["documents"] });
+    void qc.invalidateQueries({ queryKey: ["contract-history"] });
     if (isEsfStep) void qc.invalidateQueries({ queryKey: ["esf"] });
   }
 
@@ -140,7 +146,9 @@ export function StepActionModal({ settlement, step, onClose }: Props) {
       if (isEsfStep && esfMode === "portal") {
         if (!selectedInvoice) throw new Error("Выберите отправленную или принятую ЭСФ этого партнёра.");
         if (!esfCoversSettlement(selectedInvoice, settlement.id)) {
-          await esfApi.attach(selectedInvoice.id, settlement.id);
+          const attached = await esfApi.attach(selectedInvoice.id, settlement.id, linkedInvoice?.id);
+          // Attachment already completes the step atomically, with the new invoice's evidence.
+          if (!noteEdited) return attached;
         }
       }
       if (isEsfStep && esfMode === "url" && !isEvidenceUrl(evidenceUrl)) {
@@ -160,7 +168,7 @@ export function StepActionModal({ settlement, step, onClose }: Props) {
         fileAssetId = await uploadEvidence(file);
       }
       return settlementsApi.completeStep(settlement.id, step.id, {
-        ...(note.trim() ? { note: note.trim() } : {}),
+        ...(displayedNote.trim() ? { note: displayedNote.trim() } : {}),
         ...(fileAssetId ? { fileAssetId } : {}),
         ...(isEsfStep && esfMode === "url" ? { evidenceUrl: evidenceUrl.trim() } : {}),
       });
@@ -296,7 +304,7 @@ export function StepActionModal({ settlement, step, onClose }: Props) {
                   <div className="mb-4">
                     <EsfInvoicePicker invoices={esfCandidates} value={selectedInvoiceId} currency={settlement.currency}
                       loading={esfQuery.isPending} disabled={busy || esfQuery.isPending || esfQuery.isError}
-                      onChange={(id) => { setEsfInvoiceId(id); setError(""); }} />
+                      onChange={(id) => { setEsfInvoiceId(id); setNoteEdited(false); setError(""); }} />
                     {selectedInvoice && (
                       <div className="mt-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elevated)] px-3 py-2 text-xs">
                         {esfCoversSettlement(selectedInvoice, settlement.id) && <p className="mb-1 font-medium text-[var(--color-text-primary)]">Привязана к этому расчёту</p>}
@@ -304,6 +312,11 @@ export function StepActionModal({ settlement, step, onClose }: Props) {
                         <p className="mt-1 text-[var(--color-text-secondary)]">ID ЭСФ на портале: <span className="font-mono break-all select-all text-[var(--color-text-primary)]">{selectedInvoice.uuid}</span></p>
                         <p className="mt-1 text-[var(--color-text-secondary)]">{selectedInvoice.deliveryDate ? new Date(selectedInvoice.deliveryDate).toLocaleDateString("ru-RU") : "Без даты"} · {formatMoney(selectedInvoice.amount, settlement.currency)} · {ESF_STATUS_LABELS[selectedInvoice.status]}</p>
                       </div>
+                    )}
+                    {replacingInvoice && (
+                      <p role="status" className="mt-2 text-xs text-[var(--color-accent)]">
+                        При сохранении ЭСФ № {linkedInvoice.number ?? "—"} ({ESF_STATUS_LABELS[linkedInvoice.status]}) будет заменена на № {selectedInvoice.number ?? "—"} только в этом расчёте.
+                      </p>
                     )}
                     {esfQuery.isError ? (
                       <div role="alert" className="mt-2 text-xs text-[var(--color-danger)]">
@@ -315,7 +328,7 @@ export function StepActionModal({ settlement, step, onClose }: Props) {
                         {selectedInvoice && !esfCoversSettlement(selectedInvoice, settlement.id) ? `Проверьте примечание, период и сумму: выбранная ЭСФ будет связана с расчётом за ${periodLabel}.` : !esfQuery.isPending && esfCandidates.length === 0 ? "Свободных отправленных или принятых ЭСФ этого партнёра нет. Создайте новую ЭСФ или добавьте ссылку / скан." : "В списке только свободные отправленные и принятые ЭСФ партнёра. Привязанные к расчётам ЭСФ скрыты из списка."}
                       </p>
                     )}
-                    {linkedInvoice?.status === "NEW" ? <EsfDraftPanel settlementId={settlement.id} stepNote={step.note} actPdfId={actPdfId} onBusyChange={setDraftBusy} onDetached={(prepareNew) => { setEsfInvoiceId(""); setNote(""); setPreparingEsf(prepareNew); }} onPreview={previewFileInModal} /> : (
+                    {linkedInvoice ? <EsfDraftPanel settlementId={settlement.id} stepNote={step.note} actPdfId={actPdfId} onBusyChange={setDraftBusy} onDetached={(prepareNew) => { setEsfInvoiceId(""); setNote(""); setNoteEdited(false); setPreparingEsf(prepareNew); }} onPreview={previewFileInModal} /> : (
                       <details className="mt-3 border-t border-[var(--color-border)] pt-2 text-xs text-[var(--color-text-secondary)]"
                         open={preparingEsf} onToggle={(event) => setPreparingEsf(event.currentTarget.open)}>
                         <summary className="cursor-pointer py-2 font-medium text-[var(--color-accent)] focus-visible:outline-2 focus-visible:outline-[var(--color-accent)]">Создать новую ЭСФ на портале</summary>
@@ -353,8 +366,8 @@ export function StepActionModal({ settlement, step, onClose }: Props) {
                 <label className="block mb-3">
                   <span className={labelClass}>Номер и дата ЭСФ (необязательно)</span>
                   <Input
-                    value={note}
-                    onChange={(e) => setNote(e.target.value)}
+                    value={displayedNote}
+                    onChange={(e) => { setNote(e.target.value); setNoteEdited(true); }}
                     placeholder="ЭСФ № 4417 от 05.10.2026"
                     maxLength={500}
                     disabled={busy}
@@ -489,7 +502,7 @@ export function StepActionModal({ settlement, step, onClose }: Props) {
             <div className="flex justify-end gap-2">
               <Button type="button" variant="ghost" disabled={busy} onClick={onClose}>Отмена</Button>
               <Button type="submit" disabled={(requiresPdfScan && !file) || (isEsfStep && !hasEsfEvidence)} loading={busy} loadingText="Сохраняю…">
-                {isPaymentStep ? "Внести платёж" : "Готово"}
+                {isPaymentStep ? "Внести платёж" : isEsfStep && esfMode === "portal" && replacingInvoice ? "Заменить ЭСФ" : "Готово"}
               </Button>
             </div>
           </form>
@@ -644,9 +657,9 @@ function EsfDraftPanel({ settlementId, stepNote, actPdfId, onBusyChange, onDetac
   if (esfQuery.isPending) return <p role="status" className="text-xs">Проверяем связанные ЭСФ…</p>;
   if (esfQuery.isError) return <p role="alert" className="text-xs text-[var(--color-danger)]">Не удалось проверить связанные ЭСФ. <button type="button" onClick={() => void esfQuery.refetch()} className="underline">Повторить</button></p>;
   if (linkedInvoice) return (
-    <div className="space-y-2 text-xs">
-      <p>К этому расчёту уже привязана ЭСФ № {linkedInvoice.number ?? "—"}. Если она не подходит, сначала отвяжите её от этого расчёта.</p>
-      <p>ЭСФ останется в кабинете и сохранит связи с другими месяцами. Затем можно подготовить новую по PDF акта.</p>
+    <div className="mt-3 space-y-2 border-t border-[var(--color-border)] pt-3 text-xs">
+      <p className="font-medium text-[var(--color-text-primary)]">Текущая привязка: № {linkedInvoice.number ?? "—"} · <span className={linkedInvoice.status === "REVOKED" || linkedInvoice.status === "REJECTED" ? "text-[var(--color-danger)]" : ""}>{ESF_STATUS_LABELS[linkedInvoice.status]}</span></p>
+      <p>{linkedInvoice.status === "REVOKED" ? "По данным синхронизации эта ЭСФ отозвана на портале. Выберите другую ЭСФ выше и сохраните замену или отвяжите её." : "Выберите другую ЭСФ выше и сохраните замену или отвяжите текущую."} Старая ЭСФ и её связи с другими месяцами сохранятся.</p>
       <div className="flex flex-wrap gap-2">
         <Button type="button" size="sm" variant="secondary" disabled={detach.isPending || create.isPending} onClick={() => detach.mutate({ invoiceId: linkedInvoice.id, prepareNew: false })}>Отвязать от этого расчёта</Button>
         <Button type="button" size="sm" variant="secondary" disabled={detach.isPending || create.isPending} onClick={() => detach.mutate({ invoiceId: linkedInvoice.id, prepareNew: true })}>Создать новую вместо этой</Button>

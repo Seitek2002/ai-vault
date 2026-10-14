@@ -456,8 +456,8 @@ export class EsfService {
 
   // ── Ручная привязка ───────────────────────────────────────────────────────
 
-  async attach(organizationId: string, userId: string, invoiceId: string, settlementId: string): Promise<EsfInvoiceDto> {
-    await this.links.attach(organizationId, userId, invoiceId, [settlementId], false);
+  async attach(organizationId: string, userId: string, invoiceId: string, settlementId: string, replaceInvoiceId?: string): Promise<EsfInvoiceDto> {
+    await this.links.attach(organizationId, userId, invoiceId, [settlementId], false, replaceInvoiceId);
     return this.findOneDto(invoiceId, organizationId);
   }
 

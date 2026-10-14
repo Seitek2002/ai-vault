@@ -24,18 +24,35 @@ export function invoiceSettlementIds(invoice: { settlementId: string | null; set
 export class EsfLinksService {
   constructor(private prisma: PrismaService) {}
 
-  async attach(organizationId: string, userId: string, invoiceId: string, requested: string[], replace = true): Promise<void> {
+  async attach(organizationId: string, userId: string, invoiceId: string, requested: string[], replace = true, replaceInvoiceId?: string): Promise<void> {
     if (!Array.isArray(requested) || !requested.length || requested.length > 120 || requested.some((id) => typeof id !== 'string' || !id.trim())
       || new Set(requested).size !== requested.length) {
       throw new BadRequestException('Выберите от 1 до 120 разных расчётов.');
     }
+    if (replaceInvoiceId && (replace || requested.length !== 1 || replaceInvoiceId === invoiceId)) {
+      throw new BadRequestException('Для замены выберите другую ЭСФ и один расчёт.');
+    }
     try {
       await this.prisma.$transaction(async (tx) => {
-        const invoice = await this.lockInvoice(tx, organizationId, invoiceId);
+        // All invoice locks precede settlement locks; stable ordering avoids replacement deadlocks.
+        const locked = new Map<string, Invoice>();
+        for (const id of [...new Set([invoiceId, ...(replaceInvoiceId ? [replaceInvoiceId] : [])])].sort()) {
+          locked.set(id, await this.lockInvoice(tx, organizationId, id));
+        }
+        const invoice = locked.get(invoiceId)!;
+        const previous = replaceInvoiceId ? locked.get(replaceInvoiceId)! : undefined;
+        const previousIds = previous ? invoiceSettlementIds(previous) : [];
+        if (previous && !previousIds.includes(requested[0]!)) {
+          throw new BadRequestException('Привязка ЭСФ изменилась. Обновите расчёт и выберите ЭСФ заново.');
+        }
+        if (previous && (!statusClosesStep(invoice.status) || invoice.hiddenAt ||
+          invoice.counterpartyId !== previous.counterpartyId)) {
+          throw new BadRequestException('Для замены выберите свободную отправленную или принятую ЭСФ этого партнёра.');
+        }
         const before = invoiceSettlementIds(invoice);
         const ids = replace ? requested : [...new Set([...before, ...requested])];
         if (ids.length > 120) throw new BadRequestException('Одна ЭСФ может покрывать не более 120 расчётов.');
-        await this.lockSettlements(tx, organizationId, [...before, ...ids]);
+        await this.lockSettlements(tx, organizationId, [...before, ...ids, ...previousIds]);
         const settlements = await tx.settlement.findMany({ where: { organizationId, id: { in: ids } } });
         if (settlements.length !== ids.length) throw new NotFoundException('Некоторые расчёты не найдены');
         if (settlements.some((settlement) => settlement.deletedAt)) throw new BadRequestException('Удалённый комплект нужно сначала восстановить.');
@@ -48,8 +65,19 @@ export class EsfLinksService {
         const taken = await tx.esfInvoice.findFirst({ where: {
           organizationId, id: { not: invoiceId },
           OR: [{ settlementId: { in: ids } }, { settlementLinks: { some: { settlementId: { in: ids } } } }],
-        }, select: { number: true } });
-        if (taken) throw new BadRequestException(`На одном из расчётов уже есть ЭСФ ${taken.number ?? '(без номера)'}`);
+        }, select: { id: true, number: true } });
+        if (taken && taken.id !== previous?.id) throw new BadRequestException(`На одном из расчётов уже есть ЭСФ ${taken.number ?? '(без номера)'}. Сначала отвяжите её от расчёта.`);
+        if (previous) {
+          if (invoice.counterpartyId !== settlements[0]!.counterpartyId || before.length) {
+            throw new BadRequestException('Для замены выберите свободную ЭСФ этого партнёра.');
+          }
+          await this.reconcile(tx, previous, previousIds.filter((id) => id !== requested[0]));
+          const conflict = await tx.esfInvoice.findFirst({ where: {
+            organizationId, id: { not: invoiceId },
+            OR: [{ settlementId: { in: ids } }, { settlementLinks: { some: { settlementId: { in: ids } } } }],
+          }, select: { number: true } });
+          if (conflict) throw new BadRequestException('У расчёта несколько привязок ЭСФ. Обновите список и отвяжите лишнюю.');
+        }
         await this.reconcile(tx, invoice, ids, userId, settlements[0]!.counterpartyId);
       }, { maxWait: 15000, timeout: 30000 });
     } catch (error) {

@@ -66,8 +66,9 @@ export class EsfController {
     @CurrentUser() user: JwtPayload,
   ) {
     if (dto.settlementId !== undefined && dto.settlementIds !== undefined) throw new BadRequestException('Передайте один расчёт или список расчётов.');
+    if (dto.replaceInvoiceId && !dto.settlementId) throw new BadRequestException('Замену ЭСФ выполняйте для одного расчёта.');
     return dto.settlementIds ? this.service.attachMany(organizationId, user.sub, id, dto.settlementIds)
-      : this.service.attach(organizationId, user.sub, id, dto.settlementId!);
+      : this.service.attach(organizationId, user.sub, id, dto.settlementId!, dto.replaceInvoiceId);
   }
 
   @Post('invoices/:id/detach')

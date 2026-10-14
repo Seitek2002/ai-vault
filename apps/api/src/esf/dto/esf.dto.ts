@@ -106,6 +106,12 @@ export class ListEsfDto {
 }
 
 export class AttachEsfDto {
+  /** Explicit expected old invoice; replacement is scoped to one settlement. */
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  replaceInvoiceId?: string;
+
   @IsOptional()
   @IsString()
   @MinLength(1)

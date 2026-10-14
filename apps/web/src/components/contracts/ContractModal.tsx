@@ -9,6 +9,7 @@ import { ApiError } from "@/lib/api/client";
 import { contractsApi, type Contract, type ContractFormData, type ContractAttachment } from "@/lib/api/contracts";
 import { MAX_UPLOAD_SIZE_BYTES, MAX_UPLOAD_SIZE_MB, openFile, uploadFile } from "@/lib/api/files";
 import { counterpartiesApi } from "@/lib/api/counterparties";
+import { publishSavedContract } from '@/lib/queries/contracts';
 import { Button, Input, Modal, Select } from "@/components/ui";
 
 type Slot = "contractPdfId" | "ndaPdfId" | "terminationPdfId";
@@ -103,7 +104,7 @@ export function ContractModal({ editing, onClose }: { editing: Contract | null; 
       payload.additionalPdfIds = ids;
       return editing ? contractsApi.update(editing.id, payload) : contractsApi.create(payload);
     },
-    onSuccess: () => { void qc.invalidateQueries({ queryKey: ["contracts"] }); onClose(); },
+    onSuccess: async saved => { await publishSavedContract(qc, saved); onClose(); },
     onError: err => { const message = err instanceof ApiError ? err.message : "Не удалось сохранить договор. Попробуйте ещё раз."; setError(Array.isArray(message) ? String(message[0]) : message); },
   });
   function onSubmit(e: FormEvent) {
